@@ -1,5 +1,5 @@
 {
-  "name": "vue3-vite5-dashboard",
+  "name": "green-finance-dashboard",
   "version": "0.1.0",
   "author": "",
   "license": "MIT",
@@ -24,7 +24,6 @@
     "nprogress": "^0.2.0",
     "pinia": "^2.1.7",
     "prism-theme-vars": "^0.2.4",
-    "qrcode": "^1.5.3",
     "terser": "^5.24.0",
     "three": "^0.148.0",
     "vue": "^3.3.8",
