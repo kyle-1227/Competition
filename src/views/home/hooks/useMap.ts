@@ -1,5 +1,5 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment, no-undef, no-underscore-dangle, no-param-reassign, no-plusplus, no-continue */
 // @ts-nocheck
-/* eslint-disable no-undef */
 import { onMounted, watch } from 'vue';
 import { LineLayer, PointLayer, PolygonLayer, Scene } from '@antv/l7';
 import { Map } from '@antv/l7-maps';
@@ -9,61 +9,102 @@ import {
   selectedYear,
   tfeeThreshold,
   yearlyData,
+  provinceCoords,
+  fullToShortName,
 } from './provinceData';
 
-// ===== 正向空间溢出（协同减排）=====
-const greenLines = [
-  { x: '121.473', y: '31.230', x1: '118.797', y1: '32.060', from: '上海', to: '南京' },
-  { x: '121.473', y: '31.230', x1: '120.154', y1: '30.287', from: '上海', to: '杭州' },
-  { x: '121.473', y: '31.230', x1: '117.283', y1: '31.861', from: '上海', to: '合肥' },
-  { x: '113.264', y: '23.129', x1: '112.982', y1: '28.194', from: '广州', to: '长沙' },
-  { x: '113.264', y: '23.129', x1: '108.320', y1: '22.825', from: '广州', to: '南宁' },
-  { x: '113.264', y: '23.129', x1: '119.306', y1: '26.075', from: '广州', to: '福州' },
-  { x: '116.407', y: '39.904', x1: '117.190', y1: '39.126', from: '北京', to: '天津' },
-  { x: '116.407', y: '39.904', x1: '117.001', y1: '36.676', from: '北京', to: '济南' },
-  { x: '116.407', y: '39.904', x1: '114.502', y1: '38.045', from: '北京', to: '石家庄' },
-  { x: '120.154', y: '30.287', x1: '115.892', y1: '28.676', from: '杭州', to: '南昌' },
-  { x: '114.299', y: '30.584', x1: '112.982', y1: '28.194', from: '武汉', to: '长沙' },
-];
+const LINE_PARSER = { parser: { type: 'json', x: 'x', y: 'y', x1: 'x1', y1: 'y1' } };
+const POINT_PARSER = { parser: { type: 'json', x: 'lng', y: 'lat' } };
 
-// ===== 负向空间交互（污染转移）=====
-const redLines = [
-  { x: '121.473', y: '31.230', x1: '115.892', y1: '28.676', from: '上海', to: '南昌' },
-  { x: '118.797', y: '32.060', x1: '117.283', y1: '31.861', from: '南京', to: '合肥' },
-  { x: '113.264', y: '23.129', x1: '106.713', y1: '26.578', from: '广州', to: '贵阳' },
-  { x: '116.407', y: '39.904', x1: '111.678', y1: '40.854', from: '北京', to: '呼和浩特' },
-  { x: '117.001', y: '36.676', x1: '113.665', y1: '34.758', from: '济南', to: '郑州' },
-  { x: '120.154', y: '30.287', x1: '106.552', y1: '29.563', from: '杭州', to: '重庆' },
-  { x: '118.797', y: '32.060', x1: '104.066', y1: '30.659', from: '南京', to: '成都' },
-];
+// 全部 31 省省会标注数据（静态）
+const allProvincePoints = Object.entries(provinceCoords).map(([full, [lng, lat]]) => ({
+  lng,
+  lat,
+  name: fullToShortName[full] || full,
+}));
 
-// 飞线节点（城市标注）
-const hubCities = [
-  { lng: '121.473', lat: '31.230', name: '上海' },
-  { lng: '116.407', lat: '39.904', name: '北京' },
-  { lng: '113.264', lat: '23.129', name: '广州' },
-  { lng: '120.154', lat: '30.287', name: '杭州' },
-  { lng: '118.797', lat: '32.060', name: '南京' },
-  { lng: '117.190', lat: '39.126', name: '天津' },
-  { lng: '114.299', lat: '30.584', name: '武汉' },
-  { lng: '117.001', lat: '36.676', name: '济南' },
-  { lng: '117.283', lat: '31.861', name: '合肥' },
-  { lng: '112.982', lat: '28.194', name: '长沙' },
-  { lng: '115.892', lat: '28.676', name: '南昌' },
-  { lng: '108.320', lat: '22.825', name: '南宁' },
-  { lng: '119.306', lat: '26.075', name: '福州' },
-  { lng: '114.502', lat: '38.045', name: '石家庄' },
-  { lng: '113.665', lat: '34.758', name: '郑州' },
-  { lng: '106.713', lat: '26.578', name: '贵阳' },
-  { lng: '106.552', lat: '29.563', name: '重庆' },
-  { lng: '104.066', lat: '30.659', name: '成都' },
-  { lng: '111.678', lat: '40.854', name: '呼和浩特' },
-];
+interface FlyLine {
+  x: number;
+  y: number;
+  x1: number;
+  y1: number;
+  from: string;
+  to: string;
+}
+interface CityPoint {
+  lng: number;
+  lat: number;
+  name: string;
+}
+
+/**
+ * 基于引力模型的动态飞线生成算法
+ * 根据当年各省绿色金融得分排名，动态计算空间溢出关系
+ */
+function generateDynamicLines(year: number) {
+  const data = yearlyData[year] || yearlyData[2024];
+  const sorted = [...data].sort((a, b) => b.score - a.score);
+
+  const hubs = sorted.slice(0, 5);
+  const middles = sorted.slice(5, 15);
+  const bottoms = sorted.slice(-5);
+
+  const greenLines: FlyLine[] = [];
+  const redLines: FlyLine[] = [];
+  const activeSet = new Set<string>();
+
+  hubs.forEach((hub, i) => {
+    const hubCoord = provinceCoords[hub.province];
+    if (!hubCoord) return;
+    const hubShort = fullToShortName[hub.province] || hub.province;
+    activeSet.add(hub.province);
+
+    // 每个 hub 向 3 个中等省份发绿线（偏移选取，避免重叠）
+    for (let j = 0; j < 3; j++) {
+      const mid = middles[(i * 3 + j) % middles.length];
+      const midCoord = provinceCoords[mid.province];
+      if (!midCoord) continue;
+      activeSet.add(mid.province);
+      greenLines.push({
+        x: hubCoord[0],
+        y: hubCoord[1],
+        x1: midCoord[0],
+        y1: midCoord[1],
+        from: hubShort,
+        to: fullToShortName[mid.province] || mid.province,
+      });
+    }
+
+    // 每个 hub 向 1 个落后省份发红线
+    const bot = bottoms[i % bottoms.length];
+    const botCoord = provinceCoords[bot.province];
+    if (botCoord) {
+      activeSet.add(bot.province);
+      redLines.push({
+        x: hubCoord[0],
+        y: hubCoord[1],
+        x1: botCoord[0],
+        y1: botCoord[1],
+        from: hubShort,
+        to: fullToShortName[bot.province] || bot.province,
+      });
+    }
+  });
+
+  const activeCities: CityPoint[] = [...activeSet].map((fullName) => {
+    const coord = provinceCoords[fullName];
+    return { lng: coord[0], lat: coord[1], name: fullToShortName[fullName] || fullName };
+  });
+
+  return { greenLines, redLines, activeCities };
+}
 
 function buildScoreMap(year: number): Record<string, number> {
   const list = yearlyData[year] || yearlyData[2024];
   const map: Record<string, number> = {};
-  list.forEach((p) => { map[p.province] = p.score; });
+  list.forEach((p) => {
+    map[p.province] = p.score;
+  });
   return map;
 }
 
@@ -92,6 +133,8 @@ export function useMap() {
     scene.setBgColor('#131722');
 
     let redFlyLayer: LineLayer | null = null;
+    let greenFlyLayer: LineLayer | null = null;
+    let radarLayer: PointLayer | null = null;
     let provinceExtrudeLayer: PolygonLayer | null = null;
     let provinceBorderLayer: LineLayer | null = null;
 
@@ -106,7 +149,7 @@ export function useMap() {
 
         features.forEach((f) => {
           const s = scoreMap[f.properties.name] || 0;
-          f.properties._score = Math.pow(s, 1.6);
+          f.properties._score = s ** 1.6;
           f.properties._color = scoreToColor(s);
         });
 
@@ -138,20 +181,28 @@ export function useMap() {
           const newScoreMap = buildScoreMap(year);
           features.forEach((f) => {
             const s = newScoreMap[f.properties.name] || 0;
-            f.properties._score = Math.pow(s, 1.6);
+            f.properties._score = s ** 1.6;
             f.properties._color = scoreToColor(s);
           });
           const newGeo = { type: 'FeatureCollection', features: [...features] };
           provinceExtrudeLayer?.setData(newGeo);
           provinceBorderLayer?.setData(newGeo);
+
+          // 动态更新飞线和雷达
+          const { greenLines, redLines, activeCities } = generateDynamicLines(year);
+          greenFlyLayer?.setData(greenLines, LINE_PARSER);
+          redFlyLayer?.setData(redLines, LINE_PARSER);
+          radarLayer?.setData(activeCities, POINT_PARSER);
+          scene.render();
         });
       });
 
-      // ========== 绿色飞线：正向空间溢出（协同减排）==========
-      const greenFlyLayer = new LineLayer({ blend: 'normal', zIndex: 8 })
-        .source(greenLines, {
-          parser: { type: 'json', x: 'x', y: 'y', x1: 'x1', y1: 'y1' },
-        })
+      // ========== 动态飞线初始化 ==========
+      const initial = generateDynamicLines(selectedYear.value);
+
+      // 绿色飞线：正向空间溢出（协同减排）
+      greenFlyLayer = new LineLayer({ blend: 'normal', zIndex: 8 })
+        .source(initial.greenLines, LINE_PARSER)
         .size(1.8)
         .shape('arc3d')
         .color('#00e5ff')
@@ -159,11 +210,9 @@ export function useMap() {
         .style({ sourceColor: '#00e5ff', targetColor: '#76ff03', thetaOffset: 0.8, opacity: 0.9 });
       scene.addLayer(greenFlyLayer);
 
-      // ========== 红色飞线：负向空间交互（污染转移）==========
+      // 红色飞线：负向空间交互（污染转移）
       redFlyLayer = new LineLayer({ blend: 'normal', zIndex: 8 })
-        .source(redLines, {
-          parser: { type: 'json', x: 'x', y: 'y', x1: 'x1', y1: 'y1' },
-        })
+        .source(initial.redLines, LINE_PARSER)
         .size(2)
         .shape('arc3d')
         .color('#ff4444')
@@ -186,21 +235,21 @@ export function useMap() {
         scene.render();
       });
 
-      // ========== 城市节点：脉冲圆点 ==========
-      const dotLayer = new PointLayer({ zIndex: 12 })
-        .source(hubCities, { parser: { type: 'json', x: 'lng', y: 'lat' } })
+      // ========== 飞线关联省份：雷达脉冲效果 ==========
+      radarLayer = new PointLayer({ zIndex: 12 })
+        .source(initial.activeCities, POINT_PARSER)
         .shape('circle')
         .animate(true)
         .size(30)
         .color('#00e5ff')
         .style({ opacity: 0.8 });
-      scene.addLayer(dotLayer);
+      scene.addLayer(radarLayer);
 
-      // ========== 城市名称标注 ==========
-      const textLayer = new PointLayer({ zIndex: 15 })
-        .source(hubCities, { parser: { type: 'json', x: 'lng', y: 'lat' } })
+      // ========== 全部 31 省名称标注 ==========
+      const allLabelsLayer = new PointLayer({ zIndex: 15 })
+        .source(allProvincePoints, POINT_PARSER)
         .shape('name', 'text')
-        .size(12)
+        .size(10)
         .color('#0ff')
         .style({
           textAnchor: 'bottom',
@@ -211,7 +260,7 @@ export function useMap() {
           strokeWidth: 0.3,
           textAllowOverlap: true,
         });
-      scene.addLayer(textLayer);
+      scene.addLayer(allLabelsLayer);
     });
   });
 }

@@ -8,7 +8,7 @@
       <span class="timeline-label">数据年份</span>
       <el-slider
         v-model="selectedYear"
-        :min="2010"
+        :min="2000"
         :max="2024"
         :step="1"
         :marks="yearMarks"
@@ -31,9 +31,7 @@
       />
       <div class="tfee-value">
         当前: <b>{{ tfeeThreshold.toFixed(2) }}</b>
-        <span class="tfee-threshold-mark" :class="{ active: tfeeThreshold >= 0.62 }">
-          门槛值 0.62
-        </span>
+        <span class="tfee-threshold-mark" :class="{ active: tfeeThreshold >= 0.62 }"> 门槛值 0.62 </span>
       </div>
     </div>
 
@@ -53,16 +51,15 @@
 
 <script setup lang="ts">
 import BizWrap from './BizWrap.vue';
-import {
-  selectedYear,
-  tfeeThreshold,
-} from './hooks/provinceData';
+import { selectedYear, tfeeThreshold } from './hooks/provinceData';
 
 const showThresholdEffect = ref(false);
 const animatedPercent = ref('0.0');
 let hasCrossed = false;
 
 const yearMarks = {
+  2000: '2000',
+  2005: '2005',
   2010: '2010',
   2015: '2015',
   2020: '2020',
@@ -74,7 +71,9 @@ watch(tfeeThreshold, (val, oldVal) => {
     hasCrossed = true;
     showThresholdEffect.value = true;
     animateNumber(0, 184.5, 1200);
-    setTimeout(() => { showThresholdEffect.value = false; }, 4000);
+    setTimeout(() => {
+      showThresholdEffect.value = false;
+    }, 4000);
   }
   if (val < 0.62) {
     hasCrossed = false;
@@ -85,7 +84,7 @@ function animateNumber(from: number, to: number, duration: number) {
   const start = performance.now();
   function tick(now: number) {
     const t = Math.min((now - start) / duration, 1);
-    const ease = 1 - Math.pow(1 - t, 3);
+    const ease = 1 - (1 - t) ** 3;
     animatedPercent.value = (from + (to - from) * ease).toFixed(1);
     if (t < 1) requestAnimationFrame(tick);
   }
@@ -181,10 +180,10 @@ export default {
 }
 .tfee-slider {
   :deep(.el-slider__runway) {
-    background: linear-gradient(90deg, rgba(255,80,80,0.3), rgba(80,220,120,0.3));
+    background: linear-gradient(90deg, rgba(255, 80, 80, 0.3), rgba(80, 220, 120, 0.3));
   }
   :deep(.el-slider__bar) {
-    background: linear-gradient(90deg, rgb(255,80,80), rgb(80,220,120));
+    background: linear-gradient(90deg, rgb(255, 80, 80), rgb(80, 220, 120));
   }
   :deep(.el-slider__button) {
     width: 14px;
@@ -268,8 +267,14 @@ export default {
 }
 
 @keyframes pulse-glow {
-  from { transform: scale(1); filter: brightness(1); }
-  to { transform: scale(1.15); filter: brightness(1.5); }
+  from {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  to {
+    transform: scale(1.15);
+    filter: brightness(1.5);
+  }
 }
 
 .boom-enter-active {
@@ -279,11 +284,22 @@ export default {
   animation: boom-out 0.4s ease-in;
 }
 @keyframes boom-in {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
-  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
-  100% { transform: translate(-50%, -50%) scale(1); }
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 @keyframes boom-out {
-  to { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.5);
+  }
 }
 </style>
