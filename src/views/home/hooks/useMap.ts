@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment, no-undef, no-underscore-dangle, no-param-reassign, no-plusplus, no-continue */
 // @ts-nocheck
-import { onMounted, watch } from 'vue';
+import { onMounted, watch, type Ref } from 'vue';
 import { LineLayer, PointLayer, PolygonLayer, Scene } from '@antv/l7';
 import { Map } from '@antv/l7-maps';
 import { RDBSource } from 'district-data';
@@ -12,6 +12,7 @@ import {
   provinceCoords,
   fullToShortName,
 } from './provinceData';
+import { mockGreenFinanceData, mockCarbonData } from './mockData';
 
 const LINE_PARSER = { parser: { type: 'json', x: 'x', y: 'y', x1: 'x1', y1: 'y1' } };
 const POINT_PARSER = { parser: { type: 'json', x: 'lng', y: 'lat' } };
@@ -261,6 +262,168 @@ export function useMap() {
           textAllowOverlap: true,
         });
       scene.addLayer(allLabelsLayer);
+    });
+  });
+}
+
+export function useGreenFinanceMap(selectedProv: Ref<string>) {
+  onMounted(() => {
+    const scene = new Scene({
+      id: 'gf-map',
+      map: new Map({
+        pitch: 45,
+        style: 'dark',
+        center: [104.195397, 35.86166],
+        zoom: 3.2,
+      }),
+    });
+    scene.setBgColor('#131722');
+    const scoreMap: Record<string, number> = {};
+    mockGreenFinanceData.forEach((d) => {
+      scoreMap[d.province] = d.score;
+    });
+
+    scene.on('loaded', () => {
+      const mapEl = document.getElementById('gf-map');
+      if (mapEl) mapEl.style.background = '#131722';
+
+      const source = new RDBSource({ version: 2023 });
+      source.getData({ level: 'province', precision: 'low' }).then((geoData) => {
+        const features = geoData.features.filter((f) => f.properties.name);
+        features.forEach((f) => {
+          const s = scoreMap[f.properties.name] || 0;
+          f.properties._score = s ** 1.5;
+          f.properties._rawScore = s;
+        });
+        const provinceGeo = { type: 'FeatureCollection', features };
+
+        const extrudeLayer = new PolygonLayer({ zIndex: 5 })
+          .source(provinceGeo)
+          .shape('extrude')
+          .size('_score', [20000, 2000000])
+          .color('_rawScore', [
+            '#1a237e',
+            '#0d47a1',
+            '#01579b',
+            '#006064',
+            '#1b5e20',
+            '#827717',
+            '#f57f17',
+            '#ff6f00',
+            '#e65100',
+            '#ffab00',
+          ])
+          .style({ heightfixed: true, pickLight: true, opacity: 0.88 })
+          .active({ color: 'rgba(0,229,255,0.45)' });
+        scene.addLayer(extrudeLayer);
+
+        const borderLayer = new LineLayer({ zIndex: 10 })
+          .source(provinceGeo)
+          .shape('line')
+          .color('#5DDDFF')
+          .size(0.6)
+          .style({ opacity: 0.7 });
+        scene.addLayer(borderLayer);
+
+        extrudeLayer.on('click', (e) => {
+          const name = e.feature?.properties?.name;
+          if (name) selectedProv.value = name;
+        });
+      });
+
+      const labelLayer = new PointLayer({ zIndex: 15 })
+        .source(allProvincePoints, POINT_PARSER)
+        .shape('name', 'text')
+        .size(9)
+        .color('#0ff')
+        .style({
+          textAnchor: 'bottom',
+          textOffset: [0, -8],
+          spacing: 2,
+          padding: [2, 2],
+          stroke: '#0ff',
+          strokeWidth: 0.3,
+          textAllowOverlap: true,
+        });
+      scene.addLayer(labelLayer);
+    });
+  });
+}
+
+export function useCarbonMap() {
+  onMounted(() => {
+    const scene = new Scene({
+      id: 'carbon-map',
+      map: new Map({
+        pitch: 20,
+        style: 'dark',
+        center: [104.195397, 35.86166],
+        zoom: 3.5,
+      }),
+    });
+    scene.setBgColor('#131722');
+    const carbonMap: Record<string, number> = {};
+    mockCarbonData.forEach((d) => {
+      carbonMap[d.province] = d.carbonEmission;
+    });
+    scene.on('loaded', () => {
+      const mapEl = document.getElementById('carbon-map');
+      if (mapEl) mapEl.style.background = '#131722';
+
+      const source = new RDBSource({ version: 2023 });
+      source.getData({ level: 'province', precision: 'low' }).then((geoData) => {
+        const features = geoData.features.filter((f) => f.properties.name);
+        features.forEach((f) => {
+          f.properties._carbon = carbonMap[f.properties.name] || 0;
+        });
+        const provinceGeo = { type: 'FeatureCollection', features };
+
+        const choropleth = new PolygonLayer({ zIndex: 5 })
+          .source(provinceGeo)
+          .shape('fill')
+          .color('_carbon', [
+            '#1b5e20',
+            '#2e7d32',
+            '#388e3c',
+            '#43a047',
+            '#66bb6a',
+            '#a5d6a7',
+            '#ffcc80',
+            '#ffb74d',
+            '#ff9800',
+            '#f57c00',
+            '#e65100',
+            '#d84315',
+            '#b71c1c',
+          ])
+          .style({ opacity: 0.8 })
+          .active({ color: 'rgba(255,255,255,0.25)' });
+        scene.addLayer(choropleth);
+
+        const border = new LineLayer({ zIndex: 10 })
+          .source(provinceGeo)
+          .shape('line')
+          .color('rgba(255,255,255,0.25)')
+          .size(0.6)
+          .style({ opacity: 0.7 });
+        scene.addLayer(border);
+      });
+
+      const labelLayer = new PointLayer({ zIndex: 15 })
+        .source(allProvincePoints, POINT_PARSER)
+        .shape('name', 'text')
+        .size(9)
+        .color('#fff')
+        .style({
+          textAnchor: 'bottom',
+          textOffset: [0, -4],
+          spacing: 2,
+          padding: [2, 2],
+          stroke: '#000',
+          strokeWidth: 0.8,
+          textAllowOverlap: true,
+        });
+      scene.addLayer(labelLayer);
     });
   });
 }
