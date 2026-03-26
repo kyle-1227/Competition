@@ -10,6 +10,7 @@ const pathSrc = resolve(__dirname, 'src');
 export default defineConfig((env) => {
   // env 环境变量
   const viteEnv = loadEnv(env.mode, process.cwd());
+  const normalizedBase = (viteEnv.VITE_BASE || '/').replace(/\/$/, '');
 
   return {
     base: viteEnv.VITE_BASE,
@@ -23,17 +24,24 @@ export default defineConfig((env) => {
     },
     // 服务设置
     server: {
-      host: true, // host设置为true才可以使用network的形式，以ip访问项目
-      open: true, // 自动打开浏览器
-      cors: true, // 跨域设置允许
-      strictPort: true, // 如果端口已占用直接退出
-      // 接口代理
+      host: '0.0.0.0',
+      port: 5173,
+      open: true,
+      // 带 VITE_BASE 子路径时，请求为 /{base}/api/...，需单独代理并重写为后端的 /api/...
       proxy: {
-        '/__': {
-          // 本地 8000 前端代码的接口 代理到 8888 的服务端口
-          target: viteEnv.VITE_APP_DOMAIN,
-          changeOrigin: true, // 允许跨域
-          logLevel: 'info',
+        ...(normalizedBase
+          ? {
+              [`${normalizedBase}/api`]: {
+                target: 'http://127.0.0.1:8000',
+                changeOrigin: true,
+                rewrite: (path) =>
+                  path.replace(new RegExp(`^${normalizedBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api`), '/api'),
+              },
+            }
+          : {}),
+        '/api': {
+          target: 'http://127.0.0.1:8000',
+          changeOrigin: true,
         },
       },
     },

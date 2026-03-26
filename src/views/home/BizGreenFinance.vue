@@ -2,61 +2,55 @@
 import { useGreenFinanceRadar, useGreenFinanceRose } from './hooks/useChart';
 import { useGreenFinanceMap } from './hooks/useMap';
 import { mockGreenFinanceData } from './hooks/mockData';
+import { realProvinceData } from './hooks/provinceData';
 
 const selectedProv = ref('北京市');
 useGreenFinanceRadar(selectedProv);
 useGreenFinanceRose(selectedProv);
 useGreenFinanceMap(selectedProv);
-const provList = mockGreenFinanceData.map((d) => d.province);
-const displayProv = computed(() => selectedProv.value.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, ''));
-const totalGreenFinance = ref(0);
-const totalCarbonReduction = ref(0);
-const avgScore = ref(0);
-const coveredProvinces = ref(0);
-const TARGET_GREEN_FINANCE = 286452.8;
-const TARGET_CARBON_REDUCTION = 134876.5;
-const TARGET_AVG_SCORE = +(
-  (mockGreenFinanceData.reduce((s, d) => s + d.score, 0) / mockGreenFinanceData.length) *
-  100
-).toFixed(1);
-const TARGET_PROVINCES = mockGreenFinanceData.length;
 
-function animateValue(
-  update: (v: number) => void,
-  target: number,
-  duration: number,
-  decimals = 1,
-) {
-  const start = performance.now();
-  function tick(now: number) {
-    const t = Math.min((now - start) / duration, 1);
-    const ease = 1 - (1 - t) ** 3;
-    update(+(target * ease).toFixed(decimals));
-    if (t < 1) requestAnimationFrame(tick);
+const provList = computed(() => {
+  const rows = realProvinceData.value;
+  if (rows.length > 0) {
+    return [...rows].map((r) => r.province).sort((a, b) => a.localeCompare(b, 'zh-CN'));
   }
-  requestAnimationFrame(tick);
-}
-
-const activeTab = inject<ReturnType<typeof ref<string>>>('activeTab');
-let animated = false;
-function triggerAnimation() {
-  if (animated) return;
-  animated = true;
-  animateValue((v) => {
-  totalGreenFinance.value = v;
-}, TARGET_GREEN_FINANCE, 2000);
-  animateValue(totalCarbonReduction, TARGET_CARBON_REDUCTION, 2200);
-  animateValue(avgScore, TARGET_AVG_SCORE, 1800);
-  animateValue(coveredProvinces, TARGET_PROVINCES, 1500, 0);
-}
-onMounted(() => {
-  if (activeTab?.value === 'greenFinance') nextTick(triggerAnimation);
-  if (activeTab) {
-    watch(activeTab, (val) => {
-      if (val === 'greenFinance') nextTick(triggerAnimation);
-    });
-  }
+  return mockGreenFinanceData.map((d) => d.province);
 });
+
+watch(
+  provList,
+  (list) => {
+    if (list.length && !list.includes(selectedProv.value)) {
+      selectedProv.value = list[0];
+    }
+  },
+  { immediate: true },
+);
+
+/** 与省级接口联调：有数据时用 Σ(gdp×score)、Σ(碳/1e4) 等；无数据时沿用 mock 展示占位 */
+const boardStats = computed(() => {
+  const rows = realProvinceData.value;
+  if (!rows.length) {
+    const n = mockGreenFinanceData.length;
+    return {
+      totalGreenFinance: 286452.8,
+      totalCarbon: 134876.5,
+      avgScore: +((mockGreenFinanceData.reduce((s, d) => s + d.score, 0) / n) * 100).toFixed(1),
+      coveredProvinces: n,
+    };
+  }
+  const totalGreenFinance = Math.round(rows.reduce((s, r) => s + (r.gdp || 0) * (r.score || 0), 0));
+  const totalCarbon = Math.round(rows.reduce((s, r) => s + (r.carbonEmission || 0) / 10000, 0));
+  const avgScore = +((rows.reduce((s, r) => s + r.score, 0) / rows.length) * 100).toFixed(1);
+  return {
+    totalGreenFinance,
+    totalCarbon,
+    avgScore,
+    coveredProvinces: rows.length,
+  };
+});
+
+const displayProv = computed(() => selectedProv.value.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, ''));
 </script>
 <template>
   <div class="biz-wrap">
@@ -85,15 +79,15 @@ onMounted(() => {
         <div class="board-item">
           <div class="board-label">全国绿色金融总规模</div>
           <div class="board-value cyan">
-            <span class="board-num">{{ totalGreenFinance.toLocaleString() }}</span>
+            <span class="board-num">{{ boardStats.totalGreenFinance.toLocaleString() }}</span>
             <span class="board-unit">亿元</span>
           </div>
         </div>
         <div class="board-divider" />
         <div class="board-item">
-          <div class="board-label">当年碳减排总量</div>
+          <div class="board-label">全国碳排放合计</div>
           <div class="board-value green">
-            <span class="board-num">{{ totalCarbonReduction.toLocaleString() }}</span>
+            <span class="board-num">{{ boardStats.totalCarbon.toLocaleString() }}</span>
             <span class="board-unit">万吨CO₂</span>
           </div>
         </div>
@@ -101,7 +95,7 @@ onMounted(() => {
         <div class="board-item">
           <div class="board-label">全国均值指数</div>
           <div class="board-value gold">
-            <span class="board-num">{{ avgScore }}</span>
+            <span class="board-num">{{ boardStats.avgScore }}</span>
             <span class="board-unit">分</span>
           </div>
         </div>
@@ -109,7 +103,7 @@ onMounted(() => {
         <div class="board-item">
           <div class="board-label">覆盖省份</div>
           <div class="board-value purple">
-            <span class="board-num">{{ coveredProvinces }}</span>
+            <span class="board-num">{{ boardStats.coveredProvinces }}</span>
             <span class="board-unit">个</span>
           </div>
         </div>

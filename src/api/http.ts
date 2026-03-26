@@ -3,10 +3,9 @@ import { ElMessage } from 'element-plus';
 import showCodeMessage from '@/api/code';
 import { formatJsonToUrlParams, instanceObject } from '@/utils/format';
 
-// 创建实例
+// 与 Vite base（如 /vue3-vite5-dashboard/）一致，避免请求落到 /api 根路径导致 404
 const axiosInstance: AxiosInstance = axios.create({
-  // 前缀
-  baseURL: '',
+  baseURL: import.meta.env.BASE_URL,
   // 超时
   timeout: 1000 * 30,
   // 请求头
@@ -37,6 +36,13 @@ axiosInstance.interceptors.response.use(
     return response;
   },
   (error: AxiosError) => {
+    if (axios.isCancel(error)) {
+      return Promise.reject(error);
+    }
+    const msg = String((error as Error)?.message ?? '');
+    if (error.code === 'ERR_CANCELED' || msg === 'canceled') {
+      return Promise.reject(error);
+    }
     const { response } = error;
     if (response) {
       ElMessage.error(showCodeMessage(response.status));
@@ -47,8 +53,8 @@ axiosInstance.interceptors.response.use(
   },
 );
 const service = {
-  get<T = any>(url: string, data?: object): Promise<T> {
-    return axiosInstance.get(url, { params: data });
+  get<T = any>(url: string, params?: object, requestConfig?: Pick<AxiosRequestConfig, 'signal'>): Promise<T> {
+    return axiosInstance.get(url, { params, ...requestConfig });
   },
 
   post<T = any>(url: string, data?: object): Promise<T> {

@@ -1,35 +1,17 @@
-import service from '@/api/http';
+import http from '@/api/http';
 
-const { VITE_APP_DOMAIN } = import.meta.env;
-
-interface APII {
-  [x: string]: string;
-}
-
-const API: APII = {
-  test: `${VITE_APP_DOMAIN}/test`,
+/** 省级 / 地级市接口（路径相对 BASE_URL，开发时走 vite proxy → 本机 8000） */
+export const getProvinceDataApi = (year = 2024, signal?: AbortSignal) => {
+  return http.get<unknown>('api/province/data', { year }, signal ? { signal } : undefined);
 };
 
-export function test() {
-  return service.post(API.test);
-}
-
-export function soldCarList() {
-  return {
-    success: true,
-    data: {
-      list: [{}],
+export const getCityDataApi = (province: string, year = 2024, signal?: AbortSignal) => {
+  return http.get<unknown>(
+    'api/city/data',
+    {
+      province,
+      year,
     },
-    msg: '成功',
-  };
-}
-
-export function onSaleCarList() {
-  return {
-    success: true,
-    data: {},
-    msg: '成功',
-  };
-}
-
-export default API;
+    signal ? { signal } : undefined,
+  );
+};

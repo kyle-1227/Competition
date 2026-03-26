@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { useCarbonBar } from './hooks/useChart';
+import { useCarbonBar, getCarbonRowsFromApi } from './hooks/useChart';
 import { useCarbonMap } from './hooks/useMap';
-import { mockCarbonData } from './hooks/mockData';
 
 useCarbonBar();
 useCarbonMap();
-const totalCarbon = computed(() => mockCarbonData.reduce((s, d) => s + d.carbonEmission, 0));
-const avgCarbon = computed(() => Math.round(totalCarbon.value / mockCarbonData.length));
+
+const carbonRows = computed(() => getCarbonRowsFromApi());
+const totalCarbon = computed(() => carbonRows.value.reduce((s, d) => s + d.carbonEmission, 0));
+const avgCarbon = computed(() =>
+  carbonRows.value.length ? Math.round(totalCarbon.value / carbonRows.value.length) : 0,
+);
 const topProvince = computed(() => {
-  const top = [...mockCarbonData].sort((a, b) => b.carbonEmission - a.carbonEmission)[0];
-  return top.province.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, '');
+  const top = [...carbonRows.value].sort((a, b) => b.carbonEmission - a.carbonEmission)[0];
+  return top ? top.province.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, '') : '—';
 });
 </script>
 <template>

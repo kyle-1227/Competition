@@ -31,15 +31,16 @@
     <div class="timeline-bar">
       <span class="timeline-label">数据年份</span>
       <el-slider
-        v-model="selectedYear"
+        v-model="timelineYear"
         :min="2000"
         :max="2024"
         :step="1"
         :marks="yearMarks"
         :format-tooltip="(v: number) => `${v}年`"
         class="timeline-slider"
+        @change="commitTimelineYear"
       />
-      <div class="year-badge">{{ selectedYear }}年</div>
+      <div class="year-badge">{{ timelineYear }}年</div>
     </div>
 
     <!-- 右下角 TFEE 阈值滑块 -->
@@ -79,7 +80,42 @@ import BizGreenFinance from './BizGreenFinance.vue';
 import BizCarbon from './BizCarbon.vue';
 import BizEnergy from './BizEnergy.vue';
 import BizMacro from './BizMacro.vue';
-import { selectedYear, tfeeThreshold } from './hooks/provinceData';
+import {
+  selectedYear,
+  timelineYear,
+  tfeeThreshold,
+  selectedProvince,
+  fetchProvinceData,
+  fetchCityData,
+} from './hooks/provinceData';
+
+function commitTimelineYear() {
+  const y = timelineYear.value;
+  if (y === selectedYear.value) return;
+  selectedYear.value = y;
+  fetchProvinceData(y);
+  if (selectedProvince.value) {
+    fetchCityData(selectedProvince.value, y);
+  }
+}
+
+onMounted(() => {
+  timelineYear.value = selectedYear.value;
+  fetchProvinceData(selectedYear.value);
+  if (selectedProvince.value) {
+    fetchCityData(selectedProvince.value, selectedYear.value);
+  }
+});
+
+watch(selectedYear, (y) => {
+  timelineYear.value = y;
+});
+
+watch(selectedProvince, (name) => {
+  if (name) {
+    fetchCityData(name, selectedYear.value);
+  }
+});
 
 const tabs = [
   { key: 'sandbox', label: '综合引力沙盘', icon: '🌐' },

@@ -1,12 +1,14 @@
 import { onMounted, watch, inject, nextTick, type Ref } from 'vue';
 import * as echarts from 'echarts';
 import {
-  yearlyData,
   indicatorLabels,
   indicatorKeys,
   findProvince,
   selectedProvince,
   selectedYear,
+  realProvinceData,
+  getProvinceRows,
+  type ProvinceGreenFinance,
 } from './provinceData';
 import {
   mockGreenFinanceData,
@@ -21,6 +23,39 @@ type GfValueKey = keyof Omit<MockGreenFinanceRow, 'province' | 'score'>;
 
 function gfVal(item: MockGreenFinanceRow, key: string): number {
   return item[key as GfValueKey];
+}
+
+/** 接口省级记录 → 屏二雷达/玫瑰图结构（七维键与 greenFinanceIndicators 一致） */
+export function provinceToGfMonitorRow(p: ProvinceGreenFinance): MockGreenFinanceRow {
+  return {
+    province: p.province,
+    score: p.score,
+    greenCredit: p.greenCredit,
+    greenInvest: p.greenInvest,
+    greenInsurance: p.greenInsurance,
+    greenBond: p.greenBond,
+    greenSupport: p.greenExpend,
+    greenFund: p.greenFund,
+    greenEquity: p.greenEquity,
+  };
+}
+
+export function getGfMonitorRows(): MockGreenFinanceRow[] {
+  const raw = realProvinceData.value;
+  if (raw.length > 0) return raw.map(provinceToGfMonitorRow);
+  return mockGreenFinanceData;
+}
+
+/** 碳模块：万吨 CO₂（库内为吨级量级，除以 1e4） */
+export function getCarbonRowsFromApi(): { province: string; carbonEmission: number }[] {
+  const raw = realProvinceData.value;
+  if (raw.length > 0) {
+    return raw.map((r) => ({
+      province: r.province,
+      carbonEmission: (r.carbonEmission ?? 0) / 10000,
+    }));
+  }
+  return mockCarbonData;
 }
 /* ========================================================================
  * 延迟初始化辅助：解决 v-show 下图表容器 0 尺寸的问题
@@ -47,7 +82,7 @@ export function useStackedBar() {
   let chart: echarts.ECharts | null = null;
   function render() {
     const year = selectedYear.value;
-    const list = yearlyData[year] ?? [];
+    const list = getProvinceRows(year);
     const top = [...list].sort((a, b) => b.score - a.score).slice(0, 15);
     const provinces = top.map((p) => p.province.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, ''));
     if (!chart) {
@@ -86,7 +121,7 @@ export function useStackedBar() {
   }
   useDeferredChart('sandbox', () => {
     render();
-    watch(selectedYear, render);
+    watch(realProvinceData, render, { deep: true });
   });
 }
 
@@ -97,12 +132,12 @@ export function useRadar() {
   let chart: echarts.ECharts | null = null;
   function render() {
     const year = selectedYear.value;
-    const list = yearlyData[year] ?? [];
+    const list = getProvinceRows(year);
     const row = selectedProvince.value
       ? findProvince(selectedProvince.value, year)
       : [...list].sort((a, b) => b.score - a.score)[0];
     if (!row) return;
-    const values = indicatorKeys.map((k) => row[k]);
+    const values = indicatorKeys.map((k) => Number(row[k] ?? 0));
     const indMax = Math.max(...values, 0.02) * 1.4;
     if (!chart) {
       const el = document.getElementById('radar');
@@ -161,7 +196,8 @@ export function useRadar() {
   }
   useDeferredChart('sandbox', () => {
     render();
-    watch([selectedYear, selectedProvince], render);
+    watch(selectedProvince, render);
+    watch(realProvinceData, render, { deep: true });
   });
 }
 
@@ -170,9 +206,11 @@ export function useRadar() {
  * ======================================================================== */
 export function useGreenFinanceRadar(selectedProv: Ref<string>) {
   let chart: echarts.ECharts | null = null;
-  let inited = false;
+  let hooksReady = false;
   function render() {
-    const item = mockGreenFinanceData.find((d) => d.province === selectedProv.value) || mockGreenFinanceData[0];
+    const rows = getGfMonitorRows();
+    const item = rows.find((d) => d.province === selectedProv.value) || rows[0];
+    if (!item) return;
     const indicator = greenFinanceIndicators.map((ind) => ({ name: ind.label, max: 0.18 }));
     const values = greenFinanceIndicators.map((ind) => gfVal(item, ind.key));
     if (!chart) {
@@ -289,9 +327,10 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
   }
   useDeferredChart('greenFinance', () => {
     render();
-    if (!inited) {
-      inited = true;
+    if (!hooksReady) {
+      hooksReady = true;
       watch(selectedProv, render);
+      watch(realProvinceData, render, { deep: true });
     }
   });
 }
@@ -331,9 +370,11 @@ const ROSE_PALETTE = [
 const ROSE_SOLID_COLORS = ['#00BFFF', '#00E5A0', '#FFD54F', '#CE93D8', '#FF8A65', '#4FC3F7', '#AED581'];
 export function useGreenFinanceRose(selectedProv: Ref<string>) {
   let chart: echarts.ECharts | null = null;
-  let inited = false;
+  let hooksReady = false;
   function render() {
-    const item = mockGreenFinanceData.find((d) => d.province === selectedProv.value) || mockGreenFinanceData[0];
+    const rows = getGfMonitorRows();
+    const item = rows.find((d) => d.province === selectedProv.value) || rows[0];
+    if (!item) return;
     const total = greenFinanceIndicators.reduce((s, ind) => s + gfVal(item, ind.key), 0);
     const data = greenFinanceIndicators.map((ind, i) => ({
       value: +(gfVal(item, ind.key) * 100).toFixed(2),
@@ -429,9 +470,10 @@ export function useGreenFinanceRose(selectedProv: Ref<string>) {
   }
   useDeferredChart('greenFinance', () => {
     render();
-    if (!inited) {
-      inited = true;
+    if (!hooksReady) {
+      hooksReady = true;
       watch(selectedProv, render);
+      watch(realProvinceData, render, { deep: true });
     }
   });
 }
@@ -440,8 +482,10 @@ export function useGreenFinanceRose(selectedProv: Ref<string>) {
  * ======================================================================== */
 export function useCarbonBar() {
   let chart: echarts.ECharts | null = null;
+  let hooksReady = false;
   function render() {
-    const sorted = [...mockCarbonData]
+    const source = getCarbonRowsFromApi();
+    const sorted = [...source]
       .sort((a, b) => b.carbonEmission - a.carbonEmission)
       .slice(0, 10)
       .reverse();
@@ -508,7 +552,13 @@ export function useCarbonBar() {
       true,
     );
   }
-  useDeferredChart('carbon', render);
+  useDeferredChart('carbon', () => {
+    render();
+    if (!hooksReady) {
+      hooksReady = true;
+      watch(realProvinceData, render, { deep: true });
+    }
+  });
 }
 /* ========================================================================
  * 能耗强度分析 - 散点图 + 线性回归

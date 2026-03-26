@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useStackedBar, useRadar } from './hooks/useChart';
 import { useMap } from './hooks/useMap';
-import { selectedYear } from './hooks/provinceData';
+import { timelineYear } from './hooks/provinceData';
 
 useStackedBar();
 useRadar();
@@ -12,11 +12,11 @@ useMap();
   <div class="biz-wrap">
     <div class="biz-wrap-sidebar">
       <div class="sidebar-section">
-        <div class="chart-title">绿色金融指数结构 · {{ selectedYear }}年（TOP 15）</div>
+        <div class="chart-title">绿色金融指数结构 · {{ timelineYear }}年（TOP 15）</div>
         <div id="bar" class="chart-box"></div>
       </div>
       <div class="sidebar-section">
-        <div class="chart-title">绿色金融雷达图 · {{ selectedYear }}年</div>
+        <div class="chart-title">绿色金融雷达图 · {{ timelineYear }}年</div>
         <div id="radar" class="chart-box"></div>
       </div>
     </div>

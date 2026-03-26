@@ -6,13 +6,11 @@ import { Map } from '@antv/l7-maps';
 import { RDBSource } from 'district-data';
 import {
   selectedProvince,
-  selectedYear,
   tfeeThreshold,
-  yearlyData,
   provinceCoords,
   fullToShortName,
+  realProvinceData,
 } from './provinceData';
-import { mockGreenFinanceData, mockCarbonData } from './mockData';
 
 const LINE_PARSER = { parser: { type: 'json', x: 'x', y: 'y', x1: 'x1', y1: 'y1' } };
 const POINT_PARSER = { parser: { type: 'json', x: 'lng', y: 'lat' } };
@@ -42,8 +40,9 @@ interface CityPoint {
  * 基于引力模型的动态飞线生成算法
  * 根据当年各省绿色金融得分排名，动态计算空间溢出关系
  */
-function generateDynamicLines(year: number) {
-  const data = yearlyData[year] || yearlyData[2024];
+function generateDynamicLines() {
+  /* 联调：无接口数据时不使用 mock，飞线为空便于对比 */
+  const data = realProvinceData.value;
   const sorted = [...data].sort((a, b) => b.score - a.score);
 
   const hubs = sorted.slice(0, 5);
@@ -92,16 +91,17 @@ function generateDynamicLines(year: number) {
     }
   });
 
-  const activeCities: CityPoint[] = [...activeSet].map((fullName) => {
+  const activeCities: CityPoint[] = [...activeSet].flatMap((fullName) => {
     const coord = provinceCoords[fullName];
-    return { lng: coord[0], lat: coord[1], name: fullToShortName[fullName] || fullName };
+    if (!coord) return [];
+    return [{ lng: coord[0], lat: coord[1], name: fullToShortName[fullName] || fullName }];
   });
 
   return { greenLines, redLines, activeCities };
 }
 
-function buildScoreMap(year: number): Record<string, number> {
-  const list = yearlyData[year] || yearlyData[2024];
+function buildScoreMap(): Record<string, number> {
+  const list = realProvinceData.value;
   const map: Record<string, number> = {};
   list.forEach((p) => {
     map[p.province] = p.score;
@@ -143,10 +143,9 @@ export function useMap() {
       const mapEl = document.getElementById('map');
       if (mapEl) mapEl.style.background = '#131722';
 
-      // ========== Province 3D extrude ==========
       source.getData({ level: 'province', precision: 'low' }).then((geoData) => {
         const features = geoData.features.filter((f) => f.properties.name);
-        const scoreMap = buildScoreMap(selectedYear.value);
+        const scoreMap = buildScoreMap();
 
         features.forEach((f) => {
           const s = scoreMap[f.properties.name] || 0;
@@ -178,8 +177,8 @@ export function useMap() {
           if (name) selectedProvince.value = name;
         });
 
-        watch(selectedYear, (year) => {
-          const newScoreMap = buildScoreMap(year);
+        const syncFromProvinceData = () => {
+          const newScoreMap = buildScoreMap();
           features.forEach((f) => {
             const s = newScoreMap[f.properties.name] || 0;
             f.properties._score = s ** 1.6;
@@ -189,81 +188,92 @@ export function useMap() {
           provinceExtrudeLayer?.setData(newGeo);
           provinceBorderLayer?.setData(newGeo);
 
-          // 动态更新飞线和雷达
-          const { greenLines, redLines, activeCities } = generateDynamicLines(year);
+          const { greenLines, redLines, activeCities } = generateDynamicLines();
           greenFlyLayer?.setData(greenLines, LINE_PARSER);
           redFlyLayer?.setData(redLines, LINE_PARSER);
           radarLayer?.setData(activeCities, POINT_PARSER);
           scene.render();
+        };
+
+        const initial = generateDynamicLines();
+
+        greenFlyLayer = new LineLayer({ blend: 'normal', zIndex: 8 })
+          .source(initial.greenLines, LINE_PARSER)
+          .size(1.8)
+          .shape('arc3d')
+          .color('#00e5ff')
+          .animate({ interval: 0.08, trailLength: 0.5, duration: 0.6 })
+          .style({ sourceColor: '#00e5ff', targetColor: '#76ff03', thetaOffset: 0.8, opacity: 0.9 });
+        scene.addLayer(greenFlyLayer);
+
+        redFlyLayer = new LineLayer({ blend: 'normal', zIndex: 8 })
+          .source(initial.redLines, LINE_PARSER)
+          .size(2)
+          .shape('arc3d')
+          .color('#ff4444')
+          .animate({ interval: 0.08, trailLength: 0.4, duration: 0.5 })
+          .style({ sourceColor: '#ff4444', targetColor: '#ffab00', thetaOffset: 1, opacity: 1 });
+        scene.addLayer(redFlyLayer);
+
+        watch(tfeeThreshold, (val) => {
+          if (!redFlyLayer) return;
+          if (val >= 0.62) {
+            redFlyLayer.size(0.4);
+            redFlyLayer.color('#66bb6a');
+            redFlyLayer.style({ sourceColor: '#66bb6a', targetColor: '#a5d6a7', opacity: 0.3 });
+          } else {
+            redFlyLayer.size(2);
+            redFlyLayer.color('#ff4444');
+            redFlyLayer.style({ sourceColor: '#ff4444', targetColor: '#ffab00', opacity: 1 });
+          }
+          scene.render();
         });
+
+        radarLayer = new PointLayer({ zIndex: 12 })
+          .source(initial.activeCities, POINT_PARSER)
+          .shape('circle')
+          .animate(true)
+          .size(30)
+          .color('#00e5ff')
+          .style({ opacity: 0.8 });
+        scene.addLayer(radarLayer);
+
+        const allLabelsLayer = new PointLayer({ zIndex: 15 })
+          .source(allProvincePoints, POINT_PARSER)
+          .shape('name', 'text')
+          .size(10)
+          .color('#0ff')
+          .style({
+            textAnchor: 'bottom',
+            textOffset: [0, -8],
+            spacing: 2,
+            padding: [2, 2],
+            stroke: '#0ff',
+            strokeWidth: 0.3,
+            textAllowOverlap: true,
+          });
+        scene.addLayer(allLabelsLayer);
+
+        watch(realProvinceData, syncFromProvinceData, { deep: true, immediate: true });
       });
-
-      // ========== 动态飞线初始化 ==========
-      const initial = generateDynamicLines(selectedYear.value);
-
-      // 绿色飞线：正向空间溢出（协同减排）
-      greenFlyLayer = new LineLayer({ blend: 'normal', zIndex: 8 })
-        .source(initial.greenLines, LINE_PARSER)
-        .size(1.8)
-        .shape('arc3d')
-        .color('#00e5ff')
-        .animate({ interval: 0.08, trailLength: 0.5, duration: 0.6 })
-        .style({ sourceColor: '#00e5ff', targetColor: '#76ff03', thetaOffset: 0.8, opacity: 0.9 });
-      scene.addLayer(greenFlyLayer);
-
-      // 红色飞线：负向空间交互（污染转移）
-      redFlyLayer = new LineLayer({ blend: 'normal', zIndex: 8 })
-        .source(initial.redLines, LINE_PARSER)
-        .size(2)
-        .shape('arc3d')
-        .color('#ff4444')
-        .animate({ interval: 0.08, trailLength: 0.4, duration: 0.5 })
-        .style({ sourceColor: '#ff4444', targetColor: '#ffab00', thetaOffset: 1, opacity: 1 });
-      scene.addLayer(redFlyLayer);
-
-      // TFEE 阈值联动：红色飞线变细变淡
-      watch(tfeeThreshold, (val) => {
-        if (!redFlyLayer) return;
-        if (val >= 0.62) {
-          redFlyLayer.size(0.4);
-          redFlyLayer.color('#66bb6a');
-          redFlyLayer.style({ sourceColor: '#66bb6a', targetColor: '#a5d6a7', opacity: 0.3 });
-        } else {
-          redFlyLayer.size(2);
-          redFlyLayer.color('#ff4444');
-          redFlyLayer.style({ sourceColor: '#ff4444', targetColor: '#ffab00', opacity: 1 });
-        }
-        scene.render();
-      });
-
-      // ========== 飞线关联省份：雷达脉冲效果 ==========
-      radarLayer = new PointLayer({ zIndex: 12 })
-        .source(initial.activeCities, POINT_PARSER)
-        .shape('circle')
-        .animate(true)
-        .size(30)
-        .color('#00e5ff')
-        .style({ opacity: 0.8 });
-      scene.addLayer(radarLayer);
-
-      // ========== 全部 31 省名称标注 ==========
-      const allLabelsLayer = new PointLayer({ zIndex: 15 })
-        .source(allProvincePoints, POINT_PARSER)
-        .shape('name', 'text')
-        .size(10)
-        .color('#0ff')
-        .style({
-          textAnchor: 'bottom',
-          textOffset: [0, -8],
-          spacing: 2,
-          padding: [2, 2],
-          stroke: '#0ff',
-          strokeWidth: 0.3,
-          textAllowOverlap: true,
-        });
-      scene.addLayer(allLabelsLayer);
     });
   });
+}
+
+function buildProvinceScoreMap(): Record<string, number> {
+  const scoreMap: Record<string, number> = {};
+  realProvinceData.value.forEach((d) => {
+    scoreMap[d.province] = d.score;
+  });
+  return scoreMap;
+}
+
+function buildCarbonMapWanTon(): Record<string, number> {
+  const m: Record<string, number> = {};
+  realProvinceData.value.forEach((d) => {
+    m[d.province] = (d.carbonEmission ?? 0) / 10000;
+  });
+  return m;
 }
 
 export function useGreenFinanceMap(selectedProv: Ref<string>) {
@@ -278,10 +288,6 @@ export function useGreenFinanceMap(selectedProv: Ref<string>) {
       }),
     });
     scene.setBgColor('#131722');
-    const scoreMap: Record<string, number> = {};
-    mockGreenFinanceData.forEach((d) => {
-      scoreMap[d.province] = d.score;
-    });
 
     scene.on('loaded', () => {
       const mapEl = document.getElementById('gf-map');
@@ -290,11 +296,15 @@ export function useGreenFinanceMap(selectedProv: Ref<string>) {
       const source = new RDBSource({ version: 2023 });
       source.getData({ level: 'province', precision: 'low' }).then((geoData) => {
         const features = geoData.features.filter((f) => f.properties.name);
-        features.forEach((f) => {
-          const s = scoreMap[f.properties.name] || 0;
-          f.properties._score = s ** 1.5;
-          f.properties._rawScore = s;
-        });
+        const applyScores = () => {
+          const scoreMap = buildProvinceScoreMap();
+          features.forEach((f) => {
+            const s = scoreMap[f.properties.name] || 0;
+            f.properties._score = s ** 1.5;
+            f.properties._rawScore = s;
+          });
+        };
+        applyScores();
         const provinceGeo = { type: 'FeatureCollection', features };
 
         const extrudeLayer = new PolygonLayer({ zIndex: 5 })
@@ -329,6 +339,18 @@ export function useGreenFinanceMap(selectedProv: Ref<string>) {
           const name = e.feature?.properties?.name;
           if (name) selectedProv.value = name;
         });
+
+        watch(
+          realProvinceData,
+          () => {
+            applyScores();
+            const newGeo = { type: 'FeatureCollection', features: [...features] };
+            extrudeLayer.setData(newGeo);
+            borderLayer.setData(newGeo);
+            scene.render();
+          },
+          { deep: true, immediate: true },
+        );
       });
 
       const labelLayer = new PointLayer({ zIndex: 15 })
@@ -362,10 +384,6 @@ export function useCarbonMap() {
       }),
     });
     scene.setBgColor('#131722');
-    const carbonMap: Record<string, number> = {};
-    mockCarbonData.forEach((d) => {
-      carbonMap[d.province] = d.carbonEmission;
-    });
     scene.on('loaded', () => {
       const mapEl = document.getElementById('carbon-map');
       if (mapEl) mapEl.style.background = '#131722';
@@ -373,9 +391,13 @@ export function useCarbonMap() {
       const source = new RDBSource({ version: 2023 });
       source.getData({ level: 'province', precision: 'low' }).then((geoData) => {
         const features = geoData.features.filter((f) => f.properties.name);
-        features.forEach((f) => {
-          f.properties._carbon = carbonMap[f.properties.name] || 0;
-        });
+        const applyCarbon = () => {
+          const carbonMap = buildCarbonMapWanTon();
+          features.forEach((f) => {
+            f.properties._carbon = carbonMap[f.properties.name] || 0;
+          });
+        };
+        applyCarbon();
         const provinceGeo = { type: 'FeatureCollection', features };
 
         const choropleth = new PolygonLayer({ zIndex: 5 })
@@ -407,6 +429,18 @@ export function useCarbonMap() {
           .size(0.6)
           .style({ opacity: 0.7 });
         scene.addLayer(border);
+
+        watch(
+          realProvinceData,
+          () => {
+            applyCarbon();
+            const newGeo = { type: 'FeatureCollection', features: [...features] };
+            choropleth.setData(newGeo);
+            border.setData(newGeo);
+            scene.render();
+          },
+          { deep: true, immediate: true },
+        );
       });
 
       const labelLayer = new PointLayer({ zIndex: 15 })
