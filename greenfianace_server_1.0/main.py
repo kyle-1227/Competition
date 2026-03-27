@@ -141,75 +141,103 @@ def get_macro_data(province: str = None):
 
 
 
-# 4. 能耗强度预测接口（反事实推断）
+# 4. 能耗强度预测接口（反事实推断 + 省份专属基准线）
 @app.get("/api/energy/predict")
-def predict_energy_intensity(intensity_increment: float = Query(0.0, description="绿色金融投入追加比例")):
+def predict_energy_intensity(
+    intensity_increment: float = Query(0.0, description="绿色金融投入追加比例"),
+    province: str = Query(None, description="指定省份（可选，不传则使用全国平均）"),
+    year: int = Query(None, description="基准年份（可选，不传则使用最新年份）")
+):
     """
     反事实推断：预测追加绿色金融投入后的能耗强度变化
+    支持省份专属基准线（固定效应）
     
     参数:
         intensity_increment: 绿色金融投入追加比例（0.2 表示追加 20%）
+        province: 指定省份名称（如"浙江省"），不传则使用全国平均
+        year: 基准年份，不传则使用最新年份
     
     返回:
-        scatter_data: 历史散点数据 [[gfi, outcome], ...]
+        scatter_data: 历史散点数据 [[gfi, outcome, province, year], ...]
         predict_point: 预测点 [new_gfi, new_outcome]
-        trendline: 趋势线 [[start_gfi, start_outcome], [end_gfi, end_outcome]]
+        trendline: 专属趋势线 [[start_gfi, start_outcome], [end_gfi, end_outcome]]
         predicted_drop_percent: 预计能耗强度下降百分比
+        base_province: 基准省份名称（"全国平均" 或具体省份）
     """
     try:
         if panel_data is None:
             return {"code": 500, "msg": "数据未加载", "data": {}}
         
-        # 获取最新年份数据
-        latest_year = panel_data['年份'].max()
-        latest_data = panel_data[panel_data['年份'] == latest_year].copy()
+        # 确定基准年份
+        if year is None:
+            year = panel_data['年份'].max()
+        
+        # 获取指定年份的数据
+        df_current = panel_data[panel_data['年份'] == year].copy()
         
         core_x = core_vars['core_x']['raw']
         dep_var = '能源强度'
         
-        # 准备散点数据（所有历史数据）
-        valid_data = panel_data[[core_x, dep_var, '省份']].dropna()
-        scatter_data = valid_data[[core_x, dep_var]].values.tolist()
+        # 准备散点数据（所有历史数据，包含省份和年份）
+        valid_data = panel_data[[core_x, dep_var, '省份', '年份']].dropna()
+        scatter_data = []
+        for _, row in valid_data.iterrows():
+            gfi_val = round(float(row[core_x]), 4)
+            outcome_val = round(float(row[dep_var]), 4)
+            prov_name = str(row['省份'])
+            year_val = int(row['年份'])
+            scatter_data.append([gfi_val, outcome_val, prov_name, year_val])
         
-        # 计算当前平均值
-        current_gfi = latest_data[core_x].mean()
-        current_outcome = latest_data[dep_var].mean()
+        # 【核心逻辑】确定基准点（推演起点）
+        if province and province in df_current['省份'].values:
+            # 省份专属基准点（固定效应）
+            province_row = df_current[df_current['省份'] == province].iloc[0]
+            base_gfi = float(province_row[core_x])
+            base_outcome = float(province_row[dep_var])
+            base_province = province
+        else:
+            # 全国平均基准点
+            base_gfi = df_current[core_x].mean()
+            base_outcome = df_current[dep_var].mean()
+            base_province = "全国平均"
         
         # 计算反事实预测
-        new_gfi = current_gfi * (1 + intensity_increment)
-        delta_gfi = new_gfi - current_gfi
-        new_outcome = current_outcome + (beta_1 * delta_gfi)
+        new_gfi = base_gfi * (1 + intensity_increment)
+        delta_gfi = new_gfi - base_gfi
+        new_outcome = base_outcome + (beta_1 * delta_gfi)
         
         # 计算下降百分比
-        if current_outcome != 0:
-            drop_percent = ((current_outcome - new_outcome) / current_outcome) * 100
+        if base_outcome != 0:
+            drop_percent = ((base_outcome - new_outcome) / base_outcome) * 100
         else:
             drop_percent = 0.0
         
-        # 计算趋势线（包含预测点的新拟合线）
-        all_x = np.append(valid_data[core_x].values, new_gfi)
-        all_y = np.append(valid_data[dep_var].values, new_outcome)
+        # 【固定效应】计算专属趋势线
+        # 固定效应模型：各省斜率相同（beta_1）但截距不同
+        # 专属截距 = 基准点的 outcome - beta_1 * 基准点的 gfi
+        local_intercept = base_outcome - (beta_1 * base_gfi)
         
-        # 重新计算趋势线
-        n_new = len(all_x)
-        slope_new = (n_new * np.sum(all_x * all_y) - np.sum(all_x) * np.sum(all_y)) / (n_new * np.sum(all_x**2) - np.sum(all_x)**2)
-        intercept_new = (np.sum(all_y) - slope_new * np.sum(all_x)) / n_new
+        # 计算趋势线的 X 轴范围（覆盖所有数据点 + 预测点）
+        all_gfi_values = valid_data[core_x].values.tolist() + [new_gfi]
+        x_min = float(min(all_gfi_values))
+        x_max = float(max(all_gfi_values))
         
-        x_min = float(np.min(all_x))
-        x_max = float(np.max(all_x))
+        # 使用专属截距和共同斜率生成趋势线
         trendline = [
-            [x_min, float(slope_new * x_min + intercept_new)],
-            [x_max, float(slope_new * x_max + intercept_new)]
+            [x_min, float(beta_1 * x_min + local_intercept)],
+            [x_max, float(beta_1 * x_max + local_intercept)]
         ]
         
         result = {
-            "scatter_data": [[float(x), float(y)] for x, y in scatter_data],
+            "scatter_data": scatter_data,
             "predict_point": [float(new_gfi), float(new_outcome)],
             "trendline": trendline,
             "predicted_drop_percent": round(float(drop_percent), 2),
-            "current_gfi": round(float(current_gfi), 4),
-            "current_outcome": round(float(current_outcome), 4),
-            "beta_coefficient": round(float(beta_1), 6)
+            "current_gfi": round(float(base_gfi), 4),
+            "current_outcome": round(float(base_outcome), 4),
+            "beta_coefficient": round(float(beta_1), 6),
+            "base_province": base_province,
+            "base_year": int(year)
         }
         
         return {"code": 200, "msg": "success", "data": result}

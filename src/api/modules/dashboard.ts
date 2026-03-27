@@ -35,10 +35,19 @@ export interface PredictEnergyResponse {
   current_gfi: number;
   current_outcome: number;
   beta_coefficient: number;
+  base_province: string;
+  base_year: number;
+}
+
+/** 能耗强度预测接口参数类型 */
+export interface PredictEnergyParams {
+  intensity_increment: number;
+  year?: number;
+  province?: string;
 }
 
 /** 能耗强度预测接口 */
-export const predictEnergyIntensity = (params: { intensity_increment: number }, signal?: AbortSignal) => {
+export const predictEnergyIntensity = (params: PredictEnergyParams, signal?: AbortSignal) => {
   return http.get<{ code: number; msg: string; data: PredictEnergyResponse }>(
     'api/energy/predict',
     params,
