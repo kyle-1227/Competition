@@ -3,12 +3,15 @@ import numpy as np
 import os
 import warnings
 warnings.filterwarnings('ignore')
+# 数据相对 greenfianace_server_1.0/；输出 empirical_results 同在该目录下
+_SERVER_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+_DATA_DIR = os.path.join(_SERVER_ROOT, 'data')
 # ==================== 一、文件路径 ====================
 file_paths = {
-    '核心数据集': r'D:\点宽杯_2025_718\crawler\中国计算机大赛\省级绿色金融指数，碳排放、DID与能源消耗合并数据(清洗后-剔除西藏）+减排效率6.0.xlsx',
-    '省级经纬度表': r'D:\点宽杯_2025_718\crawler\中国计算机大赛\中国省级行政区经纬度表.xlsx'
+    '核心数据集': os.path.join(_DATA_DIR, '省级绿色金融指数，碳排放、DID与能源消耗合并数据(清洗后-剔除西藏）+减排效率6.0.xlsx'),
+    '省级经纬度表': os.path.join(_DATA_DIR, '中国省级行政区经纬度表.xlsx'),
 }
-output_path = r'D:\点宽杯_2025_718\crawler\中国计算机大赛\empirical_results'
+output_path = os.path.join(_SERVER_ROOT, 'empirical_results')
 os.makedirs(output_path, exist_ok=True)
 os.makedirs(os.path.join(output_path, 'figures'), exist_ok=True)
 os.makedirs(os.path.join(output_path, 'spatial'), exist_ok=True)
@@ -117,10 +120,10 @@ province_lon_lat = load_province_lon_lat()
 
 # ==================== 一、文件路径 ====================
 file_paths = {
-    '核心数据集': r'D:\点宽杯_2025_718\crawler\中国计算机大赛\省级绿色金融指数，碳排放、DID与能源消耗合并数据(清洗后-剔除西藏）+减排效率6.0.xlsx',
-    '省级经纬度表': r'D:\点宽杯_2025_718\crawler\中国计算机大赛\中国省级行政区经纬度表.xlsx'
+    '核心数据集': os.path.join(_DATA_DIR, '省级绿色金融指数，碳排放、DID与能源消耗合并数据(清洗后-剔除西藏）+减排效率6.0.xlsx'),
+    '省级经纬度表': os.path.join(_DATA_DIR, '中国省级行政区经纬度表.xlsx'),
 }
-output_path = r'D:\点宽杯_2025_718\crawler\中国计算机大赛\empirical_results'
+output_path = os.path.join(_SERVER_ROOT, 'empirical_results')
 os.makedirs(output_path, exist_ok=True)
 os.makedirs(os.path.join(output_path, 'figures'), exist_ok=True)
 os.makedirs(os.path.join(output_path, 'spatial'), exist_ok=True)
@@ -227,10 +230,10 @@ province_lon_lat = load_province_lon_lat()
 
 # ==================== 一、文件路径 ====================
 file_paths = {
-    '核心数据集': r'D:\点宽杯_2025_718\crawler\中国计算机大赛\省级绿色金融指数，碳排放、DID与能源消耗合并数据(清洗后-剔除西藏）+减排效率6.0.xlsx',
-    '省级经纬度表': r'D:\点宽杯_2025_718\crawler\中国计算机大赛\中国省级行政区经纬度表.xlsx'
+    '核心数据集': os.path.join(_DATA_DIR, '省级绿色金融指数，碳排放、DID与能源消耗合并数据(清洗后-剔除西藏）+减排效率6.0.xlsx'),
+    '省级经纬度表': os.path.join(_DATA_DIR, '中国省级行政区经纬度表.xlsx'),
 }
-output_path = r'D:\点宽杯_2025_718\crawler\中国计算机大赛\empirical_results'
+output_path = os.path.join(_SERVER_ROOT, 'empirical_results')
 os.makedirs(output_path, exist_ok=True)
 os.makedirs(os.path.join(output_path, 'figures'), exist_ok=True)
 os.makedirs(os.path.join(output_path, 'spatial'), exist_ok=True)

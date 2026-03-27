@@ -24,3 +24,24 @@ export const getMacroDataApi = (province?: string, signal?: AbortSignal) => {
     signal ? { signal } : undefined,
   );
 };
+
+
+/** 能耗强度预测接口响应类型 */
+export interface PredictEnergyResponse {
+  scatter_data: number[][];
+  predict_point: number[];
+  trendline: number[][];
+  predicted_drop_percent: number;
+  current_gfi: number;
+  current_outcome: number;
+  beta_coefficient: number;
+}
+
+/** 能耗强度预测接口 */
+export const predictEnergyIntensity = (params: { intensity_increment: number }, signal?: AbortSignal) => {
+  return http.get<{ code: number; msg: string; data: PredictEnergyResponse }>(
+    'api/energy/predict',
+    params,
+    signal ? { signal } : undefined,
+  );
+};

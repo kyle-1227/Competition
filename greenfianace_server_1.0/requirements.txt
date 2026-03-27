@@ -1,0 +1,28 @@
+# FastAPI 核心框架
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# 数据处理
+# 使用 numpy 2.x + pandas 2.2+：在 Python 3.12/3.13 + Windows 上提供预编译 wheel，
+# 避免旧版 pandas/numpy 触发源码编译（Meson 在中文路径下易 UTF-8 报错）。
+numpy>=2.0.2,<3
+pandas>=2.2.0,<3
+openpyxl==3.1.2
+
+# 数据库
+pymysql==1.1.0
+
+# 计量经济学模型（linearmodels 6+ 与 numpy 2 兼容）
+linearmodels>=6.1,<8
+scipy>=1.13.0,<2
+statsmodels>=0.14.2,<1
+
+# 工具库
+python-multipart==0.0.6
+# 2.10+ 在 Python 3.13 上提供 pydantic-core 预编译 wheel；2.5 会触发本地 Rust 编译
+pydantic>=2.10.0,<3
+
+# 可选：性能优化
+# gunicorn==21.2.0
+# uvloop==0.19.0
+# httptools==0.6.1

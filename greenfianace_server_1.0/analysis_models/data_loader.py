@@ -5,9 +5,11 @@ import os
 
 def load_raw_data():
     """
-    加载原始数据，100%匹配你的数据文件路径，修复原函数名错误
+    加载原始数据（路径与 config.file_paths['核心数据集'] 一致）
     """
-    file_path = r'D:\点宽杯_2025_718\crawler\中国计算机大赛\省级绿色金融指数，碳排放、DID与能源消耗合并数据(清洗后-剔除西藏）+减排效率6.0.xlsx'
+    from .config import file_paths
+
+    file_path = file_paths['核心数据集']
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"❌ 数据文件不存在：{file_path}")
 
@@ -25,7 +27,7 @@ def verify_panel_structure(df):
     print("=" * 60)
 
     # 【全局统一】从config导入索引定义，避免硬编码
-    from config import core_vars
+    from .config import core_vars
     id_cols = core_vars['id_cols']
     dep_var = core_vars['dep_vars']['primary']
 
