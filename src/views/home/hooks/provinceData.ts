@@ -235,7 +235,7 @@ export function normalizeProvinceRecord(row: Record<string, unknown>): ProvinceG
   };
 }
 
-function extractList(res: unknown): unknown[] {
+export function extractList(res: unknown): unknown[] {
   if (Array.isArray(res)) return res;
   if (res && typeof res === 'object' && res !== null) {
     const o = res as Record<string, unknown>;

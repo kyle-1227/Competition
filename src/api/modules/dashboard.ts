@@ -15,3 +15,12 @@ export const getCityDataApi = (province: string, year = 2024, signal?: AbortSign
     signal ? { signal } : undefined,
   );
 };
+
+/** 宏观经济数据接口（支持全国和省级） */
+export const getMacroDataApi = (province?: string, signal?: AbortSignal) => {
+  return http.get<unknown>(
+    'api/macro/data',
+    province ? { province } : {},
+    signal ? { signal } : undefined,
+  );
+};

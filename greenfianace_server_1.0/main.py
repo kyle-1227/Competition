@@ -71,3 +71,42 @@ def get_city_data(province: str, year: int = 2024):
     if not data:
         return {"code": 200, "msg": f"暂未获取到{province}的地级市数据", "data": []}
     return {"code": 200, "msg": "success", "data": data}
+
+
+# 3. 宏观经济数据接口（支持全国和省级）
+@app.get("/api/macro/data")
+def get_macro_data(province: str = None):
+    conn = get_db_connection()
+    if not conn:
+        return {"code": 500, "msg": "数据库连接失败", "data": []}
+
+    cursor = conn.cursor()
+    
+    if province and province != "全国":
+        # 查询指定省份的历年数据
+        sql = """
+        SELECT year, gdp, carbonEmission
+        FROM province_green_finance
+        WHERE province=%s
+        ORDER BY year ASC
+        """
+        cursor.execute(sql, (province,))
+    else:
+        # 查询全国历年数据（各省求和）
+        sql = """
+        SELECT year, SUM(gdp) as gdp, SUM(carbonEmission) as carbonEmission
+        FROM province_green_finance
+        GROUP BY year
+        ORDER BY year ASC
+        """
+        cursor.execute(sql)
+    
+    data = cursor.fetchall()
+    conn.close()
+    
+    # 将碳排放从吨转换为万吨
+    for row in data:
+        if row.get('carbonEmission'):
+            row['carbonEmission'] = round(row['carbonEmission'] / 10000, 2)
+    
+    return {"code": 200, "msg": "success", "data": data}

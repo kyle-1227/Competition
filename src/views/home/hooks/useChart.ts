@@ -10,6 +10,7 @@ import {
   realCityData,
   gfDrillProvince,
   getProvinceRows,
+  extractList,
   type ProvinceGreenFinance,
 } from './provinceData';
 import {
@@ -670,18 +671,49 @@ export function useEnergyScatter() {
 /* ========================================================================
  * 宏观经济动态 - 双 Y 轴混合图（GDP 柱 + 碳排放折线）
  * ======================================================================== */
-export function useMacroChart() {
+export function useMacroChart(selectedProv: Ref<string>) {
   let chart: echarts.ECharts | null = null;
-  function render() {
-    const years = mockMacroEconomyData.map((d) => d.year);
-    const gdps = mockMacroEconomyData.map((d) => d.gdp);
-    const carbons = mockMacroEconomyData.map((d) => d.carbonEmission);
+  let hooksReady = false;
+
+  async function fetchMacroData(province: string) {
+    try {
+      const { getMacroDataApi } = await import('@/api/modules/dashboard');
+      const res: unknown = await getMacroDataApi(province === '全国' ? undefined : province);
+      const raw = extractList(res);
+      return raw.map((r) => {
+        const record = r as Record<string, unknown>;
+        return {
+          year: Number(record.year || 0),
+          gdp: Number(record.gdp || 0),
+          carbonEmission: Number(record.carbonEmission || 0),
+        };
+      });
+    } catch (error) {
+      console.error('❌ 宏观经济数据拉取失败:', error);
+      return null;
+    }
+  }
+
+  async function render() {
+    const province = selectedProv.value;
+
+    // 尝试从API获取数据
+    const apiData = await fetchMacroData(province);
+    const data = apiData && apiData.length > 0 ? apiData : mockMacroEconomyData;
+
+    const years = data.map((d) => d.year);
+    const gdps = data.map((d) => d.gdp);
+    const carbons = data.map((d) => d.carbonEmission);
+
     if (!chart) {
       const el = document.getElementById('macro-chart');
       if (!el || el.clientWidth === 0) return;
       chart = echarts.init(el, 'dark');
       window.addEventListener('resize', () => chart?.resize());
     }
+
+    const title = province === '全国' ? '全国' : province.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, '');
+
     chart.setOption(
       {
         backgroundColor: 'transparent',
@@ -689,7 +721,7 @@ export function useMacroChart() {
           trigger: 'axis',
           axisPointer: { type: 'cross' },
           formatter: (params: { axisValue: string; marker: string; seriesName: string; value: number }[]) => {
-            let s = `<b>${params[0].axisValue}年</b><br/>`;
+            let s = `<b>${params[0].axisValue}年 · ${title}</b><br/>`;
             params.forEach((row) => {
               s += `${row.marker} ${row.seriesName}: ${row.value.toLocaleString()}<br/>`;
             });
@@ -763,5 +795,13 @@ export function useMacroChart() {
       true,
     );
   }
-  useDeferredChart('macro', render);
+
+  useDeferredChart('macro', () => {
+    render();
+    if (!hooksReady) {
+      hooksReady = true;
+      watch(selectedProv, render);
+      watch(realProvinceData, render, { deep: true });
+    }
+  });
 }

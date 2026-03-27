@@ -27,8 +27,8 @@
     <!-- 宏观经济动态 -->
     <BizMacro v-show="activeTab === 'macro'" class="content" />
 
-    <!-- 底部年份时间轴 -->
-    <div class="timeline-bar">
+    <!-- 底部年份时间轴（宏观经济动态模块不展示） -->
+    <div v-show="activeTab !== 'macro'" class="timeline-bar">
       <span class="timeline-label">数据年份</span>
       <el-slider
         v-model="timelineYear"
