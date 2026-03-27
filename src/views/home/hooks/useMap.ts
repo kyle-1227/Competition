@@ -10,6 +10,12 @@ import {
   provinceCoords,
   fullToShortName,
   realProvinceData,
+  scoreToColor,
+  fetchGeoJson,
+  fetchCityData,
+  realCityData,
+  selectedYear,
+  gfDrillProvince,
 } from './provinceData';
 
 const LINE_PARSER = { parser: { type: 'json', x: 'x', y: 'y', x1: 'x1', y1: 'y1' } };
@@ -107,14 +113,6 @@ function buildScoreMap(): Record<string, number> {
     map[p.province] = p.score;
   });
   return map;
-}
-
-function scoreToColor(score: number): string {
-  if (score > 0.7) return '#00e5ff';
-  if (score > 0.5) return '#2979ff';
-  if (score > 0.3) return '#7c4dff';
-  if (score > 0.15) return '#ff6d00';
-  return '#ff1744';
 }
 
 export function useMap() {
@@ -276,6 +274,53 @@ function buildCarbonMapWanTon(): Record<string, number> {
   return m;
 }
 
+function matchCityScore(geoName: string, rows: { province: string; score: number }[]): number {
+  if (!geoName || !rows.length) return 0;
+  const g = String(geoName).trim();
+  const row = rows.find(
+    (r) => r.province === g || g.startsWith(r.province) || r.province.startsWith(g),
+  );
+  return row ? row.score : 0;
+}
+
+function updateBBoxFromCoords(
+  bbox: [number, number, number, number] | null,
+  coord: unknown,
+): [number, number, number, number] | null {
+  if (coord == null) return bbox;
+  if (typeof coord === 'number') return bbox;
+  const arr = coord as unknown[];
+  if (arr.length >= 2 && typeof arr[0] === 'number' && typeof arr[1] === 'number') {
+    const lng = arr[0] as number;
+    const lat = arr[1] as number;
+    if (!bbox) return [lng, lat, lng, lat];
+    return [
+      Math.min(bbox[0], lng),
+      Math.min(bbox[1], lat),
+      Math.max(bbox[2], lng),
+      Math.max(bbox[3], lat),
+    ];
+  }
+  let b = bbox;
+  for (let i = 0; i < arr.length; i++) {
+    b = updateBBoxFromCoords(b, arr[i]);
+  }
+  return b;
+}
+
+function boundsFromFeatures(features: { geometry?: { coordinates?: unknown } }[]): [[number, number], [number, number]] | null {
+  let bbox: [number, number, number, number] | null = null;
+  features.forEach((f) => {
+    const coords = f.geometry?.coordinates;
+    if (coords !== undefined) bbox = updateBBoxFromCoords(bbox, coords);
+  });
+  if (!bbox || bbox[0] === Infinity) return null;
+  return [
+    [bbox[0], bbox[1]],
+    [bbox[2], bbox[3]],
+  ];
+}
+
 export function useGreenFinanceMap(selectedProv: Ref<string>) {
   onMounted(() => {
     const scene = new Scene({
@@ -292,6 +337,11 @@ export function useGreenFinanceMap(selectedProv: Ref<string>) {
     scene.on('loaded', () => {
       const mapEl = document.getElementById('gf-map');
       if (mapEl) mapEl.style.background = '#131722';
+
+      let cityExtrudeLayer: PolygonLayer | null = null;
+      let cityBorderLayer: LineLayer | null = null;
+      let cityFcSnapshot: { type: string; features: any[] } | null = null;
+      let drillGen = 0;
 
       const source = new RDBSource({ version: 2023 });
       source.getData({ level: 'province', precision: 'low' }).then((geoData) => {
@@ -335,14 +385,53 @@ export function useGreenFinanceMap(selectedProv: Ref<string>) {
           .style({ opacity: 0.7 });
         scene.addLayer(borderLayer);
 
+        const labelLayer = new PointLayer({ zIndex: 15 })
+          .source(allProvincePoints, POINT_PARSER)
+          .shape('name', 'text')
+          .size(9)
+          .color('#0ff')
+          .style({
+            textAnchor: 'bottom',
+            textOffset: [0, -8],
+            spacing: 2,
+            padding: [2, 2],
+            stroke: '#0ff',
+            strokeWidth: 0.3,
+            textAllowOverlap: true,
+          });
+        scene.addLayer(labelLayer);
+
         extrudeLayer.on('click', (e) => {
           const name = e.feature?.properties?.name;
-          if (name) selectedProv.value = name;
+          if (name) {
+            selectedProv.value = name;
+            gfDrillProvince.value = name;
+          }
         });
+
+        const applyCityScoresToFc = (fc: { features: any[] }) => {
+          const rows = realCityData.value;
+          fc.features.forEach((f) => {
+            const geoName = f.properties?.name || '';
+            const s = matchCityScore(geoName, rows);
+            f.properties._score = s ** 1.5;
+            f.properties._color = scoreToColor(s);
+          });
+        };
+
+        const refreshCityLayers = () => {
+          if (!gfDrillProvince.value || !cityExtrudeLayer || !cityBorderLayer || !cityFcSnapshot) return;
+          applyCityScoresToFc(cityFcSnapshot);
+          const newGeo = { type: 'FeatureCollection', features: [...cityFcSnapshot.features] };
+          cityExtrudeLayer.setData(newGeo);
+          cityBorderLayer.setData(newGeo);
+          scene.render();
+        };
 
         watch(
           realProvinceData,
           () => {
+            if (gfDrillProvince.value) return;
             applyScores();
             const newGeo = { type: 'FeatureCollection', features: [...features] };
             extrudeLayer.setData(newGeo);
@@ -351,23 +440,95 @@ export function useGreenFinanceMap(selectedProv: Ref<string>) {
           },
           { deep: true, immediate: true },
         );
-      });
 
-      const labelLayer = new PointLayer({ zIndex: 15 })
-        .source(allProvincePoints, POINT_PARSER)
-        .shape('name', 'text')
-        .size(9)
-        .color('#0ff')
-        .style({
-          textAnchor: 'bottom',
-          textOffset: [0, -8],
-          spacing: 2,
-          padding: [2, 2],
-          stroke: '#0ff',
-          strokeWidth: 0.3,
-          textAllowOverlap: true,
+        watch(
+          realCityData,
+          () => {
+            if (!gfDrillProvince.value) return;
+            refreshCityLayers();
+          },
+          { deep: true },
+        );
+
+        watch(gfDrillProvince, async (prov) => {
+          const gen = ++drillGen;
+
+          if (!prov) {
+            cityExtrudeLayer?.hide();
+            cityBorderLayer?.hide();
+            cityFcSnapshot = null;
+            extrudeLayer.show();
+            borderLayer.show();
+            labelLayer.show();
+            scene.setZoomAndCenter(3.2, [104.195397, 35.86166]);
+            scene.setPitch(45);
+            fetchCityData('', selectedYear.value);
+            scene.render();
+            return;
+          }
+
+          extrudeLayer.hide();
+          borderLayer.hide();
+          labelLayer.hide();
+
+          try {
+            await fetchCityData(prov, selectedYear.value);
+            if (gen !== drillGen) return;
+
+            const geoRes = await fetchGeoJson(prov);
+            if (gen !== drillGen) return;
+
+            const fc = {
+              type: 'FeatureCollection',
+              features: geoRes.features.map((f: any) => ({
+                ...f,
+                properties: { ...(f.properties || {}) },
+              })),
+            };
+            applyCityScoresToFc(fc);
+            cityFcSnapshot = fc;
+
+            if (!cityExtrudeLayer) {
+              cityExtrudeLayer = new PolygonLayer({ zIndex: 6 })
+                .source(fc)
+                .shape('extrude')
+                .size('_score', [12000, 1800000])
+                .color('_color')
+                .style({ heightfixed: true, pickLight: true, opacity: 0.88 })
+                .active({ color: 'rgba(0,229,255,0.45)' });
+              scene.addLayer(cityExtrudeLayer);
+
+              cityBorderLayer = new LineLayer({ zIndex: 11 })
+                .source(fc)
+                .shape('line')
+                .color('#5DDDFF')
+                .size(0.5)
+                .style({ opacity: 0.75 });
+              scene.addLayer(cityBorderLayer);
+            } else {
+              cityExtrudeLayer.setData(fc);
+              cityBorderLayer.setData(fc);
+            }
+
+            cityExtrudeLayer.show();
+            cityBorderLayer.show();
+
+            const bounds = boundsFromFeatures(fc.features);
+            if (bounds) {
+              scene.fitBounds(bounds, { padding: 50, duration: 600 });
+            }
+            scene.setPitch(50);
+            scene.render();
+          } catch (err) {
+            console.error('绿色金融地图下钻失败:', err);
+            gfDrillProvince.value = '';
+            extrudeLayer.show();
+            borderLayer.show();
+            labelLayer.show();
+            scene.render();
+          }
         });
-      scene.addLayer(labelLayer);
+      });
     });
   });
 }

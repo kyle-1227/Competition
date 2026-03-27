@@ -2,9 +2,30 @@
 import { useGreenFinanceRadar, useGreenFinanceRose } from './hooks/useChart';
 import { useGreenFinanceMap } from './hooks/useMap';
 import { mockGreenFinanceData } from './hooks/mockData';
-import { realProvinceData } from './hooks/provinceData';
+import {
+  realProvinceData,
+  gfDrillProvince,
+  fetchCityData,
+  selectedYear,
+} from './hooks/provinceData';
 
 const selectedProv = ref('北京市');
+
+function clearGfDrill() {
+  gfDrillProvince.value = '';
+}
+
+watch([gfDrillProvince, selectedYear], () => {
+  if (gfDrillProvince.value) {
+    fetchCityData(gfDrillProvince.value, selectedYear.value);
+  }
+});
+
+watch(selectedProv, (v) => {
+  if (gfDrillProvince.value && v !== gfDrillProvince.value) {
+    gfDrillProvince.value = '';
+  }
+});
 useGreenFinanceRadar(selectedProv);
 useGreenFinanceRose(selectedProv);
 useGreenFinanceMap(selectedProv);
@@ -109,6 +130,14 @@ const displayProv = computed(() => selectedProv.value.replace(/(省|市|自治�
         </div>
       </div>
       <div class="map-area">
+        <button
+          v-if="gfDrillProvince"
+          type="button"
+          class="gf-back-map"
+          @click="clearGfDrill"
+        >
+          返回全国视角
+        </button>
         <div id="gf-map" />
         <div class="map-legend">
           <div class="legend-title">绿色金融综合指数</div>
@@ -227,6 +256,32 @@ export default { name: 'BizGreenFinance' };
   height: 36px;
   background: linear-gradient(180deg, transparent, rgba(0, 229, 255, 0.25), transparent);
   flex-shrink: 0;
+}
+.gf-back-map {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  padding: 8px 16px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #00e5ff;
+  cursor: pointer;
+  background: rgba(10, 18, 40, 0.92);
+  border: 1px solid rgba(0, 229, 255, 0.45);
+  border-radius: 6px;
+  box-shadow:
+    0 0 12px rgba(0, 229, 255, 0.25),
+    inset 0 0 20px rgba(0, 229, 255, 0.06);
+  transition:
+    box-shadow 0.2s,
+    border-color 0.2s;
+}
+.gf-back-map:hover {
+  border-color: rgba(0, 255, 255, 0.8);
+  box-shadow:
+    0 0 18px rgba(0, 229, 255, 0.45),
+    inset 0 0 24px rgba(0, 229, 255, 0.1);
 }
 .map-area {
   flex: 1;

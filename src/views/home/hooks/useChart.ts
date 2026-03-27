@@ -7,6 +7,8 @@ import {
   selectedProvince,
   selectedYear,
   realProvinceData,
+  realCityData,
+  gfDrillProvince,
   getProvinceRows,
   type ProvinceGreenFinance,
 } from './provinceData';
@@ -56,6 +58,16 @@ export function getCarbonRowsFromApi(): { province: string; carbonEmission: numb
     }));
   }
   return mockCarbonData;
+}
+
+/** 屏二雷达/玫瑰：下钻时用本地市数据最高分市，否则用省级列表 + 下拉省 */
+function getGreenFinanceChartItem(selectedProv: Ref<string>): MockGreenFinanceRow | null {
+  if (gfDrillProvince.value && realCityData.value.length > 0) {
+    const top = [...realCityData.value].sort((a, b) => b.score - a.score)[0];
+    return provinceToGfMonitorRow(top);
+  }
+  const rows = getGfMonitorRows();
+  return rows.find((d) => d.province === selectedProv.value) || rows[0] || null;
 }
 /* ========================================================================
  * 延迟初始化辅助：解决 v-show 下图表容器 0 尺寸的问题
@@ -138,7 +150,7 @@ export function useRadar() {
       : [...list].sort((a, b) => b.score - a.score)[0];
     if (!row) return;
     const values = indicatorKeys.map((k) => Number(row[k] ?? 0));
-    const indMax = Math.max(...values, 0.02) * 1.4;
+    const indMax = Math.max(...values, 0.02) * 1.1;
     if (!chart) {
       const el = document.getElementById('radar');
       if (!el || el.clientWidth === 0) return;
@@ -208,11 +220,13 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
   let chart: echarts.ECharts | null = null;
   let hooksReady = false;
   function render() {
-    const rows = getGfMonitorRows();
-    const item = rows.find((d) => d.province === selectedProv.value) || rows[0];
+    const item = getGreenFinanceChartItem(selectedProv);
     if (!item) return;
-    const indicator = greenFinanceIndicators.map((ind) => ({ name: ind.label, max: 0.18 }));
     const values = greenFinanceIndicators.map((ind) => gfVal(item, ind.key));
+    // 动态计算每个维度的最大值，让数据更接近边缘
+    const maxValue = Math.max(...values);
+    const dynamicMax = maxValue > 0 ? maxValue * 1.05 : 0.18; // 使用1.25倍最大值，让数据更接近边缘
+    const indicator = greenFinanceIndicators.map((ind) => ({ name: ind.label, max: dynamicMax }));
     if (!chart) {
       const el = document.getElementById('gf-radar');
       if (!el || el.clientWidth === 0) return;
@@ -331,6 +345,8 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
       hooksReady = true;
       watch(selectedProv, render);
       watch(realProvinceData, render, { deep: true });
+      watch(gfDrillProvince, render);
+      watch(realCityData, render, { deep: true });
     }
   });
 }
@@ -372,8 +388,7 @@ export function useGreenFinanceRose(selectedProv: Ref<string>) {
   let chart: echarts.ECharts | null = null;
   let hooksReady = false;
   function render() {
-    const rows = getGfMonitorRows();
-    const item = rows.find((d) => d.province === selectedProv.value) || rows[0];
+    const item = getGreenFinanceChartItem(selectedProv);
     if (!item) return;
     const total = greenFinanceIndicators.reduce((s, ind) => s + gfVal(item, ind.key), 0);
     const data = greenFinanceIndicators.map((ind, i) => ({
@@ -474,6 +489,8 @@ export function useGreenFinanceRose(selectedProv: Ref<string>) {
       hooksReady = true;
       watch(selectedProv, render);
       watch(realProvinceData, render, { deep: true });
+      watch(gfDrillProvince, render);
+      watch(realCityData, render, { deep: true });
     }
   });
 }

@@ -1,0 +1,37 @@
+# 放置各省 GeoJSON，文件名须为「省级全称.geojson」，与地图/接口省名一致。
+# 以下为完整清单（按需放入实际文件即可）：
+#
+北京市.geojson
+天津市.geojson
+河北省.geojson
+山西省.geojson
+内蒙古自治区.geojson
+辽宁省.geojson
+吉林省.geojson
+黑龙江省.geojson
+上海市.geojson
+江苏省.geojson
+浙江省.geojson
+安徽省.geojson
+福建省.geojson
+江西省.geojson
+山东省.geojson
+河南省.geojson
+湖北省.geojson
+湖南省.geojson
+广东省.geojson
+广西壮族自治区.geojson
+海南省.geojson
+重庆市.geojson
+四川省.geojson
+贵州省.geojson
+云南省.geojson
+西藏自治区.geojson
+陕西省.geojson
+甘肃省.geojson
+青海省.geojson
+宁夏回族自治区.geojson
+新疆维吾尔自治区.geojson
+台湾省.geojson
+香港特别行政区.geojson
+澳门特别行政区.geojson

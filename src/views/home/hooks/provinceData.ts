@@ -134,6 +134,72 @@ export const fullToShortName: Record<string, string> = Object.fromEntries(
   Object.entries(provinceNameMap).map(([short, full]) => [full, short]),
 );
 
+/** 省级全称 → 6 位 adcode（备查；本地 GeoJSON 现按「省全称.geojson」加载） */
+export const provinceAdcodeMap: Record<string, string> = {
+  北京市: '110000',
+  天津市: '120000',
+  河北省: '130000',
+  山西省: '140000',
+  内蒙古自治区: '150000',
+  辽宁省: '210000',
+  吉林省: '220000',
+  黑龙江省: '230000',
+  上海市: '310000',
+  江苏省: '320000',
+  浙江省: '330000',
+  安徽省: '340000',
+  福建省: '350000',
+  江西省: '360000',
+  山东省: '370000',
+  河南省: '410000',
+  湖北省: '420000',
+  湖南省: '430000',
+  广东省: '440000',
+  广西壮族自治区: '450000',
+  海南省: '460000',
+  重庆市: '500000',
+  四川省: '510000',
+  贵州省: '520000',
+  云南省: '530000',
+  西藏自治区: '540000',
+  陕西省: '610000',
+  甘肃省: '620000',
+  青海省: '630000',
+  宁夏回族自治区: '640000',
+  新疆维吾尔自治区: '650000',
+};
+
+/** 按 public/geojson/下的「省级全称.geojson」加载，如 广东省.geojson */
+export async function fetchGeoJson(provinceFullName: string): Promise<{ type: string; features: unknown[] }> {
+  const base = import.meta.env.BASE_URL || '/';
+  const file = `${encodeURIComponent(provinceFullName)}.geojson`;
+  const path = `${base}geojson/${file}`.replace(/\/{2,}/g, '/');
+  const res = await fetch(path);
+  if (!res.ok) {
+    throw new Error(`GeoJSON 请求失败 ${provinceFullName}: ${res.status}`);
+  }
+  const json = (await res.json()) as { type: string; features?: unknown[] };
+  if (json.type === 'FeatureCollection' && Array.isArray(json.features)) {
+    return { type: 'FeatureCollection', features: json.features };
+  }
+  if (json.type === 'Feature') {
+    return { type: 'FeatureCollection', features: [json] };
+  }
+  throw new Error(`无效的 GeoJSON: ${provinceFullName}`);
+}
+
+/** 地图柱体配色（沙盘与绿色金融监测共用） */
+export function scoreToColor(score: number): string {
+  if (score > 0.7) return '#00e5ff';
+  if (score > 0.5) return '#2979ff';
+  if (score > 0.3) return '#7c4dff';
+  if (score > 0.15) return '#ff6d00';
+  return '#ff1744';
+}
+
+/** 绿色金融监测：地图下钻中的省级全称，空表示全国视角 */
+export const gfDrillProvince: Ref<string> = ref('');
+
 export const selectedProvince: Ref<string> = ref('');
 export const selectedYear: Ref<number> = ref(2024);
 /** 底部时间轴滑块当前值（与角标一致）；松手 commit 后才会与接口数据年 selectedYear 对齐拉数 */
