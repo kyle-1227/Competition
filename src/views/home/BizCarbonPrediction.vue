@@ -6,7 +6,7 @@
       </div>
       <div class="province-selector">
         <span class="label">分析区域：</span>
-        <select v-model="selectedProvince" @change="updateChart">
+        <select v-model="selectedProvince" @change="onProvinceChange">
           <option value="全国">全国 (平均值)</option>
           <option v-for="prov in provinceList" :key="prov" :value="prov">{{ prov }}</option>
         </select>
@@ -45,10 +45,10 @@
       <div class="coef-box">
         <div class="box-title">📊 SDM模型核心系数 (基于历史面板回归)</div>
         <div class="coef-list">
-          <span class="tag">绿色金融(核心): <b>0.1446</b></span>
-          <span class="tag">人口&能耗(控制): <b>1.18~1.25</b></span>
-          <span class="tag">空间滞后(W_X): <b>-3.69~0.62</b></span>
-          <span class="tag">空间自回归(Rho): <b>0.4882</b></span>
+          <span class="tag">绿色金融 gfi_std: <b>{{ fmt4(coef?.core) }}</b></span>
+          <span class="tag">能源强度 / ln_pop: <b>{{ fmt4(coef?.control) }} / {{ fmt4(coef?.control_ln_pop) }}</b></span>
+          <span class="tag">W_gfi_std: <b>{{ fmt4(coef?.spatial) }}</b></span>
+          <span class="tag">W_碳排放强度(rho): <b>{{ fmt4(coef?.rho) }}</b></span>
         </div>
       </div>
       <div class="result-box">
@@ -71,75 +71,95 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, shallowRef, computed, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, shallowRef, computed, onUnmounted, nextTick, watch } from 'vue';
+import { ElMessage } from 'element-plus';
 import * as echarts from 'echarts';
+import {
+  getCarbonPredictData,
+  type CarbonPredictCoefficients,
+} from '@/api/modules/dashboard';
 
-// --- 1. 状态定义 ---
 const chartRef = ref<HTMLElement | null>(null);
 const chartInstance = shallowRef<echarts.ECharts | null>(null);
 
-const provinceList = ['北京市', '浙江省', '广东省', '内蒙古自治区', '四川省', '新疆维吾尔自治区']; // 示例省份
+/** 后端拉取：省份 -> 年序列 */
+const historyPayload = ref<Record<string, { year: number; value: number }[]>>({});
+const coefficientsPayload = ref<CarbonPredictCoefficients | null>(null);
+const coef = computed(() => coefficientsPayload.value);
+
+function fmt4(v: number | undefined | null) {
+  if (v === undefined || v === null || Number.isNaN(v)) return '—';
+  return v.toFixed(4);
+}
+
+const provinceList = computed(() => {
+  const keys = Object.keys(historyPayload.value).filter((k) => k !== '全国');
+  return keys.sort((a, b) => a.localeCompare(b, 'zh-CN'));
+});
+
 const selectedProvince = ref('全国');
 
-// 五大自变量控制器 (1.0 表示维持2024年现状，1.2表示强度提升20%)
 const controls = ref({
   core: { name: '核心变量 (绿色金融)', value: 1.1 },
   control: { name: '控制变量 (人口/能耗)', value: 1.0 },
   policy: { name: '政策准自然实验 (DID)', value: 1.2 },
   spatial: { name: '空间滞后 (周边溢出)', value: 1.05 },
-  mediator: { name: '中介变量 (产业结构)', value: 1.15 }
+  mediator: { name: '中介变量 (产业结构)', value: 1.15 },
 });
 
-// SDM模型核心回归系数 (用于底层推算)
-const modelCoef = { core: 0.1446, control: 1.2510, spatial: -0.0284, rho: 0.4882, policy: -0.05, mediator: -0.08 };
+/** 与推演公式同步的系数（来自 SDM CSV） */
+const modelCoef = computed(() => {
+  const c = coefficientsPayload.value;
+  return {
+    core: c?.core ?? 0.1446,
+    control: c?.control ?? 1.251,
+    spatial: c?.spatial ?? -0.0284,
+    rho: c?.rho ?? 0.4882,
+    policy: c?.policy ?? 0,
+    mediator: c?.mediator ?? -0.08,
+  };
+});
 
-// --- 2. 模拟历史数据生成器 (2000 - 2024) ---
-const yearsHistorical = Array.from({length: 25}, (_, i) => 2000 + i);
+function seriesFor(province: string) {
+  const rows = historyPayload.value[province] || historyPayload.value['全国'] || [];
+  return [...rows].sort((a, b) => a.year - b.year);
+}
+
+const historicalYears = computed(() => seriesFor(selectedProvince.value).map((r) => r.year));
+
 const yearsFuture = [2025, 2026, 2027];
-const allYears = [...yearsHistorical, ...yearsFuture];
 
-// 生成基于省份的历史波动数据
-const getHistoricalData = (province: string) => {
-  let base = province === '全国' ? 1.5 : (province === '内蒙古自治区' ? 2.8 : 1.0);
-  return yearsHistorical.map((year, index) => {
-    // 模拟碳排放强度随时间先升后降的倒U型趋势
-    const trend = Math.sin(index / 8) * 0.4;
-    const noise = (Math.random() - 0.5) * 0.05;
-    return Number((base + trend - (index * 0.02) + noise).toFixed(4));
-  });
-};
+const allYears = computed(() => [...historicalYears.value, ...yearsFuture]);
 
-// 当前历史数据
-const currentHistory = computed(() => getHistoricalData(selectedProvince.value));
+const firstFutureYear = computed(() => yearsFuture[0] ?? 2025);
 
-// --- 3. 预测推算逻辑 (2025 - 2027) ---
+const currentHistory = computed(() => seriesFor(selectedProvince.value).map((r) => r.value));
+
 const currentPrediction = computed(() => {
-  const lastVal = currentHistory.value[currentHistory.value.length - 1];
-  let predicted = [];
-  let currentVal = lastVal;
-
+  const hist = currentHistory.value;
+  const mc = modelCoef.value;
+  if (!hist.length) return [];
+  let currentVal = hist[hist.length - 1]!;
+  const predicted: number[] = [];
   for (let i = 0; i < yearsFuture.length; i++) {
-    // 根据调整的乘数和系数推演
-    // 简化公式: ΔY = (Core * Coef) + (Control * Coef) + (Spatial * Coef) ... + (Rho * W_Y)
-    const deltaCore = (controls.value.core.value - 1) * modelCoef.core;
-    const deltaControl = (controls.value.control.value - 1) * modelCoef.control * 0.1; // 权重缩放
-    const deltaPolicy = (controls.value.policy.value - 1) * modelCoef.policy;
-    const deltaSpatial = (controls.value.spatial.value - 1) * modelCoef.spatial;
-    const deltaMediator = (controls.value.mediator.value - 1) * modelCoef.mediator;
-    
-    // 综合边际影响
-    const netEffect = -(deltaCore + deltaPolicy + deltaMediator - deltaControl - deltaSpatial); 
-    
-    currentVal = currentVal + netEffect - 0.015; // 基础自然下降0.015
+    const deltaCore = (controls.value.core.value - 1) * mc.core;
+    const deltaControl = (controls.value.control.value - 1) * mc.control * 0.1;
+    const deltaPolicy = (controls.value.policy.value - 1) * mc.policy;
+    const deltaSpatial = (controls.value.spatial.value - 1) * mc.spatial;
+    const deltaMediator = (controls.value.mediator.value - 1) * mc.mediator;
+    const netEffect = -(deltaCore + deltaPolicy + deltaMediator - deltaControl - deltaSpatial);
+    currentVal = currentVal + netEffect - 0.015;
     predicted.push(Number(Math.max(currentVal, 0.1).toFixed(4)));
   }
   return predicted;
 });
 
-// 底部结果展示数据
-const finalPrediction = computed(() => currentPrediction.value[2] || 0);
+const finalPrediction = computed(() => currentPrediction.value[2] ?? 0);
 const predictionChange = computed(() => {
-  const base = currentHistory.value[currentHistory.value.length - 1];
+  const hist = currentHistory.value;
+  if (!hist.length) return 0;
+  const base = hist[hist.length - 1]!;
+  if (base === 0) return 0;
   return (finalPrediction.value - base) / base;
 });
 
@@ -153,19 +173,41 @@ const scheduleChartResize = () => {
   });
 };
 
-// --- 4. 图表渲染 ---
 const updateChart = () => {
   if (!chartInstance.value) return;
 
+  const years = allYears.value;
   const historyData = currentHistory.value;
   const predictData = currentPrediction.value;
-  
-  // 拼接数据以保持折线连贯
-  const padding = new Array(historyData.length - 1).fill(null);
-  const connectedPrediction = [...padding, historyData[historyData.length - 1], ...predictData];
+  const yearToVal = new Map(seriesFor(selectedProvince.value).map((r) => [r.year, r.value]));
 
+  if (!years.length || !historyData.length) {
+    chartInstance.value.setOption({
+      title: {
+        text: '暂无面板历史数据（请检查后端 CSV 与接口）',
+        left: 'center',
+        top: 'middle',
+        textStyle: { color: '#94a3b8', fontSize: 13 },
+      },
+      xAxis: { type: 'category', data: [] },
+      yAxis: { type: 'value' },
+      series: [],
+    });
+    scheduleChartResize();
+    return;
+  }
+
+  const histLine = years.map((y) => {
+    if (yearToVal.has(y)) return yearToVal.get(y) as number;
+    return null;
+  });
+
+  const padding = new Array(historyData.length - 1).fill(null);
+  const connectedPrediction = [...padding, historyData[historyData.length - 1]!, ...predictData];
+
+  const fy = firstFutureYear.value;
   const option = {
-    // 💡 核心亮点：荧光毛玻璃浮框 Tooltip
+    title: { show: false },
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'transparent',
@@ -173,8 +215,8 @@ const updateChart = () => {
       borderWidth: 0,
       formatter: (params: any) => {
         const year = params[0].axisValue;
-        const isPredict = year >= 2025;
-        const val = params.find((p:any) => p.value !== null)?.value || 0;
+        const isPredict = Number(year) >= fy;
+        const val = params.find((p: any) => p.value !== null)?.value || 0;
         
         // 自定义 HTML 毛玻璃样式
         return `
@@ -212,7 +254,7 @@ const updateChart = () => {
     grid: { top: 52, left: 12, right: 20, bottom: 28, containLabel: true },
     xAxis: {
       type: 'category',
-      data: allYears,
+      data: years,
       axisLabel: { color: '#94a3b8', fontSize: 11, interval: 2 },
       axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
       splitLine: { show: false }
@@ -238,7 +280,7 @@ const updateChart = () => {
             { offset: 1, color: 'rgba(79, 172, 254, 0.0)' }
           ])
         },
-        data: [...historyData, ...new Array(yearsFuture.length).fill(null)],
+        data: histLine,
         animationDuration: 800
       },
       {
@@ -258,10 +300,32 @@ const updateChart = () => {
   scheduleChartResize();
 };
 
-// --- 5. 生命周期管理 ---
+async function loadPredictData() {
+  try {
+    const res = await getCarbonPredictData();
+    if (res.code === 200 && res.data) {
+      historyPayload.value = res.data.historyData;
+      coefficientsPayload.value = res.data.coefficients;
+      if (!historyPayload.value[selectedProvince.value]) {
+        selectedProvince.value = historyPayload.value['全国'] ? '全国' : Object.keys(historyPayload.value)[0] || '全国';
+      }
+    } else {
+      ElMessage.error(res.msg || '碳强度预测数据加载失败');
+    }
+  } catch (e) {
+    console.error(e);
+    ElMessage.error('无法连接预测数据接口');
+  }
+}
+
+function onProvinceChange() {
+  updateChart();
+}
+
 let resizeObserver: ResizeObserver | null = null;
 
-onMounted(() => {
+onMounted(async () => {
+  await loadPredictData();
   if (chartRef.value) {
     chartInstance.value = echarts.init(chartRef.value);
     updateChart();
@@ -271,6 +335,8 @@ onMounted(() => {
     scheduleChartResize();
   }
 });
+
+watch([selectedProvince, historyPayload, coefficientsPayload], () => nextTick(() => updateChart()), { deep: true });
 
 onUnmounted(() => {
   window.removeEventListener('resize', resizeHandler);

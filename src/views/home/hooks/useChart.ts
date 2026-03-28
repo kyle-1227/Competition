@@ -13,21 +13,18 @@ import {
   type ProvinceGreenFinance,
 } from './provinceData';
 import {
-  mockGreenFinanceData,
-  mockCarbonData,
-  mockMacroEconomyData,
   greenFinanceIndicators,
-  type MockGreenFinanceRow,
-} from './mockData';
+  type GreenFinanceMonitorRow,
+} from './greenFinanceMeta';
 
-type GfValueKey = keyof Omit<MockGreenFinanceRow, 'province' | 'score'>;
+type GfValueKey = keyof Omit<GreenFinanceMonitorRow, 'province' | 'score'>;
 
-function gfVal(item: MockGreenFinanceRow, key: string): number {
+function gfVal(item: GreenFinanceMonitorRow, key: string): number {
   return item[key as GfValueKey];
 }
 
 /** 接口省级记录 → 屏二雷达/玫瑰图结构（七维键与 greenFinanceIndicators 一致） */
-export function provinceToGfMonitorRow(p: ProvinceGreenFinance): MockGreenFinanceRow {
+export function provinceToGfMonitorRow(p: ProvinceGreenFinance): GreenFinanceMonitorRow {
   return {
     province: p.province,
     score: p.score,
@@ -41,10 +38,10 @@ export function provinceToGfMonitorRow(p: ProvinceGreenFinance): MockGreenFinanc
   };
 }
 
-export function getGfMonitorRows(): MockGreenFinanceRow[] {
+export function getGfMonitorRows(): GreenFinanceMonitorRow[] {
   const raw = realProvinceData.value;
   if (raw.length > 0) return raw.map(provinceToGfMonitorRow);
-  return mockGreenFinanceData;
+  return [];
 }
 
 /** 碳模块：万吨 CO₂（库内为吨级量级，除以 1e4） */
@@ -56,11 +53,11 @@ export function getCarbonRowsFromApi(): { province: string; carbonEmission: numb
       carbonEmission: (r.carbonEmission ?? 0) / 10000,
     }));
   }
-  return mockCarbonData;
+  return [];
 }
 
 /** 屏二雷达/玫瑰：下钻时用本地市数据最高分市，否则用省级列表 + 下拉省 */
-function getGreenFinanceChartItem(selectedProv: Ref<string>): MockGreenFinanceRow | null {
+function getGreenFinanceChartItem(selectedProv: Ref<string>): GreenFinanceMonitorRow | null {
   if (gfDrillProvince.value && realCityData.value.length > 0) {
     const top = [...realCityData.value].sort((a, b) => b.score - a.score)[0];
     return provinceToGfMonitorRow(top);
@@ -557,7 +554,32 @@ export function useMacroChart(selectedProv: Ref<string>) {
 
     // 尝试从API获取数据
     const apiData = await fetchMacroData(province);
-    const data = apiData && apiData.length > 0 ? apiData : mockMacroEconomyData;
+    const data = apiData && apiData.length > 0 ? apiData : [];
+
+    if (!data.length) {
+      if (!chart) {
+        const el = document.getElementById('macro-chart');
+        if (!el || el.clientWidth === 0) return;
+        chart = echarts.init(el, 'dark');
+        window.addEventListener('resize', () => chart?.resize());
+      }
+      chart?.setOption(
+        {
+          backgroundColor: 'transparent',
+          title: {
+            text: '暂无宏观经济数据（请检查数据库或接口）',
+            left: 'center',
+            top: 'middle',
+            textStyle: { color: '#888', fontSize: 14 },
+          },
+          xAxis: { type: 'category', data: [] },
+          yAxis: [{ type: 'value' }, { type: 'value' }],
+          series: [],
+        },
+        true,
+      );
+      return;
+    }
 
     const years = data.map((d) => d.year);
     const gdps = data.map((d) => d.gdp);

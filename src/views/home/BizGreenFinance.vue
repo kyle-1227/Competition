@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useGreenFinanceRadar, useGreenFinanceRose } from './hooks/useChart';
 import { useGreenFinanceMap } from './hooks/useMap';
-import { mockGreenFinanceData } from './hooks/mockData';
 import {
   realProvinceData,
   gfDrillProvince,
@@ -35,7 +34,7 @@ const provList = computed(() => {
   if (rows.length > 0) {
     return [...rows].map((r) => r.province).sort((a, b) => a.localeCompare(b, 'zh-CN'));
   }
-  return mockGreenFinanceData.map((d) => d.province);
+  return [];
 });
 
 watch(
@@ -48,16 +47,15 @@ watch(
   { immediate: true },
 );
 
-/** 与省级接口联调：有数据时用 Σ(gdp×score)、Σ(碳/1e4) 等；无数据时沿用 mock 展示占位 */
+/** 与省级接口联调：有数据时用 Σ(gdp×score)、Σ(碳/1e4) 等 */
 const boardStats = computed(() => {
   const rows = realProvinceData.value;
   if (!rows.length) {
-    const n = mockGreenFinanceData.length;
     return {
-      totalGreenFinance: 286452.8,
-      totalCarbon: 134876.5,
-      avgScore: +((mockGreenFinanceData.reduce((s, d) => s + d.score, 0) / n) * 100).toFixed(1),
-      coveredProvinces: n,
+      totalGreenFinance: 0,
+      totalCarbon: 0,
+      avgScore: 0,
+      coveredProvinces: 0,
     };
   }
   const totalGreenFinance = Math.round(rows.reduce((s, r) => s + (r.gdp || 0) * (r.score || 0), 0));
