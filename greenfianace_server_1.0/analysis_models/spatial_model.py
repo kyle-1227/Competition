@@ -1,120 +1,189 @@
+import os
 import pandas as pd
 import numpy as np
-from scipy.sparse import csr_matrix
 from linearmodels import PanelOLS
-import os
-from config import core_vars, output_path
 import warnings
+from libpysal.weights import W
+from esda.moran import Moran
+from config import core_vars, output_path, model_params, province_lon_lat
 
 warnings.filterwarnings('ignore')
 
+# ==================== 效应分解函数 ====================
+def sdm_effect_decomposition(results, w_matrix, x_vars):
+    rho = np.nan
+    # 修复：精准提取空间自回归系数 W_被解释变量
+    for key in results.params.index:
+        if key.startswith('W_') and key != f'W_{x_vars[0]}':
+            rho = results.params[key]
+            break
 
-def global_moran_test(df, dep_var, weight_matrix, id_cols):
-    """全局莫兰指数检验"""
-    from esda.moran import Moran
-    import libpysal
-    try:
-        df_mean = df.groupby(id_cols[0])[dep_var].mean().reset_index()
-        y = df_mean[dep_var].values
-        w = libpysal.weights.W(weight_matrix)
-        moran = Moran(y, w)
-        return {
-            '莫兰指数': round(moran.I, 4),
-            'P值': round(moran.p_sim, 4),
-            'Z值': round(moran.z_sim, 4)
-        }
-    except Exception as e:
-        print(f"⚠️  莫兰指数计算失败：{str(e)}")
+    if np.isnan(rho):
+        print("❌ 无法提取空间自回归系数rho，效应分解失败")
         return None
 
+    n_prov = w_matrix.n
+    k_vars = len(x_vars)
+    beta = np.array([results.params.get(v, 0) for v in x_vars])
+    theta = np.array([results.params.get(f'W_{v}', 0) for v in x_vars])
 
-def run_SDM_model(df, spatial_weight):
-    """
-    优化版空间杜宾模型（终极修复：因变量改为碳排放强度）
-    """
-    print("\n" + "=" * 60)
-    print("📌 第六步：空间杜宾模型SDM（地理-经济嵌套权重，因变量：碳排放强度）")
-    print("=" * 60)
+    I_n = np.eye(n_prov)
+    W = w_matrix.full()[0]
     try:
-        id_cols = core_vars['id_cols']
-        # 【核心修复】空间模型因变量改为碳排放强度（反向指标）
-        dep_var = core_vars['dep_vars']['secondary']
-        X_vars = [core_vars['core_x']['primary']] + [v for v in core_vars['control_vars'] if v in df.columns]
-        df_spatial = df.copy().set_index(id_cols).sort_index()
-        y = df_spatial[dep_var]
-        X = df_spatial[X_vars]
-        W = spatial_weight.toarray()
-        n_prov = df['省份'].nunique()
-        n_year = df_spatial.index.levels[1].nunique()
+        S = np.linalg.inv(I_n - rho * W)
+    except:
+        S = np.linalg.pinv(I_n - rho * W)
 
-        print("\n🔍 第一步：全局莫兰指数空间自相关检验")
-        w_dict = {}
-        for i in range(n_prov):
-            neighbors = np.where(W[i] > 0)[0].tolist()
-            w_dict[i] = neighbors
-        moran_result = global_moran_test(df, dep_var, w_dict, id_cols)
-        if moran_result:
-            print(f"📊 全局莫兰指数：{moran_result['莫兰指数']}，P值：{moran_result['P值']}，Z值：{moran_result['Z值']}")
-            if moran_result['P值'] < 0.05:
-                print("✅ 存在显著的空间正自相关，碳排放强度具有空间溢出效应，适合使用空间计量模型")
-            else:
-                print("⚠️  空间自相关不显著，仍可使用SDM模型检验空间溢出效应")
+    direct = np.zeros(k_vars)
+    indirect = np.zeros(k_vars)
+    total = np.zeros(k_vars)
 
-        W_full = np.kron(np.eye(n_year), W)
-        X_spatial = np.dot(W_full, X.values)
-        X_spatial_df = pd.DataFrame(X_spatial, index=X.index, columns=[f'W_{col}' for col in X_vars])
-        model_data = pd.concat([y, X, X_spatial_df], axis=1)
-        formula = f"{dep_var} ~ 1 + {' + '.join(X_vars)} + {' + '.join(X_spatial_df.columns)} + EntityEffects + TimeEffects"
-        sdm_model = PanelOLS.from_formula(formula, data=model_data, drop_absorbed=True)
-        results = sdm_model.fit(cov_type='clustered', cluster_entity=True)
-        print("\n🎯 SDM空间杜宾模型回归结果：")
-        print(results.summary)
+    for i in range(k_vars):
+        mat = S @ (I_n * beta[i] + W * theta[i])
+        direct[i] = np.mean(np.diag(mat))
+        total[i] = np.mean(mat)
+        indirect[i] = total[i] - direct[i]
 
-        # ---------------------- 第二步：模型适配性检验（简化版） ----------------------
-        print("\n🔍 第二步：模型适配性说明")
-        print("📊 因变量为碳排放强度（反向指标），若核心变量系数为负，说明绿色金融显著降低本地碳排放")
-        if 'W_' + core_vars['core_x']['primary'] in results.pvalues.index:
-            spillover_p = results.pvalues['W_' + core_vars['core_x']['primary']]
-            if spillover_p < 0.1:
-                print("✅ 空间滞后项显著，绿色金融对相邻省份的碳排放具有显著的空间溢出效应")
-            else:
-                print("⚠️  空间滞后项不显著，空间溢出效应较弱")
+    df = pd.DataFrame({
+        '变量': x_vars,
+        '直接效应': direct.round(6),
+        '间接效应': indirect.round(6),
+        '总效应': total.round(6)
+    })
+    print("✅ 效应分解完成")
+    print(df)
+    return df
 
-        # ---------------------- 第三步：空间效应简化分析 ----------------------
-        print("\n🔍 第三步：空间效应简化分析")
-        try:
-            core_x_name = core_vars['core_x']['primary']
-            direct_effect = results.params.get(core_x_name, np.nan)
-            indirect_effect = results.params.get(f'W_{core_x_name}', np.nan)
-
-            print(f"📊 本地效应（直接效应）：绿色金融综合指数每提升1个标准差，本地碳排放强度变化{round(direct_effect, 4)}")
-            print(
-                f"📊 溢出效应（间接效应）：绿色金融综合指数每提升1个标准差，相邻省份碳排放强度变化{round(indirect_effect, 4)}")
-
-            if not np.isnan(direct_effect) and direct_effect < 0:
-                print("✅ 本地效应符合预期：绿色金融发展显著降低本地碳排放")
-            if not np.isnan(indirect_effect) and indirect_effect < 0:
-                print("✅ 溢出效应符合预期：绿色金融发展具有正向空间溢出，带动相邻省份减排")
-        except Exception as e:
-            print(f"⚠️  空间效应分析失败：{str(e)}")
-
-        coefs = results.params
-        pvals = results.pvalues
-        save_df = pd.DataFrame({
-            '变量名': coefs.index,
-            '变量含义': [core_vars['var_alias'].get(col, col) for col in coefs.index],
-            '系数': np.round(coefs.values, 4),
-            'p值': np.round(pvals.values, 4),
-            '显著性': ['***' if p < 0.001 else '**' if p < 0.01 else '*' if p < 0.05 else '' for p in pvals]
+# ==================== 莫兰检验 ====================
+def moran_test(df, dep_var, w, id_cols):
+    years = sorted(df[id_cols[1]].unique())
+    res = []
+    for y in years:
+        d = df[df[id_cols[1]] == y].sort_values(id_cols[0])
+        # 匹配空间权重省份顺序，避免报错
+        d = d.set_index(id_cols[0]).loc[w.id_order].reset_index()
+        m = Moran(d[dep_var].values, w)
+        res.append({
+            '年份': y,
+            '莫兰指数': round(m.I,4),
+            'p值': round(m.p_sim,4)
         })
-        save_path = os.path.join(output_path, 'spatial/7_空间杜宾模型SDM结果_碳排放强度.csv')
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        save_df.to_csv(save_path, index=False, encoding='utf-8-sig')
-        print(f"\n✅ SDM模型运行成功！结果已保存至：{save_path}")
+    return res
 
-        return results
+# ==================== 修复版 SDM 主函数（添加 dep_var 参数） ====================
+def run_SDM_model(df, dep_var, model_name="SDM"):
+    print("\n" + "="*80)
+    print(f"📌 运行 {model_name} | 被解释变量：{dep_var}")
+    print("="*80)
+
+    id_cols = core_vars['id_cols']
+    core_x = core_vars['core_x']['primary']
+    # 关键：和你之前流程一致，剔除高VIF的 ln_GDP
+    controls = [c for c in core_vars['control_vars'] if c in df.columns and c != 'ln_GDP']
+    X = [core_x] + controls
+
+    # 数据清洗
+    dt = df.dropna(subset=X+[dep_var]).copy()
+    # 平衡面板筛选
+    prov_counts = dt.groupby(id_cols[0])[id_cols[1]].nunique()
+    keep = prov_counts[prov_counts == prov_counts.max()].index.tolist()
+    dt = dt[dt[id_cols[0]].isin(keep)].reset_index(drop=True)
+
+    # 读取经纬度配置
+    lon_col = model_params['spatial_lon_col']
+    lat_col = model_params['spatial_lat_col']
+    dist_thresh = model_params['distance_threshold']
+
+    # 合并省份经纬度
+    geo = pd.DataFrame.from_dict(province_lon_lat, orient='index', columns=[lon_col, lat_col]).reset_index()
+    geo.columns = [id_cols[0], lon_col, lat_col]
+    dt = pd.merge(dt, geo, on=id_cols[0], how='inner')
+
+    # 去重地理信息
+    geo_unique = dt[[id_cols[0], lon_col, lat_col]].drop_duplicates().set_index(id_cols[0]).loc[keep].reset_index()
+    n = len(keep)
+
+    # 球面距离公式
+    def haversine(c1,c2):
+        lon1,lat1 = np.radians(c1)
+        lon2,lat2 = np.radians(c2)
+        d = np.sin((lat2-lat1)/2)**2 + np.cos(lat1)*np.cos(lat2)*np.sin((lon2-lon1)/2)**2
+        return 6371 * 2 * np.arcsin(np.sqrt(d))
+
+    # 构建距离权重矩阵
+    coords = list(zip(geo_unique[lon_col], geo_unique[lat_col]))
+    dist = np.zeros((n,n))
+    for i in range(n):
+        for j in range(n):
+            if i!=j:
+                dist[i,j] = haversine(coords[i], coords[j])
+    bin_mat = (dist < dist_thresh).astype(int)
+    np.fill_diagonal(bin_mat,0)
+    neighbors = {keep[i]: [keep[j] for j in np.where(bin_mat[i])[0]] for i in range(n)}
+
+    # 构建空间权重
+    try:
+        w = W(neighbors, id_order=keep)
+        w.transform = 'r'  # 行标准化
     except Exception as e:
-        print(f"⚠️ 空间模型运行失败：{str(e)}")
-        import traceback
-        traceback.print_exc()
-        return None
+        print(f"❌ 空间权重构建失败：{e}")
+        return None, None
+
+    print(f"✅ 平衡省份：{n} | 空间权重矩阵构建完成")
+    # 莫兰指数检验
+    yearly_moran = moran_test(dt, dep_var, w, id_cols)
+
+    # 构建空间滞后项 WY, WX
+    d2 = dt.copy()
+    wy_name = f'W_{dep_var}'
+    for year in d2[id_cols[1]].unique():
+        mask = d2[id_cols[1]] == year
+        ydf = d2[mask].sort_values(id_cols[0]).set_index(id_cols[0]).loc[w.id_order].reset_index()
+        # 滞后被解释变量
+        d2.loc[mask, wy_name] = (w.full()[0] @ ydf[dep_var].values).flatten()
+        # 滞后自变量
+        for x in X:
+            d2.loc[mask, f'W_{x}'] = (w.full()[0] @ ydf[x].values).flatten()
+
+    # 面板回归
+    d2 = d2.set_index(id_cols)
+    WX = [f'W_{x}' for x in X]
+    # SDM 模型公式（双向固定效应）
+    formula = f"{dep_var} ~ 1 + {wy_name} + {'+'.join(X)} + {'+'.join(WX)} + EntityEffects + TimeEffects"
+
+    try:
+        model = PanelOLS.from_formula(formula, data=d2, drop_absorbed=True)
+        res = model.fit(cov_type='clustered', cluster_entity=True)
+        print("\n🎯 SDM 回归结果：")
+        print(res.summary)
+    except Exception as e:
+        print(f"❌ 回归失败：{e}")
+        return None, None
+
+    # 效应分解
+    effect_df = sdm_effect_decomposition(res, w, X)
+
+    # 保存结果
+    out = os.path.join(output_path, 'spatial')
+    os.makedirs(out, exist_ok=True)
+    res.params.to_csv(os.path.join(out, f'{model_name}_系数.csv'), encoding='utf-8-sig')
+    if effect_df is not None:
+        effect_df.to_csv(os.path.join(out, f'{model_name}_效应分解.csv'), encoding='utf-8-sig')
+    pd.DataFrame(yearly_moran).to_csv(os.path.join(out, f'{model_name}_莫兰.csv'), encoding='utf-8-sig')
+
+    print(f"\n✅ {model_name} 结果保存至：{out}")
+    return res, effect_df
+
+# ==================== 🔥 单独运行入口（一键跑双模型） ====================
+def run_all_spatial_models(df):
+    """
+    单独运行空间模型：
+    1. 减排效率（本地效应）
+    2. 碳排放强度（空间溢出效应）
+    """
+    print("\n🎉 开始单独运行空间杜宾模型（双被解释变量）")
+    # 模型1：减排效率
+    run_SDM_model(df, dep_var="减排效率", model_name="SDM_减排效率")
+    # 模型2：碳排放强度
+    run_SDM_model(df, dep_var="碳排放强度", model_name="SDM_碳排放强度")
+    print("\n✅ 所有空间模型运行完成！")

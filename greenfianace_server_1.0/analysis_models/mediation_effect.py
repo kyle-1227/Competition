@@ -1,133 +1,142 @@
 import pandas as pd
 import numpy as np
-from linearmodels import PanelOLS
+import statsmodels.api as sm
+from sklearn.preprocessing import StandardScaler
 import warnings
 import os
-from config import core_vars, model_params, output_path
+import random
+from scipy.stats import norm
+from config import core_vars, output_path
 
+np.random.seed(42)
+random.seed(42)
 warnings.filterwarnings('ignore')
 
-
 def run_mediation_analysis(df, keep_vars):
-    """
-    中介效应模型检验（三步法+Bootstrap，终极修复：id_vars→id_cols）
-    """
-    print("\n" + "=" * 60)
-    print("📌 第三步：中介效应模型检验（三步法+Bootstrap）")
-    print("=" * 60)
+    print("\n" + "=" * 70)
+    print("📌 中介效应模型（完全匹配你的表头 · 学术优化版）")
+    print("=" * 70)
 
-    # 【核心修复】id_vars→id_cols
     id_cols = core_vars['id_cols']
     dep_var = core_vars['dep_vars']['primary']
     core_x = core_vars['core_x']['primary']
-    mediators = core_vars['mediator_vars']
-    control_vars = [v for v in keep_vars if v not in [dep_var, core_x] and v in df.columns]
 
-    print(f"📝 检验的中介变量：{mediators}")
-    print(f"📝 控制变量：{control_vars}")
+    df_med = df.copy().reset_index(drop=True)
 
-    df_panel = df.copy().set_index(id_cols)
-    mediation_results = []
+    # ==============================
+    # 以下完全使用你的真实列名
+    # ==============================
 
-    for mediator in mediators:
-        if mediator not in df_panel.columns:
-            print(f"\n⚠️  中介变量 {mediator} 不存在，跳过")
-            continue
-        print(f"\n🔍 检验中介变量：{mediator}")
+    # 1. 能源利用效率（单要素/全要素通用）
+    df_med["能源利用效率"] = df_med["地区生产总值"] / df_med["能源消费总量"].clip(lower=1e-8)
 
-        # 步骤1：总效应 Y ~ X + Controls
-        formula1 = f"{dep_var} ~ {core_x} + {' + '.join(control_vars)} + EntityEffects + TimeEffects"
-        model1 = PanelOLS.from_formula(formula1, data=df_panel, drop_absorbed=True)
-        res1 = model1.fit(cov_type='clustered', cluster_entity=True)
-        total_effect = res1.params.get(core_x, np.nan)
-        total_p = res1.pvalues.get(core_x, np.nan)
-        print(
-            f"   步骤1（总效应）：{core_vars['var_alias'].get(core_x, core_x)}→{core_vars['var_alias'].get(dep_var, dep_var)} 系数={total_effect.round(4)}，p值={total_p.round(4)}")
+    # 2. 能源结构清洁化（电力+天然气 / 总能耗）→ 文献标准！
+    df_med["能源结构清洁化"] = (df_med["电力消费量"] + df_med["天然气消费量"]) / df_med["能源消费总量"].clip(lower=1e-8)
 
-        # 步骤2：X → M
-        formula2 = f"{mediator} ~ {core_x} + {' + '.join(control_vars)} + EntityEffects + TimeEffects"
-        model2 = PanelOLS.from_formula(formula2, data=df_panel, drop_absorbed=True)
-        res2 = model2.fit(cov_type='clustered', cluster_entity=True)
-        x_to_m = res2.params.get(core_x, np.nan)
-        x_to_m_p = res2.pvalues.get(core_x, np.nan)
-        print(
-            f"   步骤2（X→M）：{core_vars['var_alias'].get(core_x, core_x)}→{core_vars['var_alias'].get(mediator, mediator)} 系数={x_to_m.round(4)}，p值={x_to_m_p.round(4)}")
+    # 3. 产业结构高级化
+    df_med["产业结构高级化"] = df_med["第三产业增加值"] / df_med["第二产业增加值"].clip(lower=1e-8)
 
-        # 步骤3：Y ~ X + M + Controls
-        formula3 = f"{dep_var} ~ {core_x} + {mediator} + {' + '.join(control_vars)} + EntityEffects + TimeEffects"
-        model3 = PanelOLS.from_formula(formula3, data=df_panel, drop_absorbed=True)
-        res3 = model3.fit(cov_type='clustered', cluster_entity=True)
-        direct_effect = res3.params.get(core_x, np.nan)
-        direct_p = res3.pvalues.get(core_x, np.nan)
-        m_to_y = res3.params.get(mediator, np.nan)
-        m_to_y_p = res3.pvalues.get(mediator, np.nan)
-        print(
-            f"   步骤3（直接效应）：{core_vars['var_alias'].get(core_x, core_x)}→{core_vars['var_alias'].get(dep_var, dep_var)} 系数={direct_effect.round(4)}，p值={direct_p.round(4)}")
-        print(
-            f"   步骤3（M→Y）：{core_vars['var_alias'].get(mediator, mediator)}→{core_vars['var_alias'].get(dep_var, dep_var)} 系数={m_to_y.round(4)}，p值={m_to_y_p.round(4)}")
+    print("✅ 能源利用效率 生成完成")
+    print("✅ 能源结构清洁化 生成完成")
+    print("✅ 产业结构高级化 生成完成")
 
-        # Bootstrap检验
-        bootstrap_indirect = np.nan
-        bootstrap_ci_low = np.nan
-        bootstrap_ci_high = np.nan
-        bootstrap_p = np.nan
-        try:
-            np.random.seed(model_params['bootstrap_seed'])
-            n_iter = model_params['bootstrap_iter']
-            indirect_effects = []
-            provinces = df_panel.index.get_level_values(0).unique()
-            for i in range(n_iter):
-                bootstrap_provinces = np.random.choice(provinces, size=len(provinces), replace=True)
-                bootstrap_df = df_panel.loc[bootstrap_provinces].copy()
-                try:
-                    m2 = PanelOLS.from_formula(formula2, data=bootstrap_df, drop_absorbed=True).fit(
-                        cov_type='clustered', cluster_entity=True)
-                    m3 = PanelOLS.from_formula(formula3, data=bootstrap_df, drop_absorbed=True).fit(
-                        cov_type='clustered', cluster_entity=True)
-                    indirect = m2.params.get(core_x, 0) * m3.params.get(mediator, 0)
-                    indirect_effects.append(indirect)
-                except:
-                    continue
-            if len(indirect_effects) > 100:
-                bootstrap_indirect = np.mean(indirect_effects)
-                bootstrap_ci_low = np.percentile(indirect_effects, 2.5)
-                bootstrap_ci_high = np.percentile(indirect_effects, 97.5)
-                bootstrap_p = 2 * min(np.mean(np.array(indirect_effects) >= 0),
-                                      np.mean(np.array(indirect_effects) <= 0))
-                print(
-                    f"   Bootstrap检验：中介效应={bootstrap_indirect.round(4)}，95%置信区间=[{bootstrap_ci_low.round(4)}, {bootstrap_ci_high.round(4)}]，p值={bootstrap_p.round(4)}")
-        except Exception as e:
-            print(f"   ⚠️  Bootstrap检验失败：{str(e)}")
+    mediators = ["能源利用效率", "能源结构清洁化", "产业结构高级化"]
+    print(f"\n📝 检验中介变量：{mediators}")
 
-        # 中介效应判定
-        # ---------------------- 【核心修改】简化中介效应判定逻辑 ----------------------
-        mediation_type = "无显著中介效应"
-        # 【核心修改】只要X→M或M→Y有一个显著，就说明有潜在机制
-        has_mediation = False
-        mediation_message = ""
+    control_vars = [v for v in keep_vars if v not in [dep_var, core_x] + mediators and v in df_med.columns]
+    df_clean = df_med.dropna(subset=[core_x, dep_var] + control_vars + mediators).copy()
+    print(f"✅ 有效样本量：{len(df_clean)}")
 
-        if not np.isnan(x_to_m_p) and x_to_m_p < 0.1:
-            has_mediation = True
-            mediation_message += f"X→M路径显著（p={x_to_m_p.round(4)}），绿色金融显著影响中介变量「{mediator}」；"
-        if not np.isnan(m_to_y_p) and m_to_y_p < 0.1:
-            has_mediation = True
-            mediation_message += f"M→Y路径显著（p={m_to_y_p.round(4)}），中介变量「{mediator}」显著影响减排效率；"
+    scaler = StandardScaler()
+    df_clean[mediators] = scaler.fit_transform(df_clean[mediators])
 
-        if has_mediation:
-            if not np.isnan(x_to_m_p) and x_to_m_p < 0.1 and not np.isnan(m_to_y_p) and m_to_y_p < 0.1:
-                if not np.isnan(direct_p) and direct_p < 0.1:
-                    mediation_type = "部分中介效应"
-                else:
-                    mediation_type = "完全中介效应"
+    # 固定效应
+    province_dummies = pd.get_dummies(df_clean['省份'], drop_first=True, prefix='prov')
+    year_dummies = pd.get_dummies(df_clean['年份'], drop_first=True, prefix='year')
+    df_clean = pd.concat([df_clean, province_dummies, year_dummies], axis=1)
+    fe_cols = list(province_dummies.columns) + list(year_dummies.columns)
+
+    def run_reg(df, y_col, x_col, med_list, controls, fe_list):
+        all_controls = controls + fe_list
+        control_str = ' + '.join(all_controls) if all_controls else '1'
+        med_str = ' + '.join(med_list)
+
+        total = sm.OLS.from_formula(f"{y_col} ~ {x_col} + {control_str}", data=df).fit(cov_type='HC3')
+        med_res = {}
+        for med in med_list:
+            med_res[med] = sm.OLS.from_formula(f"{med} ~ {x_col} + {control_str}", data=df).fit(cov_type='HC3')
+        direct = sm.OLS.from_formula(f"{y_col} ~ {x_col} + {med_str} + {control_str}", data=df).fit(cov_type='HC3')
+        return total, med_res, direct
+
+    def bootstrap_test(df, x_col, med_list, y_col, controls, fe_list, n_iter=1000):
+        effects = {m: [] for m in med_list}
+        n_samples = len(df)
+        for _ in range(n_iter):
+            idx = random.choices(range(n_samples), k=n_samples)
+            d = df.iloc[idx].copy()
+            try:
+                ctrls = controls + fe_list
+                cstr = " + ".join(ctrls) if ctrls else "1"
+                a = {m: sm.OLS.from_formula(f"{m} ~ {x_col} + {cstr}", data=d).fit(disp=0).params[x_col] for m in med_list}
+                y_reg = sm.OLS.from_formula(f"{y_col} ~ {x_col} + {'+'.join(med_list)} + {cstr}", data=d).fit(disp=0)
+                b = {m: y_reg.params[m] for m in med_list}
+                for m in med_list:
+                    effects[m].append(a[m] * b[m])
+            except:
+                continue
+        res = {}
+        for m in med_list:
+            e = np.array(effects[m])
+            if len(e) < 200:
+                res[m] = (np.nan, np.nan, np.nan)
             else:
-                mediation_type = "潜在中介效应（部分路径显著）"
+                ci = np.percentile(e, [2.5, 97.5])
+                p = 2 * min(np.mean(e <= 0), np.mean(e >= 0))
+                res[m] = (ci, p, np.mean(e))
+        return res
 
-        print(f"   中介效应判定：{mediation_type}")
-        if mediation_message:
-            print(f"   机制说明：{mediation_message}")
-    mediation_df = pd.DataFrame(mediation_results)
-    save_path = os.path.join(output_path, 'regression_tables/3_中介效应分析结果.csv')
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    mediation_df.to_csv(save_path, index=False, encoding='utf-8-sig')
-    print(f"\n✅ 中介效应结果已保存至：{save_path}")
-    return mediation_df
+    total_res, med_res_dict, direct_res = run_reg(df_clean, dep_var, core_x, mediators, control_vars, fe_cols)
+    boot_res = bootstrap_test(df_clean, core_x, mediators, dep_var, control_vars, fe_cols)
+
+    total = total_res.params[core_x]
+    total_p = total_res.pvalues[core_x]
+    direct = direct_res.params[core_x]
+    direct_p = direct_res.pvalues[core_x]
+
+    print(f"\n🎯 总效应：{total:.4f} (p={total_p:.4f})")
+    print(f"🎯 直接效应：{direct:.4f} (p={direct_p:.4f})")
+
+    output = []
+    for med in mediators:
+        a = med_res_dict[med].params[core_x]
+        a_p = med_res_dict[med].pvalues[core_x]
+        b = direct_res.params[med]
+        b_p = direct_res.pvalues[med]
+        ab = a * b
+        ratio = (ab / total) * 100 if abs(total) > 1e-8 else np.nan
+        ci, p, mean_ab = boot_res[med]
+        sig = "✅ 显著" if p < 0.05 and not np.isnan(p) and ci[0] * ci[1] > 0 else "❌ 不显著"
+
+        print(f"\n🔍 中介：{med}")
+        print(f"   a={a:.4f}({a_p:.3f}) | b={b:.4f}({b_p:.3f})")
+        print(f"   中介效应={ab:.4f} | 占比={ratio:.2f}% | Bootstrap p={p:.3f} | {sig}")
+
+        output.append({
+            "中介变量": med,
+            "总效应": round(total,4),
+            "直接效应": round(direct,4),
+            "a": round(a,4),
+            "a_p": round(a_p,3),
+            "b": round(b,4),
+            "b_p": round(b_p,3),
+            "中介效应": round(ab,4),
+            "中介效应占比(%)": round(ratio,2) if not np.isnan(ratio) else np.nan,
+            "Bootstrap_p": round(p,3) if not np.isnan(p) else np.nan,
+            "显著性": sig
+        })
+
+    out_dir = os.path.join(output_path, 'regression_tables')
+    os.makedirs(out_dir, exist_ok=True)
+    pd.DataFrame(output).to_csv(os.path.join(out_dir, '3_中介效应_最终版.csv'), index=False, encoding='utf-8-sig')
+    print(f"\n✅ 结果已保存：3_中介效应_最终版.csv")
+    return pd.DataFrame(output)

@@ -1,12 +1,143 @@
+"""
+FastAPI 服务：能耗预测等接口。
+分析模型数据在启动时预热：优先加载「最终面板数据集.csv」，缺失则跑全量预处理生成。
+"""
+from __future__ import annotations
+
+import os
+import sys
+from contextlib import asynccontextmanager
+from typing import Any, Optional
+
+# 使 analysis_models 内脚本式 import（from config / from preprocessing）可用
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+_AM = os.path.join(_ROOT, "analysis_models")
+if _AM not in sys.path:
+    sys.path.insert(0, _AM)
+
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 import pymysql
 import pandas as pd
 import numpy as np
-from analysis_models.data_loader import load_raw_data
-from analysis_models.config import core_vars
+from linearmodels import PanelOLS
 
-app = FastAPI()
+from config import core_vars, file_paths, model_params
+from benchmark_reg import preprocess_panel_data
+from data_loader import load_raw_data, verify_panel_structure
+from preprocessing import full_preprocessing_pipeline
+
+# ---------------------------------------------------------------------------
+# 全局轻量缓存（启动时填充，请求内只读 + 纯算术）
+# ---------------------------------------------------------------------------
+GLOBAL_CACHE: dict[str, Any] = {
+    "panel_data": None,
+    "scatter_data": None,
+    "beta_1": None,
+    "gfi_mu": None,
+    "gfi_sigma": None,
+    "core_x_raw": None,
+    "dep_var": "能源强度",
+    "ready": False,
+    "error": None,
+}
+
+
+def _extract_beta_gfi_energy_intensity(df: pd.DataFrame) -> float:
+    """
+    双向固定效应下，标准化绿色金融指数 gfi_std 对「能源强度」的边际系数。
+    设定与 benchmark_reg.run_benchmark_regression 一致（Entity+Time FE + province_trend），
+    仅因变量换为能耗接口所需的「能源强度」。
+    """
+    id_cols = core_vars["id_cols"]
+    dep_var = GLOBAL_CACHE["dep_var"]
+    core_exog = core_vars["core_x"]["primary"]
+    if dep_var not in df.columns or core_exog not in df.columns:
+        raise ValueError(f"面板缺少列：需要 {dep_var}、{core_exog}")
+
+    df_p = preprocess_panel_data(df.copy(), id_cols)
+    control_vars = [v for v in core_vars["control_vars"] if v in df_p.columns]
+    exog_vars = [core_exog] + control_vars + ["province_trend"]
+    exog_part = " + ".join(exog_vars)
+    formula_fe = f"{dep_var} ~ {exog_part} + EntityEffects + TimeEffects"
+    model_fe = PanelOLS.from_formula(formula_fe, data=df_p, drop_absorbed=True)
+    results_fe = model_fe.fit(
+        cov_type="clustered",
+        cluster_entity=(model_params["cluster_level"] == "Entity"),
+    )
+    return float(results_fe.params[core_exog])
+
+
+def _build_scatter_cache(df: pd.DataFrame) -> list[list]:
+    core_x_raw = GLOBAL_CACHE["core_x_raw"]
+    dep_var = GLOBAL_CACHE["dep_var"]
+    sub = df[[core_x_raw, dep_var, "省份", "年份"]].dropna()
+    out: list[list] = []
+    for gfi, en, prov, yr in sub.itertuples(index=False, name=None):
+        out.append(
+            [
+                round(float(gfi), 4),
+                round(float(en), 4),
+                str(prov),
+                int(yr),
+            ]
+        )
+    return out
+
+
+def _warm_cache_sync() -> None:
+    """启动时同步预热：最终 CSV 优先，否则全量预处理后再加载。"""
+    final_path = file_paths.get("最终清洗数据集")
+    if not final_path or not isinstance(final_path, str):
+        raise RuntimeError("config.file_paths['最终清洗数据集'] 未配置")
+
+    GLOBAL_CACHE["core_x_raw"] = core_vars["core_x"]["raw"]
+    core_x_raw = GLOBAL_CACHE["core_x_raw"]
+
+    if not os.path.isfile(final_path):
+        print("📂 未找到最终面板 CSV，开始全量预处理（仅首次或缺失文件时）…")
+        df_raw = load_raw_data()
+        df_balanced = verify_panel_structure(df_raw)
+        df_final, _keep_vars = full_preprocessing_pipeline(df_balanced)
+        if not os.path.isfile(final_path):
+            df_final.to_csv(final_path, index=False, encoding="utf-8-sig")
+            print(f"✅ 预处理未写出 CSV，已兜底写入：{final_path}")
+
+    df = pd.read_csv(final_path, encoding="utf-8-sig")
+    df["年份"] = pd.to_numeric(df["年份"], errors="coerce").fillna(0).astype(int)
+
+    mu = float(df[core_x_raw].mean())
+    sigma = float(df[core_x_raw].std())
+    if sigma <= 0 or np.isnan(sigma):
+        raise RuntimeError(f"{core_x_raw} 标准差无效，无法做反事实换算")
+
+    beta_1 = _extract_beta_gfi_energy_intensity(df)
+    scatter = _build_scatter_cache(df)
+
+    GLOBAL_CACHE["panel_data"] = df
+    GLOBAL_CACHE["scatter_data"] = scatter
+    GLOBAL_CACHE["beta_1"] = beta_1
+    GLOBAL_CACHE["gfi_mu"] = mu
+    GLOBAL_CACHE["gfi_sigma"] = sigma
+    GLOBAL_CACHE["ready"] = True
+    GLOBAL_CACHE["error"] = None
+    print(
+        f"✅ 缓存就绪 | 样本 {len(df)} | β(gfi_std→{GLOBAL_CACHE['dep_var']})={beta_1:.6e} | σ(GFI)={sigma:.6f}"
+    )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        _warm_cache_sync()
+    except Exception as e:
+        GLOBAL_CACHE["ready"] = False
+        GLOBAL_CACHE["error"] = str(e)
+        print(f"⚠️ 启动预热失败：{e}")
+    yield
+
+
+app = FastAPI(title="Green Finance API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,45 +146,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 初始化数据和模型
-try:
-    panel_data = load_raw_data()
-    # 计算基准回归系数（使用能源强度作为因变量）
-    dep_var = '能源强度'
-    core_x = core_vars['core_x']['raw']
-    
-    # 简单线性回归计算系数
-    valid_data = panel_data[[core_x, dep_var]].dropna()
-    X = valid_data[core_x].values
-    Y = valid_data[dep_var].values
-    
-    # 计算回归系数 β1 (slope)
-    n = len(X)
-    beta_1 = (n * np.sum(X * Y) - np.sum(X) * np.sum(Y)) / (n * np.sum(X**2) - np.sum(X)**2)
-    beta_0 = (np.sum(Y) - beta_1 * np.sum(X)) / n
-    
-    print(f"✅ 模型初始化成功 - 回归系数 β1: {beta_1:.6f}")
-except Exception as e:
-    print(f"⚠️ 模型初始化失败: {e}")
-    panel_data = None
-    beta_1 = -0.5  # 默认系数
-    beta_0 = 1.0
-
 # 数据库配置
 DB_CONFIG = {
     "host": "127.0.0.1",
     "user": "root",
     "password": "123456",
     "db": "green_finance",
-    "charset": "utf8mb4"
+    "charset": "utf8mb4",
 }
 
 
-# 连接数据库
 def get_db_connection():
     try:
         return pymysql.connect(**DB_CONFIG, cursorclass=pymysql.cursors.DictCursor)
-    except:
+    except Exception:
         return None
 
 
@@ -109,9 +215,8 @@ def get_macro_data(province: str = None):
         return {"code": 500, "msg": "数据库连接失败", "data": []}
 
     cursor = conn.cursor()
-    
+
     if province and province != "全国":
-        # 查询指定省份的历年数据
         sql = """
         SELECT year, gdp, carbonEmission
         FROM province_green_finance
@@ -120,7 +225,6 @@ def get_macro_data(province: str = None):
         """
         cursor.execute(sql, (province,))
     else:
-        # 查询全国历年数据（各省求和）
         sql = """
         SELECT year, SUM(gdp) as gdp, SUM(carbonEmission) as carbonEmission
         FROM province_green_finance
@@ -128,122 +232,96 @@ def get_macro_data(province: str = None):
         ORDER BY year ASC
         """
         cursor.execute(sql)
-    
+
     data = cursor.fetchall()
     conn.close()
-    
-    # 将碳排放从吨转换为万吨
-    for row in data:
-        if row.get('carbonEmission'):
-            row['carbonEmission'] = round(row['carbonEmission'] / 10000, 2)
-    
-    return {"code": 200, "msg": "success", "data": data}
 
+    for row in data:
+        if row.get("carbonEmission"):
+            row["carbonEmission"] = round(row["carbonEmission"] / 10000, 2)
+
+    return {"code": 200, "msg": "success", "data": data}
 
 
 # 4. 能耗强度预测接口（反事实推断 + 省份专属基准线）
 @app.get("/api/energy/predict")
 def predict_energy_intensity(
     intensity_increment: float = Query(0.0, description="绿色金融投入追加比例"),
-    province: str = Query(None, description="指定省份（可选，不传则使用全国平均）"),
-    year: int = Query(None, description="基准年份（可选，不传则使用最新年份）")
+    province: Optional[str] = Query(None, description="指定省份（可选，不传则使用全国平均）"),
+    year: Optional[int] = Query(None, description="基准年份（可选，不传则使用最新年份）"),
 ):
     """
-    反事实推断：预测追加绿色金融投入后的能耗强度变化
-    支持省份专属基准线（固定效应）
-    
-    参数:
-        intensity_increment: 绿色金融投入追加比例（0.2 表示追加 20%）
-        province: 指定省份名称（如"浙江省"），不传则使用全国平均
-        year: 基准年份，不传则使用最新年份
-    
-    返回:
-        scatter_data: 历史散点数据 [[gfi, outcome, province, year], ...]
-        predict_point: 预测点 [new_gfi, new_outcome]
-        trendline: 专属趋势线 [[start_gfi, start_outcome], [end_gfi, end_outcome]]
-        predicted_drop_percent: 预计能耗强度下降百分比
-        base_province: 基准省份名称（"全国平均" 或具体省份）
+    反事实推断：追加绿色金融投入后的能耗强度变化。
+    启动时已缓存平衡面板与 FE 系数；本接口仅筛选行 + 线性反事实，无重复清洗/回归。
+
+    公式（gfi_std 为全局标准化后的指数）：
+      New_Outcome = base_outcome + beta_1 * (New_gfi_std - base_gfi_std)
+    其中 New_gfi_std、base_gfi_std 由同一 μ、σ 将原始「绿色金融综合指数」换算得到。
     """
+    if not GLOBAL_CACHE.get("ready"):
+        msg = GLOBAL_CACHE.get("error") or "数据未就绪"
+        return {"code": 503, "msg": msg, "data": {}}
+
+    panel = GLOBAL_CACHE["panel_data"]
+    scatter_data = GLOBAL_CACHE["scatter_data"]
+    beta_1 = GLOBAL_CACHE["beta_1"]
+    gfi_mu = GLOBAL_CACHE["gfi_mu"]
+    gfi_sigma = GLOBAL_CACHE["gfi_sigma"]
+    core_x_raw = GLOBAL_CACHE["core_x_raw"]
+    dep_var = GLOBAL_CACHE["dep_var"]
+
     try:
-        if panel_data is None:
-            return {"code": 500, "msg": "数据未加载", "data": {}}
-        
-        # 确定基准年份
         if year is None:
-            year = panel_data['年份'].max()
-        
-        # 获取指定年份的数据
-        df_current = panel_data[panel_data['年份'] == year].copy()
-        
-        core_x = core_vars['core_x']['raw']
-        dep_var = '能源强度'
-        
-        # 准备散点数据（所有历史数据，包含省份和年份）
-        valid_data = panel_data[[core_x, dep_var, '省份', '年份']].dropna()
-        scatter_data = []
-        for _, row in valid_data.iterrows():
-            gfi_val = round(float(row[core_x]), 4)
-            outcome_val = round(float(row[dep_var]), 4)
-            prov_name = str(row['省份'])
-            year_val = int(row['年份'])
-            scatter_data.append([gfi_val, outcome_val, prov_name, year_val])
-        
-        # 【核心逻辑】确定基准点（推演起点）
-        if province and province in df_current['省份'].values:
-            # 省份专属基准点（固定效应）
-            province_row = df_current[df_current['省份'] == province].iloc[0]
-            base_gfi = float(province_row[core_x])
-            base_outcome = float(province_row[dep_var])
+            year = int(panel["年份"].max())
+
+        df_year = panel[panel["年份"] == year]
+        if df_year.empty:
+            return {"code": 400, "msg": f"无 {year} 年面板数据", "data": {}}
+
+        if province and province in df_year["省份"].values:
+            row = df_year[df_year["省份"] == province].iloc[0]
+            base_raw = float(row[core_x_raw])
+            base_outcome = float(row[dep_var])
             base_province = province
         else:
-            # 全国平均基准点
-            base_gfi = df_current[core_x].mean()
-            base_outcome = df_current[dep_var].mean()
+            base_raw = float(df_year[core_x_raw].mean())
+            base_outcome = float(df_year[dep_var].mean())
             base_province = "全国平均"
-        
-        # 计算反事实预测
-        new_gfi = base_gfi * (1 + intensity_increment)
-        delta_gfi = new_gfi - base_gfi
-        new_outcome = base_outcome + (beta_1 * delta_gfi)
-        
-        # 计算下降百分比
+
+        base_gfi_std = (base_raw - gfi_mu) / gfi_sigma
+        new_raw = base_raw * (1.0 + intensity_increment)
+        new_gfi_std = (new_raw - gfi_mu) / gfi_sigma
+        new_outcome = base_outcome + beta_1 * (new_gfi_std - base_gfi_std)
+
         if base_outcome != 0:
             drop_percent = ((base_outcome - new_outcome) / base_outcome) * 100
         else:
             drop_percent = 0.0
-        
-        # 【固定效应】计算专属趋势线
-        # 固定效应模型：各省斜率相同（beta_1）但截距不同
-        # 专属截距 = 基准点的 outcome - beta_1 * 基准点的 gfi
-        local_intercept = base_outcome - (beta_1 * base_gfi)
-        
-        # 计算趋势线的 X 轴范围（覆盖所有数据点 + 预测点）
-        all_gfi_values = valid_data[core_x].values.tolist() + [new_gfi]
-        x_min = float(min(all_gfi_values))
-        x_max = float(max(all_gfi_values))
-        
-        # 使用专属截距和共同斜率生成趋势线
+
+        # 趋势线：在原始 GFI 横轴下斜率为 beta_1/sigma，过 (base_raw, base_outcome)
+        slope_raw = beta_1 / gfi_sigma
+        gfi_series = panel[core_x_raw].to_numpy(dtype=np.float64)
+        x_min = float(min(gfi_series.min(), new_raw))
+        x_max = float(max(gfi_series.max(), new_raw))
         trendline = [
-            [x_min, float(beta_1 * x_min + local_intercept)],
-            [x_max, float(beta_1 * x_max + local_intercept)]
+            [x_min, float(base_outcome + slope_raw * (x_min - base_raw))],
+            [x_max, float(base_outcome + slope_raw * (x_max - base_raw))],
         ]
-        
+
         result = {
             "scatter_data": scatter_data,
-            "predict_point": [float(new_gfi), float(new_outcome)],
+            "predict_point": [float(new_raw), float(new_outcome)],
             "trendline": trendline,
             "predicted_drop_percent": round(float(drop_percent), 2),
-            "current_gfi": round(float(base_gfi), 4),
+            "current_gfi": round(float(base_raw), 4),
             "current_outcome": round(float(base_outcome), 4),
             "beta_coefficient": round(float(beta_1), 6),
             "base_province": base_province,
-            "base_year": int(year)
+            "base_year": int(year),
         }
-        
         return {"code": 200, "msg": "success", "data": result}
-        
     except Exception as e:
         import traceback
-        error_detail = traceback.format_exc()
-        print(f"❌ 预测接口错误: {error_detail}")
+
+        print(f"❌ 预测接口错误: {traceback.format_exc()}")
         return {"code": 500, "msg": f"预测失败: {str(e)}", "data": {}}
