@@ -20,21 +20,23 @@
       </div>
     </div>
 
-    <div ref="chartRef" class="chart-container"></div>
+    <div ref="chartRef" class="chart-container" v-loading="loading" />
 
     <!-- 推演摘要：与滑块联动的关键指标 -->
     <div class="prediction-summary">
       <div class="summary-card">
-        <div class="summary-label">历史基准 ({{ lastHistoricalYear }}年)</div>
-        <div class="summary-value">{{ summary.base.toFixed(3) }}</div>
+        <div class="summary-label">历史基准 ({{ lastHistoricalYear || '—' }}年)</div>
+        <div class="summary-value">{{ hasData ? summary.base.toFixed(3) : '—' }}</div>
       </div>
       <div class="summary-card summary-card--highlight">
-        <div class="summary-label">预测终点 ({{ terminalYear }}年)</div>
-        <div class="summary-value">{{ summary.terminal.toFixed(3) }}</div>
+        <div class="summary-label">预测终点 ({{ terminalYear || '—' }}年)</div>
+        <div class="summary-value">{{ hasData ? summary.terminal.toFixed(3) : '—' }}</div>
       </div>
       <div class="summary-card">
         <div class="summary-label">相对基准提升</div>
-        <div class="summary-value summary-value--accent">+{{ summary.gainPercent.toFixed(2) }}%</div>
+        <div class="summary-value summary-value--accent">
+          {{ hasData ? `+${summary.gainPercent.toFixed(2)}%` : '—' }}
+        </div>
       </div>
     </div>
   </div>
@@ -42,8 +44,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue';
+import { ElMessage } from 'element-plus';
 import type { EChartsOption } from 'echarts';
 import { useChart } from './hooks/useChart';
+import { getPredictionDataApi, type PredictionEfficiencyPayload } from '@/api/modules/dashboard';
+import { selectedProvince } from './hooks/provinceData';
 
 const props = withDefaults(
   defineProps<{
@@ -56,31 +61,42 @@ const props = withDefaults(
 const growthRate = ref(8);
 const spilloverMultiplier = ref(1.2);
 const chartRef = ref<HTMLElement | null>(null);
+const loading = ref(false);
+
+const historicalYears = ref<string[]>([]);
+const historicalData = ref<number[]>([]);
+const baseCoefficient = ref(0);
+const futureYears = ref<string[]>([]);
+const baselinePredictValues = ref<number[]>([]);
 
 const { setOption } = useChart(chartRef, { tabKey: props.chartTabKey });
 
-const baseCoefficient = 0.05;
+const lastHistoricalYear = computed(() => {
+  const y = historicalYears.value;
+  return y.length ? String(y[y.length - 1]) : '';
+});
 
-/** 2000–2024，共 25 年 */
-const historicalYears = Array.from({ length: 25 }, (_, i) => String(2000 + i));
+const terminalYear = computed(() => {
+  const y = futureYears.value;
+  return y.length ? String(y[y.length - 1]) : '';
+});
 
-const historicalData = [
-  0.12, 0.13, 0.15, 0.16, 0.18, 0.2, 0.22, 0.23, 0.25, 0.28, 0.3, 0.32, 0.35, 0.38, 0.4, 0.42, 0.45, 0.48,
-  0.5, 0.52, 0.55, 0.58, 0.6, 0.62, 0.65,
-];
+const hasData = computed(
+  () =>
+    historicalYears.value.length > 0 &&
+    historicalData.value.length > 0 &&
+    futureYears.value.length > 0 &&
+    historicalYears.value.length === historicalData.value.length,
+);
 
-const futureYears = ['2025', '2026', '2027', '2028', '2029', '2030'];
-
-const lastHistoricalYear = historicalYears[historicalYears.length - 1];
-const terminalYear = futureYears[futureYears.length - 1];
-
-const calculateFutureData = () => {
-  let lastValue = historicalData[historicalData.length - 1];
+const calculateFutureData = (): number[] => {
+  if (!hasData.value || !futureYears.value.length) return [];
+  let lastValue = historicalData.value[historicalData.value.length - 1];
   const predicted: number[] = [];
+  const coef = baseCoefficient.value;
 
-  for (let i = 0; i < futureYears.length; i++) {
-    const nextValue =
-      lastValue + baseCoefficient * (growthRate.value / 100) * spilloverMultiplier.value;
+  for (let i = 0; i < futureYears.value.length; i++) {
+    const nextValue = lastValue + coef * (growthRate.value / 100) * spilloverMultiplier.value;
     predicted.push(Number(nextValue.toFixed(3)));
     lastValue = nextValue;
   }
@@ -89,18 +105,77 @@ const calculateFutureData = () => {
 
 const summary = computed(() => {
   const predicted = calculateFutureData();
-  const base = historicalData[historicalData.length - 1];
+  const hd = historicalData.value;
+  const base = hd.length ? hd[hd.length - 1] : 0;
   const terminal = predicted.length ? predicted[predicted.length - 1] : base;
   const gainPercent = base !== 0 ? ((terminal - base) / base) * 100 : 0;
   return { base, terminal, gainPercent };
 });
 
+function isOkPayload(
+  res: unknown,
+): res is { code: number; msg: string; data: PredictionEfficiencyPayload } {
+  return (
+    typeof res === 'object' &&
+    res !== null &&
+    'code' in res &&
+    (res as { code: number }).code === 200 &&
+    'data' in res &&
+    (res as { data: PredictionEfficiencyPayload | null }).data != null
+  );
+}
+
+async function fetchPredictionData(province?: string) {
+  loading.value = true;
+  try {
+    const res = await getPredictionDataApi(province);
+    if (isOkPayload(res)) {
+      const d = res.data;
+      historicalYears.value = d.historical_years.map((y) => String(y));
+      historicalData.value = [...d.historical_values];
+      baseCoefficient.value = d.base_coefficient;
+      futureYears.value = d.predict_years.map((y) => String(y));
+      baselinePredictValues.value = [...d.baseline_predict_values];
+      await nextTick();
+      renderChart();
+    } else {
+      const msg = typeof res === 'object' && res !== null && 'msg' in res ? String((res as { msg: string }).msg) : '获取预测数据失败';
+      ElMessage.error(msg);
+    }
+  } catch (e) {
+    console.error(e);
+    ElMessage.error('获取预测数据失败');
+  } finally {
+    loading.value = false;
+  }
+}
+
 function buildChartOption(): EChartsOption {
+  const hy = historicalYears.value;
+  const hd = historicalData.value;
+  const fy = futureYears.value;
+
+  if (!hy.length || !hd.length || !fy.length || hy.length !== hd.length) {
+    return {
+      backgroundColor: 'transparent',
+      title: {
+        text: loading.value ? '加载中…' : '暂无数据',
+        left: 'center',
+        top: 'middle',
+        textStyle: { color: 'rgba(255,255,255,0.45)', fontSize: 14 },
+      },
+      xAxis: { type: 'category', data: [] },
+      yAxis: { type: 'value' },
+      series: [],
+    };
+  }
+
   const futureData = calculateFutureData();
-  const paddingData = new Array(historicalData.length - 1).fill(null);
-  const connectedFutureData = [...paddingData, historicalData[historicalData.length - 1], ...futureData];
+  const paddingData = new Array(hd.length - 1).fill(null);
+  const connectedFutureData = [...paddingData, hd[hd.length - 1], ...futureData];
 
   return {
+    backgroundColor: 'transparent',
     tooltip: { trigger: 'axis' },
     legend: {
       top: 6,
@@ -119,7 +194,7 @@ function buildChartOption(): EChartsOption {
     xAxis: {
       type: 'category',
       boundaryGap: false,
-      data: [...historicalYears, ...futureYears],
+      data: [...hy, ...fy],
       axisLabel: {
         color: '#ccc',
         fontSize: 9,
@@ -140,7 +215,7 @@ function buildChartOption(): EChartsOption {
       {
         name: '历史实际值',
         type: 'line',
-        data: [...historicalData, ...new Array(futureYears.length).fill(null)],
+        data: [...hd, ...new Array(fy.length).fill(null)],
         itemStyle: { color: '#8884d8' },
         lineStyle: { width: 3 },
         smooth: true,
@@ -163,13 +238,15 @@ function renderChart() {
 }
 
 onMounted(() => {
-  nextTick(() => {
-    renderChart();
-  });
+  void fetchPredictionData(selectedProvince.value || undefined);
 });
 
 watch([growthRate, spilloverMultiplier], () => {
-  renderChart();
+  if (hasData.value) renderChart();
+});
+
+watch(selectedProvince, (name) => {
+  fetchPredictionData(name ? name : undefined);
 });
 </script>
 

@@ -54,3 +54,21 @@ export const predictEnergyIntensity = (params: PredictEnergyParams, signal?: Abo
     signal ? { signal } : undefined,
   );
 };
+
+/** 碳减排效率预测：后端 data 载荷 */
+export interface PredictionEfficiencyPayload {
+  historical_years: (number | string)[];
+  historical_values: number[];
+  base_coefficient: number;
+  predict_years: (number | string)[];
+  baseline_predict_values: number[];
+}
+
+/** GET /api/prediction/efficiency，可选 province（全国不传或空） */
+export const getPredictionDataApi = (province?: string, signal?: AbortSignal) => {
+  return http.get<{ code: number; msg: string; data: PredictionEfficiencyPayload }>(
+    'api/prediction/efficiency',
+    province ? { province } : {},
+    signal ? { signal } : undefined,
+  );
+};

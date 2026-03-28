@@ -243,7 +243,68 @@ def get_macro_data(province: str = None):
     return {"code": 200, "msg": "success", "data": data}
 
 
-# 4. 能耗强度预测接口（反事实推断 + 省份专属基准线）
+# 4. 碳减排效率预测（历史序列 + 基线预测参数，供 BizPrediction 大屏）
+@app.get("/api/prediction/efficiency")
+def get_prediction_efficiency(
+    province: Optional[str] = Query(None, description="省份，不传或空为按年全国平均"),
+):
+    """
+    返回 historical_years / historical_values（减排效率）、base_coefficient、
+    predict_years、baseline_predict_values（与 predict_years 等长）。
+    """
+    if not GLOBAL_CACHE.get("ready"):
+        msg = GLOBAL_CACHE.get("error") or "数据未就绪"
+        return {"code": 503, "msg": msg, "data": {}}
+
+    panel = GLOBAL_CACHE["panel_data"]
+    dep = core_vars["dep_vars"]["primary"]
+    if dep not in panel.columns:
+        return {"code": 500, "msg": f"面板缺少因变量列：{dep}", "data": {}}
+
+    try:
+        if province:
+            sub = panel[panel["省份"] == province].sort_values("年份")
+            if sub.empty:
+                return {"code": 400, "msg": f"无该省份数据：{province}", "data": {}}
+            hist_years = sub["年份"].astype(int).tolist()
+            hist_vals = [float(round(x, 6)) for x in sub[dep].tolist()]
+        else:
+            g = panel.groupby("年份", as_index=False)[dep].mean()
+            g = g.sort_values("年份")
+            hist_years = g["年份"].astype(int).tolist()
+            hist_vals = [float(round(x, 6)) for x in g[dep].tolist()]
+
+        if not hist_vals:
+            return {"code": 400, "msg": "无历史样本", "data": {}}
+
+        predict_years = list(range(2025, 2031))
+        base_coefficient = 0.05
+        last_v = hist_vals[-1]
+        baseline_predict_values = []
+        v = last_v
+        for _ in predict_years:
+            v = v + base_coefficient * (8.0 / 100.0) * 1.2
+            baseline_predict_values.append(round(float(v), 3))
+
+        return {
+            "code": 200,
+            "msg": "success",
+            "data": {
+                "historical_years": hist_years,
+                "historical_values": hist_vals,
+                "base_coefficient": base_coefficient,
+                "predict_years": predict_years,
+                "baseline_predict_values": baseline_predict_values,
+            },
+        }
+    except Exception as e:
+        import traceback
+
+        print(f"❌ /api/prediction/efficiency: {traceback.format_exc()}")
+        return {"code": 500, "msg": str(e), "data": {}}
+
+
+# 5. 能耗强度预测接口（反事实推断 + 省份专属基准线）
 @app.get("/api/energy/predict")
 def predict_energy_intensity(
     intensity_increment: float = Query(0.0, description="绿色金融投入追加比例"),
