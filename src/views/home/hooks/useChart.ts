@@ -4,20 +4,17 @@ import * as echarts from 'echarts';
 import {
   indicatorLabels,
   indicatorKeys,
-  findProvince,
   selectedProvince,
   selectedYear,
   realProvinceData,
   realCityData,
   gfDrillProvince,
-  getProvinceRows,
   extractList,
   type ProvinceGreenFinance,
 } from './provinceData';
 import {
   mockGreenFinanceData,
   mockCarbonData,
-  mockEnergyIntensityData,
   mockMacroEconomyData,
   greenFinanceIndicators,
   type MockGreenFinanceRow,
@@ -163,132 +160,6 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options?: UseChartOp
   });
 
   return { setOption, resize, dispose };
-}
-
-/* ========================================================================
- * 综合引力沙盘 - 堆叠柱状图 TOP 15
- * ======================================================================== */
-export function useStackedBar() {
-  let chart: echarts.ECharts | null = null;
-  function render() {
-    const year = selectedYear.value;
-    const list = getProvinceRows(year);
-    const top = [...list].sort((a, b) => b.score - a.score).slice(0, 15);
-    const provinces = top.map((p) => p.province.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, ''));
-    if (!chart) {
-      const el = document.getElementById('bar');
-      if (!el || el.clientWidth === 0) return;
-      chart = echarts.init(el, 'dark');
-      window.addEventListener('resize', () => chart?.resize());
-    }
-    const series = indicatorKeys.map((key) => ({
-      name: indicatorLabels[key],
-      type: 'bar' as const,
-      stack: 'total',
-      emphasis: { focus: 'series' },
-      data: top.map((row) => row[key]),
-    }));
-    chart.setOption(
-      {
-        backgroundColor: 'transparent',
-        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-        legend: { textStyle: { color: '#ccc', fontSize: 8 }, top: 2, type: 'scroll' },
-        grid: { left: 4, right: 10, top: 32, bottom: 4, containLabel: true },
-        xAxis: {
-          type: 'value',
-          axisLabel: { color: '#aaa', fontSize: 8 },
-          splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
-        },
-        yAxis: {
-          type: 'category',
-          data: provinces,
-          axisLabel: { color: '#ccc', fontSize: 9 },
-        },
-        series,
-      },
-      true,
-    );
-  }
-  useDeferredChart('sandbox', () => {
-    render();
-    watch(realProvinceData, render, { deep: true });
-  });
-}
-
-/* ========================================================================
- * 综合引力沙盘 - 雷达图（当前选中省份 / 默认同分最高省）
- * ======================================================================== */
-export function useRadar() {
-  let chart: echarts.ECharts | null = null;
-  function render() {
-    const year = selectedYear.value;
-    const list = getProvinceRows(year);
-    const row = selectedProvince.value
-      ? findProvince(selectedProvince.value, year)
-      : [...list].sort((a, b) => b.score - a.score)[0];
-    if (!row) return;
-    const values = indicatorKeys.map((k) => Number(row[k] ?? 0));
-    const indMax = Math.max(...values, 0.02) * 1.1;
-    if (!chart) {
-      const el = document.getElementById('radar');
-      if (!el || el.clientWidth === 0) return;
-      chart = echarts.init(el, 'dark');
-      window.addEventListener('resize', () => chart?.resize());
-    }
-    chart.setOption(
-      {
-        backgroundColor: 'transparent',
-        tooltip: { trigger: 'item' },
-        radar: {
-          indicator: indicatorKeys.map((k) => ({
-            name: indicatorLabels[k],
-            max: indMax,
-          })),
-          shape: 'polygon',
-          radius: '62%',
-          axisName: { color: 'rgba(220,240,255,0.75)', fontSize: 10 },
-          splitArea: {
-            areaStyle: {
-              color: [
-                'rgba(0,60,120,0.12)',
-                'rgba(0,20,50,0.08)',
-                'rgba(0,60,120,0.06)',
-                'rgba(0,20,50,0.04)',
-                'rgba(0,60,120,0.02)',
-              ],
-            },
-          },
-          splitLine: {
-            lineStyle: { color: '#00FFFF', opacity: 0.12, type: 'dashed' },
-          },
-        },
-        series: [
-          {
-            type: 'radar',
-            data: [
-              {
-                value: values,
-                name: row.province,
-                areaStyle: {
-                  color: new echarts.graphic.RadialGradient(0.5, 0.5, 1, [
-                    { offset: 0, color: 'rgba(0,229,255,0.35)' },
-                    { offset: 1, color: 'rgba(0,229,255,0.05)' },
-                  ]),
-                },
-                lineStyle: { color: '#00e5ff', width: 2 },
-              },
-            ],
-          },
-        ],
-      },
-      true,
-    );
-  }
-  useDeferredChart('sandbox', () => {
-    render();
-    watch(selectedProvince, render);
-    watch(realProvinceData, render, { deep: true });
-  });
 }
 
 /* ========================================================================
@@ -654,96 +525,6 @@ export function useCarbonBar() {
       watch(realProvinceData, render, { deep: true });
     }
   });
-}
-/* ========================================================================
- * 能耗强度分析 - 散点图 + 线性回归
- * ======================================================================== */
-export function useEnergyScatter() {
-  let chart: echarts.ECharts | null = null;
-  function render() {
-    const data = mockEnergyIntensityData;
-    const scatterData = data.map((d) => [d.score, d.energyConsume, d.province]);
-    const n = data.length;
-    const sumX = data.reduce((s, d) => s + d.score, 0);
-    const sumY = data.reduce((s, d) => s + d.energyConsume, 0);
-    const sumXY = data.reduce((s, d) => s + d.score * d.energyConsume, 0);
-    const sumX2 = data.reduce((s, d) => s + d.score * d.score, 0);
-    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-    const intercept = (sumY - slope * sumX) / n;
-    const xMin = Math.min(...data.map((d) => d.score)) - 0.05;
-    const xMax = Math.max(...data.map((d) => d.score)) + 0.05;
-    const regressionLine = [
-      [xMin, slope * xMin + intercept],
-      [xMax, slope * xMax + intercept],
-    ];
-    if (!chart) {
-      const el = document.getElementById('energy-scatter');
-      if (!el || el.clientWidth === 0) return;
-      chart = echarts.init(el, 'dark');
-      window.addEventListener('resize', () => chart?.resize());
-    }
-    chart.setOption(
-      {
-        backgroundColor: 'transparent',
-        tooltip: {
-          trigger: 'item',
-          formatter: (p: { seriesIndex: number; value: [number, number, string] }) => {
-            if (p.seriesIndex === 1) return '';
-            return `<b>${p.value[2]}</b><br/>绿色金融指数: ${p.value[0]}<br/>能耗强度: ${p.value[1]}`;
-          },
-        },
-        grid: { left: 50, right: 30, top: 40, bottom: 50 },
-        xAxis: {
-          type: 'value',
-          name: '绿色金融指数',
-          nameTextStyle: { color: '#0ff', fontSize: 11 },
-          axisLabel: { color: '#aaa', fontSize: 10 },
-          splitLine: { lineStyle: { color: 'rgba(0,229,255,0.08)' } },
-        },
-        yAxis: {
-          type: 'value',
-          name: '能耗强度',
-          nameTextStyle: { color: '#0ff', fontSize: 11 },
-          axisLabel: { color: '#aaa', fontSize: 10 },
-          splitLine: { lineStyle: { color: 'rgba(0,229,255,0.08)' } },
-        },
-        series: [
-          {
-            type: 'scatter',
-            data: scatterData,
-            symbolSize: 12,
-            itemStyle: {
-              color: new echarts.graphic.RadialGradient(0.5, 0.5, 0.5, [
-                { offset: 0, color: '#00e5ff' },
-                { offset: 1, color: 'rgba(0,229,255,0.3)' },
-              ]),
-              shadowBlur: 8,
-              shadowColor: 'rgba(0,229,255,0.4)',
-            },
-            emphasis: {
-              itemStyle: { shadowBlur: 16, shadowColor: 'rgba(0,229,255,0.7)' },
-            },
-          },
-          {
-            type: 'line',
-            data: regressionLine,
-            symbol: 'none',
-            lineStyle: {
-              color: '#ff6d00',
-              width: 2,
-              type: 'dashed',
-              shadowBlur: 6,
-              shadowColor: 'rgba(255,109,0,0.4)',
-            },
-            tooltip: { show: false },
-            z: 0,
-          },
-        ],
-      },
-      true,
-    );
-  }
-  useDeferredChart('energy', render);
 }
 /* ========================================================================
  * 宏观经济动态 - 双 Y 轴混合图（GDP 柱 + 碳排放折线）

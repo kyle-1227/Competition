@@ -204,7 +204,6 @@ export const selectedProvince: Ref<string> = ref('');
 export const selectedYear: Ref<number> = ref(2024);
 /** 底部时间轴滑块当前值（与角标一致）；松手 commit 后才会与接口数据年 selectedYear 对齐拉数 */
 export const timelineYear: Ref<number> = ref(2024);
-export const tfeeThreshold: Ref<number> = ref(0.3);
 
 /** 最近一次成功拉取省级数据的年份（与 realProvinceData 对应） */
 export const apiProvinceYear = ref<number | null>(null);

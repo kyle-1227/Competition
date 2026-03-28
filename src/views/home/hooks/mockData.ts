@@ -81,42 +81,6 @@ export const mockGreenFinanceData: MockGreenFinanceRow[] = mockCarbonData.map((d
 });
 
 /**
- * 屏三：能耗强度分析 Mock 数据
- */
-export const mockEnergyIntensityData = [
-  { province: '北京市', score: 0.8523, energyConsume: 0.28 },
-  { province: '上海市', score: 0.821, energyConsume: 0.31 },
-  { province: '广东省', score: 0.7856, energyConsume: 0.35 },
-  { province: '浙江省', score: 0.7523, energyConsume: 0.38 },
-  { province: '江苏省', score: 0.7312, energyConsume: 0.42 },
-  { province: '山东省', score: 0.6845, energyConsume: 0.56 },
-  { province: '四川省', score: 0.6234, energyConsume: 0.48 },
-  { province: '福建省', score: 0.5987, energyConsume: 0.44 },
-  { province: '湖北省', score: 0.5654, energyConsume: 0.52 },
-  { province: '重庆市', score: 0.5432, energyConsume: 0.5 },
-  { province: '天津市', score: 0.521, energyConsume: 0.54 },
-  { province: '河南省', score: 0.4876, energyConsume: 0.62 },
-  { province: '安徽省', score: 0.4654, energyConsume: 0.58 },
-  { province: '湖南省', score: 0.4432, energyConsume: 0.55 },
-  { province: '河北省', score: 0.421, energyConsume: 0.72 },
-  { province: '陕西省', score: 0.3987, energyConsume: 0.68 },
-  { province: '辽宁省', score: 0.3765, energyConsume: 0.75 },
-  { province: '江西省', score: 0.3543, energyConsume: 0.6 },
-  { province: '山西省', score: 0.321, energyConsume: 0.95 },
-  { province: '吉林省', score: 0.2987, energyConsume: 0.78 },
-  { province: '黑龙江省', score: 0.2765, energyConsume: 0.82 },
-  { province: '广西壮族自治区', score: 0.2543, energyConsume: 0.7 },
-  { province: '云南省', score: 0.2321, energyConsume: 0.76 },
-  { province: '贵州省', score: 0.2098, energyConsume: 0.88 },
-  { province: '内蒙古自治区', score: 0.1987, energyConsume: 1.12 },
-  { province: '甘肃省', score: 0.1765, energyConsume: 0.92 },
-  { province: '新疆维吾尔自治区', score: 0.1543, energyConsume: 1.05 },
-  { province: '海南省', score: 0.1432, energyConsume: 0.65 },
-  { province: '宁夏回族自治区', score: 0.121, energyConsume: 1.35 },
-  { province: '青海省', score: 0.1054, energyConsume: 1.18 },
-  { province: '西藏自治区', score: 0.0876, energyConsume: 0.85 },
-];
-/**
  * 屏四：宏观经济动态 Mock 数据 (全国年度均值)
  */
 export const mockMacroEconomyData = [
