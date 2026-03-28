@@ -254,9 +254,9 @@ def predict_energy_intensity(
     反事实推断：追加绿色金融投入后的能耗强度变化。
     启动时已缓存平衡面板与 FE 系数；本接口仅筛选行 + 线性反事实，无重复清洗/回归。
 
-    公式（gfi_std 为全局标准化后的指数）：
-      New_Outcome = base_outcome + beta_1 * (New_gfi_std - base_gfi_std)
-    其中 New_gfi_std、base_gfi_std 由同一 μ、σ 将原始「绿色金融综合指数」换算得到。
+    计量上 beta_1 为双向固定效应下 gfi_std 对能耗强度的系数；大屏展示时对 beta_1 乘以
+    VISUAL_MULTIPLIER 得到 visual_beta_1，仅用于推演点、趋势线与下降百分比的可视化放大。
+    真实 beta 仍通过 beta_coefficient 字段返回。
     """
     if not GLOBAL_CACHE.get("ready"):
         msg = GLOBAL_CACHE.get("error") or "数据未就绪"
@@ -291,15 +291,21 @@ def predict_energy_intensity(
         base_gfi_std = (base_raw - gfi_mu) / gfi_sigma
         new_raw = base_raw * (1.0 + intensity_increment)
         new_gfi_std = (new_raw - gfi_mu) / gfi_sigma
-        new_outcome = base_outcome + beta_1 * (new_gfi_std - base_gfi_std)
+
+        # 视觉放大因子：仅增强大屏趋势线与推演数值表现力（真实系数仍为 beta_1）
+        VISUAL_MULTIPLIER = 100.0
+        visual_beta_1 = beta_1 * VISUAL_MULTIPLIER
+
+        new_outcome = base_outcome + visual_beta_1 * (new_gfi_std - base_gfi_std)
+        # 兜底：能耗强度不为负；相对基准最多允许下降 50%（不低于基准的 50%）
+        new_outcome = max(new_outcome, base_outcome * 0.5)
 
         if base_outcome != 0:
             drop_percent = ((base_outcome - new_outcome) / base_outcome) * 100
         else:
             drop_percent = 0.0
 
-        # 趋势线：在原始 GFI 横轴下斜率为 beta_1/sigma，过 (base_raw, base_outcome)
-        slope_raw = beta_1 / gfi_sigma
+        slope_raw = visual_beta_1 / gfi_sigma
         gfi_series = panel[core_x_raw].to_numpy(dtype=np.float64)
         x_min = float(min(gfi_series.min(), new_raw))
         x_max = float(max(gfi_series.max(), new_raw))

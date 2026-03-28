@@ -1,4 +1,5 @@
-import { onMounted, watch, inject, nextTick, type Ref } from 'vue';
+import { onMounted, onUnmounted, watch, inject, nextTick, type Ref } from 'vue';
+import type { EChartsOption } from 'echarts';
 import * as echarts from 'echarts';
 import {
   indicatorLabels,
@@ -88,6 +89,82 @@ function useDeferredChart(tabKey: string, initFn: () => void) {
     }
   });
 }
+
+/** 通用：基于模板 ref 的 ECharts（懒初始化 + resize；可选 tabKey 与 activeTab 对齐后 resize） */
+export interface UseChartOptions {
+  theme?: string;
+  /** 与 index provide 的 activeTab 一致时，切回该 Tab 会 nextTick resize */
+  tabKey?: string;
+}
+
+export function useChart(chartRef: Ref<HTMLElement | null>, options?: UseChartOptions) {
+  const theme = options?.theme ?? 'dark';
+  const tabKey = options?.tabKey;
+  const activeTab = inject<Ref<string> | undefined>('activeTab', undefined);
+  let chart: echarts.ECharts | null = null;
+
+  function onWindowResize() {
+    chart?.resize();
+  }
+
+  function tryInit(): boolean {
+    const el = chartRef.value;
+    if (!el || el.clientWidth === 0) return false;
+    if (!chart) {
+      chart = echarts.init(el, theme);
+      window.addEventListener('resize', onWindowResize);
+    }
+    return true;
+  }
+
+  function dispose() {
+    if (chart) {
+      window.removeEventListener('resize', onWindowResize);
+      chart.dispose();
+      chart = null;
+    }
+  }
+
+  function resize() {
+    chart?.resize();
+  }
+
+  function setOption(option: EChartsOption, notMerge = true) {
+    const apply = () => {
+      if (!tryInit()) return false;
+      chart!.setOption(option, notMerge);
+      return true;
+    };
+    if (!apply()) {
+      nextTick(() => {
+        if (tryInit()) {
+          chart!.setOption(option, notMerge);
+        }
+      });
+    }
+  }
+
+  onMounted(() => {
+    if (tabKey && activeTab) {
+      watch(
+        activeTab,
+        (val) => {
+          if (val === tabKey) {
+            nextTick(() => resize());
+          }
+        },
+        { flush: 'post' },
+      );
+    }
+  });
+
+  onUnmounted(() => {
+    dispose();
+  });
+
+  return { setOption, resize, dispose };
+}
+
 /* ========================================================================
  * 综合引力沙盘 - 堆叠柱状图 TOP 15
  * ======================================================================== */

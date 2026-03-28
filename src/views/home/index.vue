@@ -22,12 +22,12 @@
     <BizGreenFinance v-show="activeTab === 'greenFinance'" class="content" />
     <!-- 碳排放底色 -->
     <BizCarbon v-show="activeTab === 'carbon'" class="content" />
-    <!-- 能耗强度分析 -->
-    <BizEnergy v-show="activeTab === 'energy'" class="content" />
+    <!-- 碳减排效率预测（原 energy Tab，BizEnergy.vue 保留不引用） -->
+    <BizPrediction v-show="activeTab === 'energy'" class="content" />
     <!-- 宏观经济动态 -->
     <BizMacro v-show="activeTab === 'macro'" class="content" />
 
-    <!-- 底部年份时间轴（宏观经济动态和能耗强度分析模块不展示） -->
+    <!-- 底部年份时间轴（宏观经济动态与碳减排效率预测 Tab 不展示） -->
     <div v-show="activeTab !== 'macro' && activeTab !== 'energy'" class="timeline-bar">
       <span class="timeline-label">数据年份</span>
       <el-slider
@@ -78,7 +78,7 @@
 import BizWrap from './BizWrap.vue';
 import BizGreenFinance from './BizGreenFinance.vue';
 import BizCarbon from './BizCarbon.vue';
-import BizEnergy from './BizEnergy.vue';
+import BizPrediction from './BizPrediction.vue';
 import BizMacro from './BizMacro.vue';
 import {
   selectedYear,
@@ -121,7 +121,7 @@ const tabs = [
   { key: 'sandbox', label: '综合引力沙盘', icon: '🌐' },
   { key: 'greenFinance', label: '绿色金融监测', icon: '💹' },
   { key: 'carbon', label: '碳排放底色', icon: '🏭' },
-  { key: 'energy', label: '能耗强度分析', icon: '⚡' },
+  { key: 'energy', label: '碳减排效率预测', icon: '⚡' },
   { key: 'macro', label: '宏观经济动态', icon: '📈' },
 ];
 const activeTab = ref('sandbox');
