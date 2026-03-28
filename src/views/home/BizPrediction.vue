@@ -60,9 +60,16 @@ const chartRef = ref<HTMLElement | null>(null);
 const { setOption } = useChart(chartRef, { tabKey: props.chartTabKey });
 
 const baseCoefficient = 0.05;
-const historicalYears = ['2017', '2018', '2019', '2020', '2021', '2022'];
-const historicalData = [0.35, 0.38, 0.42, 0.46, 0.5, 0.53];
-const futureYears = ['2023', '2024', '2025', '2026', '2027', '2028', '2029', '2030'];
+
+/** 2000–2024，共 25 年 */
+const historicalYears = Array.from({ length: 25 }, (_, i) => String(2000 + i));
+
+const historicalData = [
+  0.12, 0.13, 0.15, 0.16, 0.18, 0.2, 0.22, 0.23, 0.25, 0.28, 0.3, 0.32, 0.35, 0.38, 0.4, 0.42, 0.45, 0.48,
+  0.5, 0.52, 0.55, 0.58, 0.6, 0.62, 0.65,
+];
+
+const futureYears = ['2025', '2026', '2027', '2028', '2029', '2030'];
 
 const lastHistoricalYear = historicalYears[historicalYears.length - 1];
 const terminalYear = futureYears[futureYears.length - 1];
@@ -95,20 +102,38 @@ function buildChartOption(): EChartsOption {
 
   return {
     tooltip: { trigger: 'axis' },
-    legend: { data: ['历史实际值', '动态预测值'], textStyle: { color: '#fff' } },
-    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    legend: {
+      top: 6,
+      left: 'center',
+      itemGap: 24,
+      data: ['历史实际值', '动态预测值'],
+      textStyle: { color: 'rgba(255,255,255,0.92)', fontSize: 11 },
+    },
+    grid: {
+      left: '2%',
+      right: '3%',
+      top: 44,
+      bottom: 52,
+      containLabel: true,
+    },
     xAxis: {
       type: 'category',
       boundaryGap: false,
       data: [...historicalYears, ...futureYears],
-      axisLabel: { color: '#ccc' },
+      axisLabel: {
+        color: '#ccc',
+        fontSize: 9,
+        rotate: 38,
+        interval: 0,
+        hideOverlap: true,
+      },
     },
     yAxis: {
       type: 'value',
       name: '减排效率',
       nameTextStyle: { color: '#ccc' },
       axisLabel: { color: '#ccc' },
-      min: 0.2,
+      min: 0,
       max: 1.0,
     },
     series: [
@@ -150,50 +175,88 @@ watch([growthRate, spilloverMultiplier], () => {
 
 <style scoped lang="scss">
 .biz-prediction {
+  box-sizing: border-box;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: rgba(13, 20, 36, 0.6);
-  border-radius: 8px;
-  padding: 15px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-radius: 10px;
+  padding: 12px 12px 14px;
+  /* 透明荧光毛玻璃 */
+  background: linear-gradient(
+    145deg,
+    rgba(12, 28, 52, 0.38) 0%,
+    rgba(8, 20, 42, 0.32) 50%,
+    rgba(6, 18, 38, 0.4) 100%
+  );
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(0, 255, 255, 0.06) inset,
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    0 0 24px rgba(0, 229, 255, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 
   .module-title {
-    font-size: 18px;
+    flex-shrink: 0;
+    font-size: 17px;
     font-weight: bold;
-    color: #fff;
-    margin-bottom: 15px;
+    color: rgba(255, 255, 255, 0.96);
+    margin-bottom: 12px;
+    text-shadow: 0 0 18px rgba(0, 229, 255, 0.35);
   }
 
   .control-panel {
     display: flex;
-    justify-content: space-between;
-    gap: 20px;
-    margin-bottom: 15px;
-    padding: 10px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 6px;
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    margin-bottom: 12px;
+    padding: 10px 10px 12px;
+    border-radius: 8px;
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(0, 229, 255, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 0 20px rgba(0, 229, 255, 0.06) inset;
 
     .control-item {
-      flex: 1;
+      flex: 1 1 200px;
+      min-width: 0;
+      max-width: 100%;
       display: flex;
       flex-direction: column;
 
       .label {
         display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
         justify-content: space-between;
-        color: #eee;
-        font-size: 14px;
-        margin-bottom: 8px;
+        gap: 4px 8px;
+        color: rgba(238, 238, 238, 0.95);
+        font-size: 12px;
+        margin-bottom: 6px;
+        line-height: 1.35;
 
         .value {
-          color: #00ffcc;
+          flex-shrink: 0;
+          color: #5fffea;
           font-weight: bold;
+          text-shadow: 0 0 10px rgba(0, 255, 204, 0.45);
         }
       }
 
       input[type='range'] {
+        box-sizing: border-box;
         width: 100%;
+        max-width: 100%;
+        min-width: 0;
         cursor: pointer;
         accent-color: #00ffcc;
       }
@@ -202,44 +265,58 @@ watch([growthRate, spilloverMultiplier], () => {
 
   .chart-container {
     flex: 1;
-    min-height: 250px;
+    min-width: 0;
+    min-height: 240px;
+    width: 100%;
   }
 
   .prediction-summary {
     display: flex;
-    gap: 12px;
-    margin-top: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
     flex-shrink: 0;
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .summary-card {
-    flex: 1;
+    flex: 1 1 140px;
     min-width: 0;
-    padding: 10px 12px;
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(0, 229, 255, 0.12);
+    padding: 10px 10px;
+    border-radius: 8px;
+    box-sizing: border-box;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(0, 229, 255, 0.22);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 0 16px rgba(0, 229, 255, 0.05) inset;
     &--highlight {
-      border-color: rgba(0, 255, 204, 0.35);
-      background: rgba(0, 229, 255, 0.06);
+      border-color: rgba(0, 255, 204, 0.42);
+      background: rgba(0, 229, 255, 0.1);
+      box-shadow:
+        0 0 20px rgba(0, 255, 204, 0.12) inset,
+        0 0 12px rgba(0, 229, 255, 0.15);
     }
   }
 
   .summary-label {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.55);
-    margin-bottom: 6px;
-    letter-spacing: 0.5px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.58);
+    margin-bottom: 5px;
+    letter-spacing: 0.3px;
+    word-break: break-all;
   }
 
   .summary-value {
-    font-size: 18px;
+    font-size: clamp(15px, 2.8vw, 18px);
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.95);
+    color: rgba(255, 255, 255, 0.96);
     font-family: 'DIN Alternate', 'DIN', 'Segoe UI', sans-serif;
     &--accent {
-      color: #00ffcc;
-      text-shadow: 0 0 12px rgba(0, 255, 204, 0.25);
+      color: #5fffea;
+      text-shadow: 0 0 14px rgba(0, 255, 204, 0.4);
     }
   }
 }
