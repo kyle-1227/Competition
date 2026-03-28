@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, nextTick, inject, type Ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import * as echarts from 'echarts';
 import { predictEnergyIntensity, type PredictEnergyResponse } from '@/api/modules/dashboard';
@@ -10,10 +10,11 @@ const chartData = ref<PredictEnergyResponse | null>(null);
 const loading = ref(false);
 let chart: echarts.ECharts | null = null;
 
-// 防抖处理
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+/** v-show 隐藏时容器宽高为 0，首次 renderChart 会跳过；切换 Tab 后需重绘 */
+let chartDimensionRetry = 0;
+const activeTab = inject<Ref<string>>('activeTab', ref('sandbox'));
 
-// 中国省份列表（31个省/直辖市/自治区）
 const provinceOptions = [
   '北京市',
   '天津市',
@@ -61,11 +62,11 @@ async function handlePredict() {
       chartData.value = res.data;
       renderChart();
     } else {
-      ElMessage.error(res.msg || '预测失败');
+      ElMessage.error(res.msg || '能耗强度预测失败');
     }
   } catch (error) {
     console.error('预测接口调用失败:', error);
-    ElMessage.error('预测接口调用失败');
+    ElMessage.error('能耗预测请求失败，请检查网络或服务');
   } finally {
     loading.value = false;
   }
@@ -75,7 +76,17 @@ function renderChart() {
   if (!chartData.value) return;
 
   const el = document.getElementById('energy-scatter');
-  if (!el || el.clientWidth === 0) return;
+  if (!el) return;
+
+  // 隐藏 Tab 下宽高为 0；仅在能耗 Tab 可见时重试布局，避免后台空转
+  if (el.clientWidth === 0 || el.clientHeight === 0) {
+    if (activeTab.value === 'energy' && chartDimensionRetry < 30) {
+      chartDimensionRetry += 1;
+      requestAnimationFrame(() => renderChart());
+    }
+    return;
+  }
+  chartDimensionRetry = 0;
 
   if (!chart) {
     chart = echarts.init(el, 'dark');
@@ -89,9 +100,8 @@ function renderChart() {
     base_province: baseProvince,
   } = chartData.value;
 
-  // 处理散点数据，根据是否为选中省份进行高亮
   const processedScatterData = scatterData.map((item) => {
-    const [gfi, outcome, province] = item;
+    const [, , province] = item;
     const isSelected = baseProvince !== '全国平均' && String(province) === baseProvince;
     return {
       value: item,
@@ -132,21 +142,17 @@ function renderChart() {
           fontSize: 12,
         },
         formatter: (params: { seriesName: string; value: number[] }) => {
-          // 趋势线不显示 tooltip
-          if (params.seriesName === '趋势线') {
-            return '';
-          }
+          if (params.seriesName === '趋势线') return '';
 
-          // 预测点的 tooltip
           if (params.seriesName === '预测点') {
             const [gfi, outcome] = params.value;
             return `
               <div style="padding: 4px 0;">
-                <div style="color: #ff4444; font-weight: bold; font-size: 13px; margin-bottom: 6px;">
-                  🔮 预测情景
+                <div style="color: #ff6b6b; font-weight: bold; font-size: 13px; margin-bottom: 6px;">
+                  预测情景
                 </div>
                 <div style="margin: 4px 0; display: flex; justify-content: space-between; gap: 20px;">
-                  <span style="color: #aaa;">预测绿色金融得分</span>
+                  <span style="color: #aaa;">预测绿色金融指数</span>
                   <span style="color: #00e5ff; font-weight: bold;">${gfi.toFixed(4)}</span>
                 </div>
                 <div style="margin: 4px 0; display: flex; justify-content: space-between; gap: 20px;">
@@ -157,7 +163,6 @@ function renderChart() {
             `;
           }
 
-          // 历史数据点的 tooltip
           if (params.seriesName === '历史数据') {
             const [gfi, outcome, province, year] = params.value;
             return `
@@ -166,7 +171,7 @@ function renderChart() {
                   ${province} · ${year}年
                 </div>
                 <div style="margin: 4px 0; display: flex; justify-content: space-between; gap: 20px;">
-                  <span style="color: #aaa;">绿色金融得分</span>
+                  <span style="color: #aaa;">绿色金融指数</span>
                   <span style="color: #00e5ff; font-weight: bold;">${gfi.toFixed(4)}</span>
                 </div>
                 <div style="margin: 4px 0; display: flex; justify-content: space-between; gap: 20px;">
@@ -180,18 +185,35 @@ function renderChart() {
           return '';
         },
       },
-      grid: { left: 50, right: 30, top: 40, bottom: 50 },
+      grid: { left: 62, right: '7%', top: 48, bottom: 50 },
+      textStyle: {
+        fontFamily: "'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif",
+      },
       xAxis: {
         type: 'value',
-        name: '绿色金融指数',
-        nameTextStyle: { color: '#0ff', fontSize: 11 },
+        name: '绿色金融指数（自变量）',
+        nameLocation: 'middle',
+        nameGap: 28,
+        nameTextStyle: {
+          color: 'rgba(0, 238, 255, 0.95)',
+          fontSize: 13,
+          fontWeight: 600,
+          fontFamily: "'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif",
+        },
         axisLabel: { color: '#aaa', fontSize: 10 },
         splitLine: { lineStyle: { color: 'rgba(0,229,255,0.08)' } },
       },
       yAxis: {
         type: 'value',
-        name: '能耗强度',
-        nameTextStyle: { color: '#0ff', fontSize: 11 },
+        name: '能耗强度（因变量）',
+        nameLocation: 'middle',
+        nameGap: 40,
+        nameTextStyle: {
+          color: 'rgba(0, 238, 255, 0.95)',
+          fontSize: 13,
+          fontWeight: 600,
+          fontFamily: "'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif",
+        },
         axisLabel: { color: '#aaa', fontSize: 10 },
         splitLine: { lineStyle: { color: 'rgba(0,229,255,0.08)' } },
       },
@@ -261,226 +283,448 @@ onMounted(() => {
   handlePredict();
 });
 
-// 监听省份和年份变化，自动更新预测
 watch([selectedProvince, selectedYear], () => {
   handlePredict();
 });
+
+watch([policyIntensity, chartData], () => {
+  nextTick(() => chart?.resize());
+});
+
+watch(
+  () => activeTab.value,
+  (tab) => {
+    if (tab !== 'energy') return;
+    nextTick(() => {
+      requestAnimationFrame(() => {
+        chartDimensionRetry = 0;
+        if (chartData.value) renderChart();
+        else handlePredict();
+        nextTick(() => chart?.resize());
+      });
+    });
+  },
+);
 </script>
+
 <template>
   <div class="biz-wrap">
     <div class="biz-wrap-content">
-      <div class="chart-header">
-        <div class="header-left">
-          <div class="chart-title">绿色金融指数 vs 能耗强度 · 交互式预测沙盘</div>
-          <div class="chart-desc">横轴为绿色金融综合得分，纵轴为能耗强度 —— 拖动滑块模拟政策效果</div>
-          <div v-if="chartData" class="current-target">
-            当前推演对象：<span class="target-name">{{ chartData.base_province }}</span>
-            <span class="target-year">{{ chartData.base_year }}年</span>
+      <div class="energy-toolbar">
+        <div class="energy-toolbar-left">
+          <div class="title-row zh-text">
+            <span class="chart-title">
+              <span class="t-em">绿色金融指数</span><span class="t-vs"> vs </span><span class="t-em">能耗强度</span>
+            </span>
+            <span class="chart-subtitle">· 预测沙盘</span>
+          </div>
+          <div class="chart-desc zh-text">
+            横轴：绿色金融指数（自变量）。纵轴：能耗强度（因变量）。滑块表示在现有绿色金融投入基础上追加的比例（%）。
+          </div>
+          <div v-if="chartData" class="current-target zh-text">
+            <span class="target-label">推演省份</span>
+            <span class="target-value">{{ chartData.base_province }}</span>
           </div>
         </div>
-        <div class="control-panel">
-          <div class="province-selector">
-            <div class="selector-label">推演对象</div>
+        <div class="energy-controls-card">
+          <div class="control-item control-item-select">
+            <span class="label">省份</span>
             <el-select
               v-model="selectedProvince"
+              class="energy-province-select"
+              popper-class="energy-province-dropdown"
               placeholder="选择省份"
               clearable
               :disabled="loading"
-              class="province-select"
+              filterable
+              size="default"
             >
-              <el-option label="📍 全国（宏观基准）" value="" />
+              <el-option label="全国（宏观基准）" value="" />
               <el-option v-for="province in provinceOptions" :key="province" :label="province" :value="province" />
             </el-select>
           </div>
-          <div class="divider"></div>
-          <div class="control-label">追加投入模拟 (%)</div>
-          <el-slider
-            v-model="policyIntensity"
-            :min="0"
-            :max="100"
-            :step="5"
-            :disabled="loading"
-            class="policy-slider"
-            @change="onSliderChange"
-          />
-          <div class="control-value">{{ policyIntensity }}%</div>
+          <div class="control-divider" />
+          <div class="control-item slider-item">
+            <span class="label">追加投入比例</span>
+            <el-slider
+              v-model="policyIntensity"
+              class="energy-slider"
+              :min="0"
+              :max="100"
+              :step="5"
+              :disabled="loading"
+              @change="onSliderChange"
+            />
+            <span class="value">{{ policyIntensity }}%</span>
+          </div>
         </div>
       </div>
-      <div id="energy-scatter" v-loading="loading" class="chart-box" />
-      <div v-if="chartData && policyIntensity > 0" class="prediction-summary">
-        <div class="summary-icon">📊</div>
-        <div class="summary-text">
-          【{{ chartData.base_province }}】预测减排：能耗强度将额外下降
-          <b class="highlight">{{ Math.abs(chartData.predicted_drop_percent).toFixed(2) }}%</b>
+
+      <div v-if="chartData && policyIntensity > 0" class="predict-strip">
+        <div class="result-card zh-text">
+          <div class="result-header">
+            <span class="result-prov">【{{ chartData.base_province }}】</span>
+            <span class="result-tag">沙盘推演</span>
+          </div>
+          <div class="result-main">
+            <span class="result-label">能耗强度</span>
+            <span class="result-hint">相对基准</span>
+            <span class="result-arrow">↓</span>
+            <span class="result-value">{{ Math.abs(chartData.predicted_drop_percent).toFixed(2) }}%</span>
+          </div>
         </div>
+      </div>
+
+      <div class="chart-box-wrapper">
+        <div id="energy-scatter" v-loading="loading" class="chart-box" />
       </div>
     </div>
   </div>
 </template>
+
 <script lang="ts">
 export default { name: 'BizEnergy' };
 </script>
+
 <style lang="scss" scoped>
 .biz-wrap {
   display: flex;
   height: 100%;
-  padding: 10px 20px 25px;
+  padding: 6px 12px 14px;
+  font-family: var(--el-font-family);
 }
+
+/* 关键文案与整站同源字体（见 index.scss :root） */
+.zh-text {
+  font-family: var(--el-font-family) !important;
+  text-rendering: optimizeLegibility;
+}
+
+.t-em {
+  font-weight: 600;
+}
+
+.t-vs {
+  font-weight: 400;
+  opacity: 0.75;
+  margin: 0 2px;
+}
+
 .biz-wrap-content {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  gap: 0;
 }
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+
+.energy-toolbar {
   flex-shrink: 0;
-  padding-bottom: 10px;
-  gap: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 14px;
+  padding-bottom: 6px;
 }
-.header-left {
+
+.energy-toolbar-left {
   flex: 1;
+  min-width: 220px;
   text-align: left;
 }
+
+.title-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
 .chart-title {
-  color: rgba(0, 229, 255, 0.85);
-  font-size: 15px;
-  letter-spacing: 1px;
+  color: rgba(0, 229, 255, 0.92);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
+
+.chart-subtitle {
+  color: rgba(0, 229, 255, 0.5);
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .chart-desc {
-  color: rgba(200, 220, 255, 0.4);
+  color: rgba(200, 220, 255, 0.48);
   font-size: 11px;
-  margin-top: 2px;
+  line-height: 1.4;
+  margin-top: 3px;
+  max-width: 52em;
 }
+
 .current-target {
-  color: rgba(200, 220, 255, 0.7);
-  font-size: 12px;
-  margin-top: 6px;
-  padding: 4px 0;
-}
-.target-name {
-  color: #ffd700;
-  font-weight: bold;
-  margin: 0 4px;
-}
-.target-year {
-  color: #00e5ff;
-  margin-left: 8px;
-}
-.control-panel {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px 16px;
-  background: rgba(0, 229, 255, 0.05);
-  border: 1px solid rgba(0, 229, 255, 0.2);
-  border-radius: 6px;
-  min-width: 280px;
-}
-.province-selector {
-  display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 6px;
-}
-.selector-label {
-  color: rgba(0, 229, 255, 0.8);
+  margin-top: 4px;
   font-size: 11px;
-  font-weight: 500;
 }
-.province-select {
-  width: 100%;
-  :deep(.el-input__wrapper) {
-    background: rgba(10, 15, 30, 0.8);
-    border: 1px solid rgba(0, 229, 255, 0.3);
-    box-shadow: none;
-    transition: all 0.3s ease;
-    &:hover {
-      border-color: rgba(0, 229, 255, 0.6);
-      box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
-    }
-  }
-  :deep(.el-input__wrapper.is-focus) {
-    border-color: #00e5ff;
-    box-shadow: 0 0 12px rgba(0, 229, 255, 0.5);
-  }
-  :deep(.el-input__inner) {
-    color: #00e5ff;
-    font-size: 12px;
-    &::placeholder {
-      color: rgba(0, 229, 255, 0.4);
-    }
-  }
-  :deep(.el-input__suffix) {
-    .el-icon {
-      color: rgba(0, 229, 255, 0.6);
-    }
-  }
-}
-.divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.3), transparent);
-  margin: 4px 0;
-}
-.control-label {
-  color: rgba(0, 229, 255, 0.8);
-  font-size: 12px;
+
+.target-label {
+  color: rgba(200, 220, 255, 0.55);
   white-space: nowrap;
 }
-.policy-slider {
-  flex: 1;
-  :deep(.el-slider__runway) {
-    background-color: rgba(0, 229, 255, 0.1);
+
+.target-value {
+  color: #ffd700;
+  font-weight: 600;
+  padding: 2px 8px;
+  background: rgba(255, 215, 0, 0.1);
+  border: 1px solid rgba(255, 215, 0, 0.28);
+  border-radius: 4px;
+}
+
+.energy-controls-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 8px 12px;
+  background: rgba(10, 15, 30, 0.88);
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  flex-shrink: 0;
+}
+
+.control-divider {
+  width: 1px;
+  height: 22px;
+  background: linear-gradient(180deg, transparent, rgba(0, 229, 255, 0.28), transparent);
+}
+
+.control-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  .label {
+    color: rgba(0, 229, 255, 0.85);
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
   }
+
+  .value {
+    color: #00ff88;
+    font-size: 12px;
+    font-weight: 700;
+    min-width: 30px;
+    text-align: right;
+  }
+
+  &.slider-item {
+    gap: 8px;
+  }
+
+  :deep(.energy-slider.el-slider) {
+    width: 128px;
+    --el-slider-runway-bg-color: rgba(8, 14, 28, 0.95);
+    --el-color-primary: #00e5ff;
+  }
+
+  :deep(.el-slider__runway) {
+    height: 5px;
+    border: 1px solid rgba(0, 229, 255, 0.28);
+    border-radius: 3px;
+  }
+
   :deep(.el-slider__bar) {
     background: linear-gradient(90deg, #00e5ff, #00ff88);
+    height: 5px;
+    border-radius: 3px;
   }
+
   :deep(.el-slider__button) {
-    border-color: #00e5ff;
-    background-color: #00e5ff;
+    width: 12px;
+    height: 12px;
+    border: 2px solid #00e5ff;
+    background: #0a0f1e;
+    box-shadow: 0 0 6px rgba(0, 229, 255, 0.45);
+
+    &:hover {
+      transform: scale(1.12);
+    }
   }
 }
-.control-value {
-  color: #00ff88;
-  font-size: 14px;
-  font-weight: bold;
-  min-width: 40px;
-  text-align: right;
+
+// 省份选择：触发器（科技风描边 + 略宽以容纳省名）
+.control-item-select {
+  :deep(.energy-province-select) {
+    width: 158px;
+    min-width: 140px;
+  }
+
+  :deep(.energy-province-select .el-input__wrapper) {
+    border-radius: 6px;
+    min-height: 32px;
+    padding: 0 10px 0 12px;
+    /* 覆盖 Element Plus 默认浅色底，避免大屏上出现「白底」下拉框 */
+    --el-input-bg-color: rgba(8, 14, 28, 0.98);
+    --el-fill-color-blank: rgba(8, 14, 28, 0.98);
+    background: linear-gradient(135deg, rgba(6, 14, 28, 0.98) 0%, rgba(10, 22, 42, 0.92) 100%) !important;
+    border: 1px solid rgba(0, 229, 255, 0.38);
+    box-shadow:
+      inset 0 1px 0 rgba(0, 229, 255, 0.12),
+      0 2px 8px rgba(0, 0, 0, 0.25);
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease,
+      background 0.2s ease;
+
+    &:hover {
+      border-color: rgba(0, 229, 255, 0.62);
+      box-shadow:
+        inset 0 1px 0 rgba(0, 229, 255, 0.18),
+        0 0 14px rgba(0, 229, 255, 0.12);
+    }
+  }
+
+  :deep(.energy-province-select .el-input__wrapper.is-focus) {
+    border-color: #00e5ff;
+    box-shadow:
+      0 0 0 1px rgba(0, 229, 255, 0.45),
+      0 0 0 1px rgba(0, 229, 255, 0.15) inset,
+      0 0 20px rgba(0, 229, 255, 0.2);
+  }
+
+  :deep(.energy-province-select .el-input__wrapper.is-disabled) {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  :deep(.energy-province-select .el-input__inner) {
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 12px;
+    font-weight: 500;
+    height: 30px;
+    line-height: 30px;
+
+    &::placeholder {
+      color: rgba(180, 210, 255, 0.45);
+    }
+  }
+
+  :deep(.energy-province-select .el-select__caret) {
+    color: rgba(0, 229, 255, 0.8);
+    font-size: 13px;
+    transition: color 0.2s ease;
+  }
+
+  :deep(.energy-province-select .el-input__wrapper.is-focus .el-select__caret) {
+    color: #00e5ff;
+  }
 }
-.chart-box {
-  flex: 1;
-  min-height: 0;
+
+.predict-strip {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  padding: 0 0 8px;
+  animation: predictFadeIn 0.35s ease;
 }
-.prediction-summary {
+
+.result-card {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(12, 22, 42, 0.78) 0%,
+    rgba(8, 16, 32, 0.85) 100%
+  );
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(0, 229, 255, 0.32);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 1px 0 rgba(0, 229, 255, 0.22),
+    0 6px 24px rgba(0, 0, 0, 0.35),
+    0 0 20px rgba(0, 229, 255, 0.06);
+}
+
+.result-header {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 12px 20px;
-  margin-top: 10px;
-  background: linear-gradient(135deg, rgba(0, 229, 255, 0.08), rgba(0, 255, 136, 0.08));
-  border: 1px solid rgba(0, 229, 255, 0.25);
-  border-radius: 8px;
-  animation: fadeIn 0.5s ease-in;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  line-height: 1.4;
 }
-.summary-icon {
-  font-size: 24px;
-}
-.summary-text {
-  color: rgba(200, 220, 255, 0.9);
-  font-size: 13px;
+
+.result-prov {
+  color: rgba(0, 229, 255, 0.95);
+  font-size: 14px;
+  font-weight: 600;
   letter-spacing: 0.5px;
 }
-.highlight {
-  color: #00ff88;
-  font-size: 16px;
-  margin: 0 4px;
-  text-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
+
+.result-tag {
+  color: rgba(180, 220, 255, 0.88);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 2px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  background: rgba(0, 229, 255, 0.06);
 }
-@keyframes fadeIn {
+
+.result-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.result-label {
+  color: rgba(220, 232, 255, 0.96);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.result-hint {
+  color: rgba(180, 200, 230, 0.65);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.result-arrow {
+  color: #00ff88;
+  font-size: 20px;
+  font-weight: bold;
+  line-height: 1;
+  animation: bounce 1.5s ease-in-out infinite;
+}
+
+.result-value {
+  color: #5aebff;
+  font-size: 26px;
+  font-weight: 800;
+  font-family: 'DIN Alternate', 'DIN', 'Arial', sans-serif;
+  text-shadow: 0 0 16px rgba(0, 229, 255, 0.55);
+  letter-spacing: 0.5px;
+}
+
+@keyframes predictFadeIn {
   from {
     opacity: 0;
-    transform: translateY(-10px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -488,23 +732,86 @@ export default { name: 'BizEnergy' };
   }
 }
 
-// Element Plus 下拉框全局样式覆盖
-:deep(.el-select-dropdown) {
-  background: rgba(10, 15, 30, 0.95);
-  border: 1px solid rgba(0, 229, 255, 0.3);
-  box-shadow: 0 4px 20px rgba(0, 229, 255, 0.2);
+@keyframes bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
 }
-:deep(.el-select-dropdown__item) {
-  color: rgba(200, 220, 255, 0.8);
+
+.chart-box-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-box {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+</style>
+
+<style lang="scss">
+/* 下拉层 teleport 到 body，须 popper-class + 非 scoped */
+.energy-province-dropdown.el-select-dropdown,
+.energy-province-dropdown.el-popper {
+  background: linear-gradient(165deg, rgba(6, 14, 28, 0.98), rgba(10, 22, 44, 0.96)) !important;
+  border: 1px solid rgba(0, 229, 255, 0.38) !important;
+  border-radius: 8px !important;
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  box-shadow:
+    0 0 0 1px rgba(0, 229, 255, 0.08) inset,
+    0 12px 40px rgba(0, 0, 0, 0.55),
+    0 0 28px rgba(0, 229, 255, 0.08);
+  padding: 6px 0;
+}
+
+.energy-province-dropdown .el-select-dropdown__item {
+  position: relative;
+  margin: 0 6px;
+  padding: 9px 14px 9px 12px;
+  border-radius: 8px;
   font-size: 12px;
-  &:hover {
-    background: rgba(0, 229, 255, 0.15);
-    color: #00e5ff;
-  }
-  &.selected {
-    background: rgba(0, 229, 255, 0.2);
-    color: #00e5ff;
-    font-weight: bold;
-  }
+  line-height: 1.35;
+  color: rgba(210, 225, 255, 0.92);
+  font-family: var(--el-font-family);
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+.energy-province-dropdown .el-select-dropdown__item:hover,
+.energy-province-dropdown .el-select-dropdown__item.hover,
+.energy-province-dropdown .el-select-dropdown__item.is-hovering {
+  background: rgba(0, 229, 255, 0.14);
+  color: #fff;
+}
+
+.energy-province-dropdown .el-select-dropdown__item.selected,
+.energy-province-dropdown .el-select-dropdown__item.is-selected {
+  background: linear-gradient(90deg, rgba(0, 229, 255, 0.24), rgba(0, 229, 255, 0.06));
+  color: #00e5ff;
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 #00e5ff;
+}
+
+.energy-province-dropdown .el-scrollbar__bar.is-vertical {
+  width: 5px;
+}
+
+.energy-province-dropdown .el-scrollbar__thumb {
+  background: rgba(0, 229, 255, 0.35);
+  border-radius: 3px;
+}
+
+.energy-province-dropdown .el-select-dropdown__wrap {
+  max-height: min(320px, 40vh);
 }
 </style>

@@ -27,8 +27,8 @@
     <!-- 宏观经济动态 -->
     <BizMacro v-show="activeTab === 'macro'" class="content" />
 
-    <!-- 底部年份时间轴（宏观经济动态模块不展示） -->
-    <div v-show="activeTab !== 'macro'" class="timeline-bar">
+    <!-- 底部年份时间轴（宏观经济动态和能耗强度分析模块不展示） -->
+    <div v-show="activeTab !== 'macro' && activeTab !== 'energy'" class="timeline-bar">
       <span class="timeline-label">数据年份</span>
       <el-slider
         v-model="timelineYear"
@@ -177,6 +177,8 @@ export default {
   flex: 0 0 72px;
   line-height: 72px;
   font-size: 24px;
+  font-family: var(--el-font-family);
+  letter-spacing: 0.02em;
 }
 .content {
   flex: 1;
@@ -190,6 +192,7 @@ export default {
   padding: 0 40px 8px;
   position: relative;
   z-index: 50;
+  font-family: var(--el-font-family);
 }
 .tab-item {
   position: relative;
@@ -204,7 +207,7 @@ export default {
   backdrop-filter: blur(8px);
   color: rgba(255, 255, 255, 0.55);
   font-size: 13px;
-  letter-spacing: 1px;
+  letter-spacing: 0;
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   .tab-icon {
@@ -215,6 +218,7 @@ export default {
   .tab-label {
     position: relative;
     z-index: 1;
+    letter-spacing: 0;
   }
   .tab-glow {
     position: absolute;

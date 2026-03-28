@@ -15,6 +15,7 @@
     "@antv/l7": "^2.19.11",
     "@antv/l7-maps": "^2.19.11",
     "@antv/l7-three": "^2.19.11",
+    "@fontsource/noto-sans-sc": "5.0.0",
     "@vueuse/core": "^8.9.4",
     "axios": "^0.27.2",
     "district-data": "^0.0.17",

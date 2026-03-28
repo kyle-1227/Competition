@@ -6,6 +6,17 @@
 // 字体
 @import './front.css';
 
+:root {
+  /* Element Plus 与整站中文：优先网页字体，再回退系统黑体 */
+  --el-font-family:
+    'Noto Sans SC',
+    'Source Han Sans SC',
+    'Microsoft YaHei UI',
+    'Microsoft YaHei',
+    'PingFang SC',
+    sans-serif;
+}
+
 html {
   height: 100%;
 }
@@ -17,4 +28,10 @@ body {
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  font-family: var(--el-font-family);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  font-family: var(--el-font-family);
 }
