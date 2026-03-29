@@ -1,13 +1,11 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment, no-undef, no-underscore-dangle, no-param-reassign, no-plusplus, no-continue */
 // @ts-nocheck
 import { onMounted, watch, type Ref } from 'vue';
-import { LineLayer, PointLayer, PolygonLayer, Scene } from '@antv/l7';
+import { LineLayer, PolygonLayer, Scene } from '@antv/l7';
 import { Map } from '@antv/l7-maps';
 import { RDBSource } from 'district-data';
 import {
   selectedProvince,
-  provinceCoords,
-  fullToShortName,
   realProvinceData,
   scoreToColor,
   fetchGeoJson,
@@ -15,16 +13,8 @@ import {
   realCityData,
   selectedYear,
   gfDrillProvince,
+  isProvinceExcludedFromPanel,
 } from './provinceData';
-
-const POINT_PARSER = { parser: { type: 'json', x: 'lng', y: 'lat' } };
-
-// 全部 31 省省会标注数据（静态）
-const allProvincePoints = Object.entries(provinceCoords).map(([full, [lng, lat]]) => ({
-  lng,
-  lat,
-  name: fullToShortName[full] || full,
-}));
 
 function buildProvinceScoreMap(): Record<string, number> {
   const scoreMap: Record<string, number> = {};
@@ -114,16 +104,28 @@ export function useGreenFinanceMap(selectedProv: Ref<string>) {
       const source = new RDBSource({ version: 2023 });
       source.getData({ level: 'province', precision: 'low' }).then((geoData) => {
         const features = geoData.features.filter((f) => f.properties.name);
+        const noPanelFeats = features.filter((f) => isProvinceExcludedFromPanel(f.properties.name));
+        const mainFeats = features.filter((f) => !isProvinceExcludedFromPanel(f.properties.name));
+        const fullOutlineGeo = { type: 'FeatureCollection', features };
+
+        const noPanelFillGeo = { type: 'FeatureCollection', features: noPanelFeats };
+        const noPanelFill = new PolygonLayer({ zIndex: 4 })
+          .source(noPanelFillGeo)
+          .shape('fill')
+          .color('#5c6470')
+          .style({ opacity: 0.95 });
+        scene.addLayer(noPanelFill);
+
         const applyScores = () => {
           const scoreMap = buildProvinceScoreMap();
-          features.forEach((f) => {
+          mainFeats.forEach((f) => {
             const s = scoreMap[f.properties.name] || 0;
             f.properties._score = s ** 1.5;
             f.properties._rawScore = s;
           });
         };
         applyScores();
-        const provinceGeo = { type: 'FeatureCollection', features };
+        const provinceGeo = { type: 'FeatureCollection', features: mainFeats };
 
         const extrudeLayer = new PolygonLayer({ zIndex: 5 })
           .source(provinceGeo)
@@ -146,32 +148,16 @@ export function useGreenFinanceMap(selectedProv: Ref<string>) {
         scene.addLayer(extrudeLayer);
 
         const borderLayer = new LineLayer({ zIndex: 10 })
-          .source(provinceGeo)
+          .source(fullOutlineGeo)
           .shape('line')
           .color('#5DDDFF')
           .size(0.6)
           .style({ opacity: 0.7 });
         scene.addLayer(borderLayer);
 
-        const labelLayer = new PointLayer({ zIndex: 15 })
-          .source(allProvincePoints, POINT_PARSER)
-          .shape('name', 'text')
-          .size(9)
-          .color('#0ff')
-          .style({
-            textAnchor: 'bottom',
-            textOffset: [0, -8],
-            spacing: 2,
-            padding: [2, 2],
-            stroke: '#0ff',
-            strokeWidth: 0.3,
-            textAllowOverlap: true,
-          });
-        scene.addLayer(labelLayer);
-
         extrudeLayer.on('click', (e) => {
           const name = e.feature?.properties?.name;
-          if (name) {
+          if (name && !isProvinceExcludedFromPanel(name)) {
             selectedProv.value = name;
             gfDrillProvince.value = name;
           }
@@ -201,9 +187,7 @@ export function useGreenFinanceMap(selectedProv: Ref<string>) {
           () => {
             if (gfDrillProvince.value) return;
             applyScores();
-            const newGeo = { type: 'FeatureCollection', features: [...features] };
-            extrudeLayer.setData(newGeo);
-            borderLayer.setData(newGeo);
+            extrudeLayer.setData({ type: 'FeatureCollection', features: [...mainFeats] });
             scene.render();
           },
           { deep: true, immediate: true },
@@ -225,9 +209,11 @@ export function useGreenFinanceMap(selectedProv: Ref<string>) {
             cityExtrudeLayer?.hide();
             cityBorderLayer?.hide();
             cityFcSnapshot = null;
+            applyScores();
+            extrudeLayer.setData({ type: 'FeatureCollection', features: [...mainFeats] });
             extrudeLayer.show();
             borderLayer.show();
-            labelLayer.show();
+            noPanelFill.show();
             scene.setZoomAndCenter(3.2, [104.195397, 35.86166]);
             scene.setPitch(45);
             fetchCityData('', selectedYear.value);
@@ -237,7 +223,7 @@ export function useGreenFinanceMap(selectedProv: Ref<string>) {
 
           extrudeLayer.hide();
           borderLayer.hide();
-          labelLayer.hide();
+          noPanelFill.hide();
 
           try {
             await fetchCityData(prov, selectedYear.value);
@@ -290,10 +276,6 @@ export function useGreenFinanceMap(selectedProv: Ref<string>) {
           } catch (err) {
             console.error('绿色金融地图下钻失败:', err);
             gfDrillProvince.value = '';
-            extrudeLayer.show();
-            borderLayer.show();
-            labelLayer.show();
-            scene.render();
           }
         });
       });
@@ -320,14 +302,26 @@ export function useCarbonMap() {
       const source = new RDBSource({ version: 2023 });
       source.getData({ level: 'province', precision: 'low' }).then((geoData) => {
         const features = geoData.features.filter((f) => f.properties.name);
+        const noPanelFeats = features.filter((f) => isProvinceExcludedFromPanel(f.properties.name));
+        const mainFeats = features.filter((f) => !isProvinceExcludedFromPanel(f.properties.name));
+        const fullOutlineGeo = { type: 'FeatureCollection', features };
+
+        const noPanelFillGeo = { type: 'FeatureCollection', features: noPanelFeats };
+        const noPanelFill = new PolygonLayer({ zIndex: 4 })
+          .source(noPanelFillGeo)
+          .shape('fill')
+          .color('#5c6470')
+          .style({ opacity: 0.95 });
+        scene.addLayer(noPanelFill);
+
         const applyCarbon = () => {
           const carbonMap = buildCarbonMapWanTon();
-          features.forEach((f) => {
+          mainFeats.forEach((f) => {
             f.properties._carbon = carbonMap[f.properties.name] || 0;
           });
         };
         applyCarbon();
-        const provinceGeo = { type: 'FeatureCollection', features };
+        const provinceGeo = { type: 'FeatureCollection', features: mainFeats };
 
         const choropleth = new PolygonLayer({ zIndex: 5 })
           .source(provinceGeo)
@@ -352,7 +346,7 @@ export function useCarbonMap() {
         scene.addLayer(choropleth);
 
         const border = new LineLayer({ zIndex: 10 })
-          .source(provinceGeo)
+          .source(fullOutlineGeo)
           .shape('line')
           .color('rgba(255,255,255,0.25)')
           .size(0.6)
@@ -363,30 +357,12 @@ export function useCarbonMap() {
           realProvinceData,
           () => {
             applyCarbon();
-            const newGeo = { type: 'FeatureCollection', features: [...features] };
-            choropleth.setData(newGeo);
-            border.setData(newGeo);
+            choropleth.setData({ type: 'FeatureCollection', features: [...mainFeats] });
             scene.render();
           },
           { deep: true, immediate: true },
         );
       });
-
-      const labelLayer = new PointLayer({ zIndex: 15 })
-        .source(allProvincePoints, POINT_PARSER)
-        .shape('name', 'text')
-        .size(9)
-        .color('#fff')
-        .style({
-          textAnchor: 'bottom',
-          textOffset: [0, -4],
-          spacing: 2,
-          padding: [2, 2],
-          stroke: '#000',
-          strokeWidth: 0.8,
-          textAllowOverlap: true,
-        });
-      scene.addLayer(labelLayer);
     });
   });
 }

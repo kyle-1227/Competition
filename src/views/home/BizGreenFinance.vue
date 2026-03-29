@@ -6,7 +6,11 @@ import {
   gfDrillProvince,
   fetchCityData,
   selectedYear,
+  excludeProvincesWithoutPanelData,
+  NO_PANEL_DATA_REGIONS_LEGEND,
 } from './hooks/provinceData';
+
+const noDataRegionLabel = NO_PANEL_DATA_REGIONS_LEGEND;
 
 const selectedProv = ref('北京市');
 
@@ -32,7 +36,9 @@ useGreenFinanceMap(selectedProv);
 const provList = computed(() => {
   const rows = realProvinceData.value;
   if (rows.length > 0) {
-    return [...rows].map((r) => r.province).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+    return excludeProvincesWithoutPanelData([...rows].map((r) => r.province)).sort((a, b) =>
+      a.localeCompare(b, 'zh-CN'),
+    );
   }
   return [];
 });
@@ -143,6 +149,10 @@ const displayProv = computed(() => selectedProv.value.replace(/(省|市|自治�
           <div class="legend-labels">
             <span>低</span>
             <span>高</span>
+          </div>
+          <div class="legend-note">
+            <span class="swatch swatch--muted" />
+            <span>灰色：无面板数据区域（{{ noDataRegionLabel }}），不可选</span>
           </div>
         </div>
         <div class="map-approve">本底图基于国家地理信息公共服务平台标准地图制作，审图号：GS(2025)5996号</div>
@@ -299,7 +309,29 @@ export default { name: 'BizGreenFinance' };
     border-radius: 6px;
     padding: 8px 12px;
     backdrop-filter: blur(4px);
-    width: 140px;
+    width: min(240px, 42vw);
+  }
+  .legend-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(200, 210, 225, 0.85);
+    font-size: 10px;
+    line-height: 1.35;
+  }
+  .swatch {
+    flex-shrink: 0;
+    width: 14px;
+    height: 10px;
+    border-radius: 2px;
+    margin-top: 2px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+  .swatch--muted {
+    background: #5c6470;
   }
   .legend-title {
     color: rgba(0, 229, 255, 0.8);

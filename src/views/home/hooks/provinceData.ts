@@ -62,6 +62,30 @@ export const indicatorKeys = Object.keys(indicatorLabels) as (keyof Omit<Provinc
 // ======================================================================
 export const yearlyData: Record<number, ProvinceGreenFinance[]> = {};
 
+/**
+ * 面板无样本/后端不返回：地图置灰不可选，下拉不含。
+ * 名称须与 district-data / GeoJSON 省级 properties.name 一致。
+ */
+export const PROVINCES_EXCLUDED_FROM_PANEL = [
+  '西藏自治区',
+  '香港特别行政区',
+  '澳门特别行政区',
+  '台湾省',
+] as const;
+
+const PROVINCES_EXCLUDED_SET = new Set<string>(PROVINCES_EXCLUDED_FROM_PANEL);
+
+export function isProvinceExcludedFromPanel(name: string): boolean {
+  return PROVINCES_EXCLUDED_SET.has(name);
+}
+
+/** 图例短名，与 PROVINCES_EXCLUDED_FROM_PANEL 对应 */
+export const NO_PANEL_DATA_REGIONS_LEGEND = '西藏、香港、澳门、台湾';
+
+export function excludeProvincesWithoutPanelData(names: string[]): string[] {
+  return names.filter((n) => !isProvinceExcludedFromPanel(n));
+}
+
 export const provinceNameMap: Record<string, string> = {
   上海: '上海市',
   云南: '云南省',

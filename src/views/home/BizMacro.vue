@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { useMacroChart } from './hooks/useChart';
-import { realProvinceData } from './hooks/provinceData';
+import { realProvinceData, excludeProvincesWithoutPanelData } from './hooks/provinceData';
 
 const selectedProvince = ref('全国');
 
-// 获取省份列表
 const provinceList = computed(() => {
-  const provinces = realProvinceData.value.map((p) => p.province);
+  const provinces = excludeProvincesWithoutPanelData(realProvinceData.value.map((p) => p.province));
   return ['全国', ...provinces.sort((a, b) => a.localeCompare(b, 'zh-CN'))];
 });
 

@@ -45,10 +45,10 @@
       <div class="coef-box">
         <div class="box-title">📊 SDM模型核心系数 (基于历史面板回归)</div>
         <div class="coef-list">
-          <span class="tag">绿色金融 gfi_std: <b>{{ fmt4(coef?.core) }}</b></span>
+          <span class="tag">绿色金融(gfi_std): <b>{{ fmt4(coef?.core) }}</b></span>
           <span class="tag">能源强度 / ln_pop: <b>{{ fmt4(coef?.control) }} / {{ fmt4(coef?.control_ln_pop) }}</b></span>
-          <span class="tag">W_gfi_std: <b>{{ fmt4(coef?.spatial) }}</b></span>
-          <span class="tag">W_碳排放强度(rho): <b>{{ fmt4(coef?.rho) }}</b></span>
+          <span class="tag">周边溢出: <b>{{ fmt4(coef?.spatial) }}</b></span>
+          <span class="tag">碳排放强度(rho): <b>{{ fmt4(coef?.rho) }}</b></span>
         </div>
       </div>
       <div class="result-box">
@@ -78,6 +78,7 @@ import {
   getCarbonPredictData,
   type CarbonPredictCoefficients,
 } from '@/api/modules/dashboard';
+import { excludeProvincesWithoutPanelData, isProvinceExcludedFromPanel } from './hooks/provinceData';
 
 const chartRef = ref<HTMLElement | null>(null);
 const chartInstance = shallowRef<echarts.ECharts | null>(null);
@@ -94,7 +95,7 @@ function fmt4(v: number | undefined | null) {
 
 const provinceList = computed(() => {
   const keys = Object.keys(historyPayload.value).filter((k) => k !== '全国');
-  return keys.sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  return excludeProvincesWithoutPanelData(keys).sort((a, b) => a.localeCompare(b, 'zh-CN'));
 });
 
 const selectedProvince = ref('全国');
@@ -306,8 +307,13 @@ async function loadPredictData() {
     if (res.code === 200 && res.data) {
       historyPayload.value = res.data.historyData;
       coefficientsPayload.value = res.data.coefficients;
-      if (!historyPayload.value[selectedProvince.value]) {
-        selectedProvince.value = historyPayload.value['全国'] ? '全国' : Object.keys(historyPayload.value)[0] || '全国';
+      if (
+        !historyPayload.value[selectedProvince.value] ||
+        isProvinceExcludedFromPanel(selectedProvince.value)
+      ) {
+        selectedProvince.value = historyPayload.value['全国']
+          ? '全国'
+          : excludeProvincesWithoutPanelData(Object.keys(historyPayload.value))[0] || '全国';
       }
     } else {
       ElMessage.error(res.msg || '碳强度预测数据加载失败');
