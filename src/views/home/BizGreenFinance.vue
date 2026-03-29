@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useGreenFinanceRadar, useGreenFinanceRose } from './hooks/useChart';
+import { useGreenFinanceRadar, useGreenFinanceTop10Bar } from './hooks/useChart';
 import {
   useGreenFinanceMap,
   createHiddenGfTooltip,
@@ -8,6 +8,7 @@ import {
 import {
   realProvinceData,
   gfDrillProvince,
+  gfRadarCityHoverGeoName,
   fetchCityData,
   selectedYear,
   excludeProvincesWithoutPanelData,
@@ -44,6 +45,7 @@ const gfTooltipStyle = computed(() => {
 
 function clearGfDrill() {
   gfDrillProvince.value = '';
+  gfRadarCityHoverGeoName.value = '';
 }
 
 watch([gfDrillProvince, selectedYear], () => {
@@ -58,7 +60,7 @@ watch(selectedProv, (v) => {
   }
 });
 useGreenFinanceRadar(selectedProv);
-useGreenFinanceRose(selectedProv);
+useGreenFinanceTop10Bar();
 useGreenFinanceMap(selectedProv, gfMapTooltip);
 
 const provList = computed(() => {
@@ -94,7 +96,7 @@ const boardStats = computed(() => {
   }
   const totalGreenFinance = Math.round(rows.reduce((s, r) => s + (r.gdp || 0) * (r.score || 0), 0));
   const totalCarbon = Math.round(rows.reduce((s, r) => s + (r.carbonEmission || 0) / 10000, 0));
-  const avgScore = +((rows.reduce((s, r) => s + r.score, 0) / rows.length) * 100).toFixed(1);
+  const avgScore = +((rows.reduce((s, r) => s + r.score, 0) / rows.length) * 100).toFixed(2);
   return {
     totalGreenFinance,
     totalCarbon,
@@ -104,6 +106,13 @@ const boardStats = computed(() => {
 });
 
 const displayProv = computed(() => selectedProv.value.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, ''));
+
+const top10Title = computed(() => {
+  if (gfDrillProvince.value) {
+    return `${displayProv.value} · 地级市 Top10`;
+  }
+  return '绿色金融综合指数 · Top10';
+});
 </script>
 <template>
   <div class="biz-wrap">
@@ -119,12 +128,15 @@ const displayProv = computed(() => selectedProv.value.replace(/(省|市|自治�
           />
         </el-select>
       </div>
-      <div class="sidebar-section">
-        <div class="chart-title">{{ displayProv }} · 七维雷达图</div>
-        <div id="gf-radar" class="chart-box" />
-      </div>
-      <div class="sidebar-section">
-        <div id="gf-rose" class="chart-box" />
+      <div class="sidebar-charts">
+        <div class="sidebar-section sidebar-section--top">
+          <div class="chart-title">{{ top10Title }}</div>
+          <div id="gf-gf-top10-bar" class="chart-box chart-box--top10" />
+        </div>
+        <div class="sidebar-section sidebar-section--bottom">
+          <div class="chart-title">{{ displayProv }} · 七维雷达图</div>
+          <div id="gf-radar" class="chart-box chart-box--radar" />
+        </div>
       </div>
     </div>
     <div class="biz-wrap-main">
@@ -321,7 +333,7 @@ export default { name: 'BizGreenFinance' };
 .gf-back-map {
   position: absolute;
   top: 10px;
-  left: 10px;
+  right: 10px;
   z-index: 1000;
   padding: 8px 16px;
   font-size: 12px;
@@ -508,15 +520,28 @@ export default { name: 'BizGreenFinance' };
     font-variant-numeric: tabular-nums;
   }
 }
-.sidebar-section {
+.sidebar-charts {
   flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sidebar-section {
+  flex: 1 1 50%;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 .chart-box {
   flex: 1;
-  min-height: 240px;
+  min-height: 120px;
+}
+.chart-box--top10 {
+  min-height: 160px;
+}
+.chart-box--radar {
+  min-height: 200px;
 }
 .chart-title {
   text-align: center;

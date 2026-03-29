@@ -4,11 +4,12 @@ import * as echarts from 'echarts';
 import {
   indicatorLabels,
   indicatorKeys,
-  selectedProvince,
   selectedYear,
   realProvinceData,
   realCityData,
   gfDrillProvince,
+  gfRadarCityHoverGeoName,
+  findCityRowByGeoName,
   extractList,
   type ProvinceGreenFinance,
 } from './provinceData';
@@ -56,15 +57,20 @@ export function getCarbonRowsFromApi(): { province: string; carbonEmission: numb
   return [];
 }
 
-/** 屏二雷达/玫瑰：下钻时用本地市数据最高分市，否则用省级列表 + 下拉省 */
+/** 屏二雷达：下钻时优先地图悬停市，否则 Top1 市；全国视角用下拉省 */
 function getGreenFinanceChartItem(selectedProv: Ref<string>): GreenFinanceMonitorRow | null {
   if (gfDrillProvince.value && realCityData.value.length > 0) {
+    const hovered = gfRadarCityHoverGeoName.value
+      ? findCityRowByGeoName(gfRadarCityHoverGeoName.value)
+      : undefined;
+    if (hovered) return provinceToGfMonitorRow(hovered);
     const top = [...realCityData.value].sort((a, b) => b.score - a.score)[0];
     return provinceToGfMonitorRow(top);
   }
   const rows = getGfMonitorRows();
   return rows.find((d) => d.province === selectedProv.value) || rows[0] || null;
 }
+
 /* ========================================================================
  * 延迟初始化辅助：解决 v-show 下图表容器 0 尺寸的问题
  * ======================================================================== */
@@ -80,6 +86,113 @@ function useDeferredChart(tabKey: string, initFn: () => void) {
           nextTick(initFn);
         }
       });
+    }
+  });
+}
+
+function shortRegionLabel(name: string): string {
+  return name.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, '');
+}
+
+/** 七维堆叠横向柱：彩虹色（与 Top10 图例顺序一致） */
+const GF_TOP10_RAINBOW = [
+  '#ff5252',
+  '#ff9800',
+  '#ffeb3b',
+  '#66bb6a',
+  '#00e5ff',
+  '#448aff',
+  '#ab47bc',
+];
+
+export function useGreenFinanceTop10Bar() {
+  let chart: echarts.ECharts | null = null;
+  let hooksReady = false;
+  function render() {
+    const drill = gfDrillProvince.value;
+    let rows: ProvinceGreenFinance[];
+    if (drill && realCityData.value.length > 0) {
+      rows = [...realCityData.value].sort((a, b) => b.score - a.score).slice(0, 10);
+    } else {
+      rows = [...realProvinceData.value].sort((a, b) => b.score - a.score).slice(0, 10);
+    }
+    if (!rows.length) {
+      chart?.clear();
+      return;
+    }
+    const categories = rows.map((r) => shortRegionLabel(r.province));
+    const series = indicatorKeys.map((key, si) => ({
+      name: indicatorLabels[key],
+      type: 'bar' as const,
+      stack: 'gf7',
+      emphasis: {
+        focus: 'series' as const,
+        blurScope: 'coordinateSystem' as const,
+      },
+      blur: {
+        itemStyle: {
+          opacity: 0.2,
+        },
+      },
+      itemStyle: {
+        color: GF_TOP10_RAINBOW[si % GF_TOP10_RAINBOW.length],
+        borderColor: 'rgba(255,255,255,0.22)',
+        borderWidth: 0.5,
+        shadowBlur: 10,
+        shadowColor: GF_TOP10_RAINBOW[si % GF_TOP10_RAINBOW.length],
+        borderRadius: [2, 2, 2, 2],
+      },
+      data: rows.map((r) => Number(r[key] ?? 0)),
+    }));
+    if (!chart) {
+      const el = document.getElementById('gf-gf-top10-bar');
+      if (!el || el.clientWidth === 0) return;
+      chart = echarts.init(el, 'dark');
+      window.addEventListener('resize', () => chart?.resize());
+    }
+    chart.setOption(
+      {
+        backgroundColor: 'transparent',
+        tooltip: {
+          trigger: 'item',
+          backgroundColor: 'rgba(10,15,30,0.92)',
+          borderColor: 'rgba(0,229,255,0.35)',
+          textStyle: { color: '#fff', fontSize: 12 },
+          formatter: (p: unknown) => {
+            const x = p as { seriesName?: string; name?: string; value?: number; marker?: string };
+            const v = typeof x.value === 'number' && Number.isFinite(x.value) ? x.value : 0;
+            const pct = (v * 100).toFixed(2);
+            const region = x.name ?? '';
+            const dim = x.seriesName ?? '';
+            return `<div style="font-weight:600;color:#00e5ff;margin-bottom:6px">${region}</div>${x.marker ?? ''}<span style="color:#aaa">${dim}</span> <b style="color:#fff">${pct}</b> <span style="color:rgba(255,255,255,0.45)">分</span>`;
+          },
+        },
+        grid: { left: 6, right: 14, top: 8, bottom: 4, containLabel: true },
+        xAxis: {
+          type: 'value',
+          axisLabel: { color: 'rgba(200,220,255,0.45)', fontSize: 9 },
+          splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
+        },
+        yAxis: {
+          type: 'category',
+          data: categories,
+          inverse: true,
+          axisLabel: { color: 'rgba(220,235,255,0.82)', fontSize: 10 },
+          axisLine: { lineStyle: { color: 'rgba(0,229,255,0.2)' } },
+        },
+        series,
+      },
+      true,
+    );
+  }
+  useDeferredChart('greenFinance', () => {
+    render();
+    if (!hooksReady) {
+      hooksReady = true;
+      watch(realProvinceData, render, { deep: true });
+      watch(realCityData, render, { deep: true });
+      watch(gfDrillProvince, render);
+      watch(selectedYear, render);
     }
   });
 }
@@ -201,7 +314,7 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
             });
             s += `<div style="margin-top:4px;border-top:1px solid rgba(0,229,255,0.2);padding-top:4px;text-align:center;color:#FFD54F;font-weight:bold">综合得分: ${(
               item.score * 100
-            ).toFixed(1)}</div>`;
+            ).toFixed(2)}</div>`;
             return s;
           },
         },
@@ -293,150 +406,7 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
       watch(realProvinceData, render, { deep: true });
       watch(gfDrillProvince, render);
       watch(realCityData, render, { deep: true });
-    }
-  });
-}
-/* ========================================================================
- * 绿色金融监测 - 南丁格尔玫瑰图
- * ======================================================================== */
-const ROSE_PALETTE = [
-  new echarts.graphic.LinearGradient(0, 0, 1, 1, [
-    { offset: 0, color: '#00BFFF' },
-    { offset: 1, color: '#004080' },
-  ]),
-  new echarts.graphic.LinearGradient(0, 0, 1, 1, [
-    { offset: 0, color: '#00E5A0' },
-    { offset: 1, color: '#005540' },
-  ]),
-  new echarts.graphic.LinearGradient(0, 0, 1, 1, [
-    { offset: 0, color: '#FFD54F' },
-    { offset: 1, color: '#996600' },
-  ]),
-  new echarts.graphic.LinearGradient(0, 0, 1, 1, [
-    { offset: 0, color: '#CE93D8' },
-    { offset: 1, color: '#6A1B9A' },
-  ]),
-  new echarts.graphic.LinearGradient(0, 0, 1, 1, [
-    { offset: 0, color: '#FF8A65' },
-    { offset: 1, color: '#BF360C' },
-  ]),
-  new echarts.graphic.LinearGradient(0, 0, 1, 1, [
-    { offset: 0, color: '#4FC3F7' },
-    { offset: 1, color: '#01579B' },
-  ]),
-  new echarts.graphic.LinearGradient(0, 0, 1, 1, [
-    { offset: 0, color: '#AED581' },
-    { offset: 1, color: '#33691E' },
-  ]),
-];
-const ROSE_SOLID_COLORS = ['#00BFFF', '#00E5A0', '#FFD54F', '#CE93D8', '#FF8A65', '#4FC3F7', '#AED581'];
-export function useGreenFinanceRose(selectedProv: Ref<string>) {
-  let chart: echarts.ECharts | null = null;
-  let hooksReady = false;
-  function render() {
-    const item = getGreenFinanceChartItem(selectedProv);
-    if (!item) return;
-    const total = greenFinanceIndicators.reduce((s, ind) => s + gfVal(item, ind.key), 0);
-    const data = greenFinanceIndicators.map((ind, i) => ({
-      value: +(gfVal(item, ind.key) * 100).toFixed(2),
-      name: ind.label,
-      itemStyle: {
-        color: ROSE_PALETTE[i],
-        borderColor: 'rgba(255,255,255,0.15)',
-        borderWidth: 1,
-        borderRadius: 6,
-        shadowBlur: 12,
-        shadowColor: `${ROSE_SOLID_COLORS[i]}40`,
-      },
-    }));
-    if (!chart) {
-      const el = document.getElementById('gf-rose');
-      if (!el || el.clientWidth === 0) return;
-      chart = echarts.init(el, 'dark');
-      window.addEventListener('resize', () => chart?.resize());
-    }
-    chart.setOption(
-      {
-        backgroundColor: 'transparent',
-        tooltip: {
-          trigger: 'item',
-          backgroundColor: 'rgba(10,15,30,0.9)',
-          borderColor: 'rgba(0,229,255,0.3)',
-          textStyle: { color: '#fff' },
-          formatter: (p: { name: string; value: number; dataIndex: number }) =>
-            `<b style="color:${ROSE_SOLID_COLORS[p.dataIndex]}">${p.name}</b><br/>数值: ${p.value}<br/>占比: ${(
-              (gfVal(item, greenFinanceIndicators[p.dataIndex].key) / total) *
-              100
-            ).toFixed(1)}%`,
-        },
-        series: [
-          {
-            type: 'pie',
-            roseType: 'area',
-            radius: ['22%', '68%'],
-            center: ['50%', '52%'],
-            data,
-            label: {
-              color: '#00FF00',
-              fontSize: 10,
-              textShadowColor: 'rgba(0,255,0,0.4)',
-              textShadowBlur: 4,
-              formatter: (p: { name: string; percent: number }) => `{name|${p.name}}\n{pct|${p.percent}%}`,
-              rich: {
-                name: { color: '#00FF00', fontSize: 10, lineHeight: 14 },
-                pct: { color: 'rgba(0,255,255,0.7)', fontSize: 9, lineHeight: 12 },
-              },
-            },
-            labelLine: {
-              lineStyle: { color: 'rgba(0,255,255,0.35)', type: 'dashed', width: 1 },
-              length: 12,
-              length2: 14,
-            },
-            animationType: 'scale',
-            animationEasing: 'elasticOut',
-            animationDelay: (idx: number) => idx * 80,
-          },
-        ],
-        graphic: [
-          {
-            type: 'text',
-            left: 'center',
-            top: '48%',
-            style: {
-              text: (item.score * 100).toFixed(1),
-              fill: '#00e5ff',
-              fontSize: 22,
-              fontWeight: 'bold',
-              fontFamily: '"DIN Alternate", "DIN", sans-serif',
-              textShadowColor: 'rgba(0,229,255,0.5)',
-              textShadowBlur: 10,
-              textAlign: 'center',
-            },
-          },
-          {
-            type: 'text',
-            left: 'center',
-            top: '55%',
-            style: {
-              text: '综合指数',
-              fill: 'rgba(0,229,255,0.5)',
-              fontSize: 10,
-              textAlign: 'center',
-            },
-          },
-        ],
-      },
-      true,
-    );
-  }
-  useDeferredChart('greenFinance', () => {
-    render();
-    if (!hooksReady) {
-      hooksReady = true;
-      watch(selectedProv, render);
-      watch(realProvinceData, render, { deep: true });
-      watch(gfDrillProvince, render);
-      watch(realCityData, render, { deep: true });
+      watch(gfRadarCityHoverGeoName, render);
     }
   });
 }

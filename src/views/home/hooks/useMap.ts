@@ -12,6 +12,7 @@ import {
   realCityData,
   selectedYear,
   gfDrillProvince,
+  gfRadarCityHoverGeoName,
   isProvinceExcludedFromPanel,
   indicatorKeys,
   indicatorLabels,
@@ -43,10 +44,14 @@ export function createHiddenGfTooltip(): GfMapTooltipState {
   };
 }
 
+/** 七维与综合指数一致：库内为 0～1，展示为百分制，保留 2 位小数 */
 function formatIndicatorCell(v: unknown): string {
   if (v == null || (typeof v === 'number' && !Number.isFinite(v))) return '—';
   if (typeof v === 'number') {
-    return v.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+    return (v * 100).toLocaleString('zh-CN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   }
   return String(v);
 }
@@ -77,7 +82,7 @@ function buildTooltipRowsFromRow(row: ProvinceGreenFinance | undefined): { label
 
 function scoreToDisplayText(row: ProvinceGreenFinance | undefined): string {
   if (!row || typeof row.score !== 'number' || !Number.isFinite(row.score)) return '—';
-  return (row.score * 100).toFixed(1);
+  return (row.score * 100).toFixed(2);
 }
 
 function attachGreenFinanceMapTooltip(
@@ -108,6 +113,9 @@ function attachGreenFinanceMapTooltip(
       rows: buildTooltipRowsFromRow(row),
       mode,
     };
+    if (mode === 'city') {
+      gfRadarCityHoverGeoName.value = name;
+    }
   };
 
   const onPick = (e: any) => {
@@ -124,6 +132,9 @@ function attachGreenFinanceMapTooltip(
 
   const hide = () => {
     tooltipRef.value = createHiddenGfTooltip();
+    if (mode === 'city') {
+      gfRadarCityHoverGeoName.value = '';
+    }
   };
 
   layer.on('mouseenter', onPick);
@@ -370,6 +381,7 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
           attachGreenFinanceMapTooltip(extrudeLayer, scene, mapAreaEl, mapEl, tooltipRef, 'province');
           mapEl.addEventListener('mouseleave', () => {
             tooltipRef.value = createHiddenGfTooltip();
+            gfRadarCityHoverGeoName.value = '';
           });
         }
 
@@ -391,6 +403,7 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
 
         watch(gfDrillProvince, () => {
           tooltipRef.value = createHiddenGfTooltip();
+          gfRadarCityHoverGeoName.value = '';
         });
 
         const applyCityScoresToFc = (fc: { features: any[] }) => {

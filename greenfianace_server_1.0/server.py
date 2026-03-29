@@ -1,19 +1,16 @@
 """
-绿色金融大屏：MySQL 省级/地级/宏观 + data/*.csv 仪表盘接口。
+绿色金融大屏：MySQL 省级/地级/宏观 + 仪表盘接口（预测与描述性统计均读库，不依赖运行时 CSV）。
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Optional
 
-import pandas as pd
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import pymysql
 
 ROOT = Path(__file__).resolve().parent
-DATA_DIR = ROOT / "data"
 
 app = FastAPI(title="绿色金融碳减排可视化大屏 API")
 app.add_middleware(
@@ -25,7 +22,7 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
-# MySQL（与旧 main.py 一致）
+# MySQL
 # ---------------------------------------------------------------------------
 DB_CONFIG = {
     "host": "127.0.0.1",
@@ -41,6 +38,18 @@ def get_db_connection():
         return pymysql.connect(**DB_CONFIG, cursorclass=pymysql.cursors.DictCursor)
     except Exception:
         return None
+
+
+def _safe_float(x: Any) -> float:
+    if x is None:
+        return 0.0
+    try:
+        v = float(x)
+        if v != v:
+            return 0.0
+        return v
+    except (TypeError, ValueError):
+        return 0.0
 
 
 @app.get("/api/province/data")
@@ -121,43 +130,31 @@ def get_macro_data(province: Optional[str] = None):
 
 
 # ---------------------------------------------------------------------------
-# SDM 系数：CSV 行名 → 前端五维滑块 + rho（与 BizCarbonPrediction.vue 对齐）
-# gfi_std→core；能源强度→control；W_gfi_std→spatial；W_碳排放强度→rho；
-# DID 不在 SDM 系数表中时用 0；人均能源消耗→mediator（控制型替代）
+# SDM 系数：sdm_coefficients → 前端五维滑块 + rho（与 BizCarbonPrediction.vue 对齐）
 # ---------------------------------------------------------------------------
 def _load_sdm_coef_pairs() -> tuple[dict[str, float], list[tuple[str, float]]]:
-    """返回 name->value 字典，以及文件行顺序列表（供行号回退）。"""
-    path = DATA_DIR / "SDM_碳排放强度_系数.csv"
-    text = path.read_text(encoding="utf-8-sig")
+    conn = get_db_connection()
+    if not conn:
+        return {}, []
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT parameter, value FROM sdm_coefficients ORDER BY id ASC"
+        )
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
+
     raw: dict[str, float] = {}
     ordered: list[tuple[str, float]] = []
-    for line in text.strip().splitlines()[1:]:
-        parts = line.split(",", 1)
-        if len(parts) != 2:
-            continue
-        name = parts[0].strip()
-        try:
-            v = float(parts[1].strip())
-        except ValueError:
-            continue
-        raw[name] = v
-        ordered.append((name, v))
+    for row in rows:
+        name = str(row["parameter"]).strip()
+        raw[name] = float(row["value"])
+        ordered.append((name, float(row["value"])))
     return raw, ordered
 
 
 def _build_coefficients_for_frontend(raw: dict[str, float], ordered: list[tuple[str, float]]) -> dict[str, Any]:
-    """
-    映射说明：
-    - core: gfi_std（绿色金融标准化）
-    - control: 能源强度（主控制）
-    - control_ln_pop: ln_pop（人口对数，供展示区间）
-    - policy: 系数表中无 DID/Post，置 0（前端仍可做情景倍率）
-    - spatial: W_gfi_std（空间滞后绿色金融）
-    - rho: W_碳排放强度（空间滞后因变量，空间自回归）
-    - mediator: 人均能源消耗（作中介/结构替代）
-    """
-    # 行序回退：与 data/SDM_碳排放强度_系数.csv 约定顺序一致
-    # 0 Intercept, 1 W_碳排放强度, 2 gfi_std, 3 ln_pop, 4 能源强度, 5 人均能源消耗, 6 W_gfi_std, ...
     def pick(*names: str) -> float | None:
         for n in names:
             if n in raw:
@@ -185,91 +182,115 @@ def _build_coefficients_for_frontend(raw: dict[str, float], ordered: list[tuple[
 
 @app.get("/api/dashboard/predict-data")
 def get_predict_data():
+    conn = get_db_connection()
+    if not conn:
+        return {"code": 500, "msg": "数据库连接失败", "data": None}
+
     try:
-        panel_path = DATA_DIR / "最终面板数据集.csv"
-        df = pd.read_csv(panel_path, encoding="utf-8-sig")
-        if "省份" not in df.columns or "年份" not in df.columns or "碳排放强度" not in df.columns:
-            return {
-                "code": 500,
-                "msg": "最终面板数据集缺少列：省份、年份、碳排放强度",
-                "data": None,
-            }
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT province, year, carbon_intensity, gfi_std, ln_pop,
+                   energy_intensity, energy_per_capita
+            FROM province_panel_data
+            ORDER BY province ASC, year ASC
+            """
+        )
+        panel_rows = cursor.fetchall()
 
-        df = df.copy()
-        df["年份"] = pd.to_numeric(df["年份"], errors="coerce").fillna(0).astype(int)
-        df["碳排放强度"] = pd.to_numeric(df["碳排放强度"], errors="coerce")
-
-        # 兜底：如果有些自变量列不存在，填充为 0
-        for col in ["gfi_std", "ln_pop", "能源强度", "人均能源消耗"]:
-            if col not in df.columns:
-                df[col] = 0.0
-            else:
-                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
-
-        def _sf(x: Any) -> float:
-            try:
-                v = float(x)
-                if pd.isna(v):
-                    return 0.0
-                return v
-            except (TypeError, ValueError):
-                return 0.0
-
-        history_data: dict[str, list[dict[str, Any]]] = {}
-        for province in df["省份"].dropna().unique():
-            prov_df = df[df["省份"] == province].sort_values("年份")
-            history_data[str(province)] = [
-                {
-                    "year": int(row["年份"]),
-                    "value": float(row["碳排放强度"]),
-                    "gfi_std": _sf(row["gfi_std"]),
-                    "ln_pop": _sf(row["ln_pop"]),
-                    "energy_intensity": _sf(row["能源强度"]),
-                    "energy_per_capita": _sf(row["人均能源消耗"]),
-                }
-                for _, row in prov_df.iterrows()
-                if pd.notna(row["碳排放强度"])
-            ]
-
-        national = df.groupby("年份", as_index=False)[
-            ["碳排放强度", "gfi_std", "ln_pop", "能源强度", "人均能源消耗"]
-        ].mean()
-        national = national.sort_values("年份")
-        national = national.fillna(0.0)
-        history_data["全国"] = [
-            {
-                "year": int(row["年份"]),
-                "value": float(row["碳排放强度"]),
-                "gfi_std": _sf(row["gfi_std"]),
-                "ln_pop": _sf(row["ln_pop"]),
-                "energy_intensity": _sf(row["能源强度"]),
-                "energy_per_capita": _sf(row["人均能源消耗"]),
-            }
-            for _, row in national.iterrows()
-            if pd.notna(row["碳排放强度"])
-        ]
-
-        raw_coef, ordered_coef = _load_sdm_coef_pairs()
-        coefficients = _build_coefficients_for_frontend(raw_coef, ordered_coef)
-
-        return {
-            "code": 200,
-            "msg": "success",
-            "data": {
-                "coefficients": coefficients,
-                "historyData": history_data,
-            },
-        }
+        cursor.execute(
+            """
+            SELECT year,
+                   AVG(carbon_intensity) AS carbon_intensity,
+                   AVG(gfi_std) AS gfi_std,
+                   AVG(ln_pop) AS ln_pop,
+                   AVG(energy_intensity) AS energy_intensity,
+                   AVG(energy_per_capita) AS energy_per_capita
+            FROM province_panel_data
+            GROUP BY year
+            ORDER BY year ASC
+            """
+        )
+        national_rows = cursor.fetchall()
     except Exception as e:
         return {"code": 500, "msg": str(e), "data": None}
+    finally:
+        conn.close()
+
+    history_data: dict[str, list[dict[str, Any]]] = {}
+
+    for row in panel_rows:
+        prov = str(row["province"])
+        pt = {
+            "year": int(row["year"]),
+            "value": _safe_float(row["carbon_intensity"]),
+            "gfi_std": _safe_float(row["gfi_std"]),
+            "ln_pop": _safe_float(row["ln_pop"]),
+            "energy_intensity": _safe_float(row["energy_intensity"]),
+            "energy_per_capita": _safe_float(row["energy_per_capita"]),
+        }
+        history_data.setdefault(prov, []).append(pt)
+
+    history_data["全国"] = [
+        {
+            "year": int(row["year"]),
+            "value": _safe_float(row["carbon_intensity"]),
+            "gfi_std": _safe_float(row["gfi_std"]),
+            "ln_pop": _safe_float(row["ln_pop"]),
+            "energy_intensity": _safe_float(row["energy_intensity"]),
+            "energy_per_capita": _safe_float(row["energy_per_capita"]),
+        }
+        for row in national_rows
+    ]
+
+    raw_coef, ordered_coef = _load_sdm_coef_pairs()
+    coefficients = _build_coefficients_for_frontend(raw_coef, ordered_coef)
+
+    return {
+        "code": 200,
+        "msg": "success",
+        "data": {
+            "coefficients": coefficients,
+            "historyData": history_data,
+        },
+    }
+
+
+def _macro_stats_row_to_pandas_shape(row: dict[str, Any]) -> dict[str, Any]:
+    """与 pandas read_csv(描述性统计.csv).to_json(orient='records') 键名一致。"""
+    return {
+        "Unnamed: 0": row["variable_name"],
+        "count": _safe_float(row["count"]),
+        "mean": _safe_float(row["mean"]),
+        "std": _safe_float(row["std"]),
+        "min": _safe_float(row["min"]),
+        "25%": _safe_float(row["q25"]),
+        "50%": _safe_float(row["q50"]),
+        "75%": _safe_float(row["q75"]),
+        "max": _safe_float(row["max"]),
+    }
 
 
 @app.get("/api/dashboard/macro-stats")
 def get_macro_stats():
+    conn = get_db_connection()
+    if not conn:
+        return {"code": 500, "msg": "数据库连接失败", "data": None}
+
     try:
-        desc_path = DATA_DIR / "描述性统计.csv"
-        desc_df = pd.read_csv(desc_path, encoding="utf-8-sig")
-        records = json.loads(desc_df.to_json(orient="records", force_ascii=False))
-        return {"code": 200, "msg": "success", "data": records}
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT variable_name, `count`, mean, std, `min`, q25, q50, q75, `max`
+            FROM descriptive_statistics
+            ORDER BY id ASC
+            """
+        )
+        rows = cursor.fetchall()
     except Exception as e:
         return {"code": 500, "msg": str(e), "data": None}
+    finally:
+        conn.close()
+
+    records = [_macro_stats_row_to_pandas_shape(r) for r in rows]
+    return {"code": 200, "msg": "success", "data": records}

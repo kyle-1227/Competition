@@ -2,7 +2,7 @@
   <div class="biz-carbon-prediction">
     <div class="header-section">
       <div class="module-title">
-        <span class="icon">📈</span> 碳排放强度动态预测沙盘 (SDM模型)
+        <span class="icon"></span> 碳排放强度动态预测 (SDM模型)
       </div>
       <div class="province-selector">
         <span class="label">分析区域：</span>
@@ -43,7 +43,7 @@
 
     <div class="bottom-panel">
       <div class="coef-box">
-        <div class="box-title">📊 SDM模型核心系数 (基于历史面板回归)</div>
+        <div class="box-title">SDM模型核心系数 (基于历史面板回归)</div>
         <div class="coef-list">
           <span class="tag">绿色金融(gfi_std): <b>{{ fmt4(coef?.core) }}</b></span>
           <span class="tag">能源强度 / ln_pop: <b>{{ fmt4(coef?.control) }} / {{ fmt4(coef?.control_ln_pop) }}</b></span>
@@ -52,7 +52,7 @@
         </div>
       </div>
       <div class="result-box">
-        <div class="box-title">🎯 2027年 预测结果 ({{ selectedProvince }})</div>
+        <div class="box-title">2027年 预测结果 ({{ selectedProvince }})</div>
         <div class="result-data">
           <div class="val-group">
             <span class="label">预测碳排放强度</span>
@@ -273,7 +273,7 @@ const updateChart = () => {
             min-width: 230px;
           ">
             <div style="border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 8px; margin-bottom: 8px; font-weight: bold; color: #00ffcc; font-size: 15px;">
-              📍 ${selectedProvince.value} | 📅 ${year}年 ${isPredict ? '(预测沙盘推演)' : '(历史真实实证)'}
+              📍 ${selectedProvince.value} | ${year}年 ${isPredict ? '(预测沙盘推演)' : '(历史真实实证)'}
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;">
               <span style="color: #aaa;">碳排放强度 (因变量Y)</span>
@@ -645,13 +645,13 @@ onUnmounted(() => {
   }
 }
 
-/* 3. 底部信息面板 */
+/* 3. 底部信息面板（系数 / 预测结果：等分铺满容器） */
 .bottom-panel {
   display: flex;
   gap: 14px;
   margin-top: 12px;
   flex-shrink: 0;
-  min-height: 72px;
+  min-height: 96px;
 
   .coef-box,
   .result-box {
@@ -659,7 +659,8 @@ onUnmounted(() => {
     padding: 10px 14px;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
+    min-height: 0;
   }
 
   .coef-box {
@@ -672,25 +673,38 @@ onUnmounted(() => {
       font-size: 12px;
       margin-bottom: 8px;
       font-weight: 500;
+      flex-shrink: 0;
     }
 
     .coef-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 12px;
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      align-items: stretch;
+      min-height: 52px;
 
       .tag {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
         font-size: 11px;
+        line-height: 1.35;
         color: #e2e8f0;
         background: rgba(255, 255, 255, 0.06);
-        padding: 4px 10px;
+        padding: 8px 6px;
         border-radius: 6px;
         border: 1px solid rgba(148, 163, 184, 0.12);
+        min-width: 0;
 
         b {
           color: #7dd3fc;
           font-family: 'DIN Alternate', 'DIN', ui-monospace, sans-serif;
           font-weight: 600;
+          margin-top: 2px;
+          font-size: 12px;
         }
       }
     }
@@ -707,25 +721,38 @@ onUnmounted(() => {
       font-size: 12px;
       margin-bottom: 8px;
       font-weight: 600;
+      flex-shrink: 0;
     }
 
     .result-data {
-      display: flex;
-      gap: 20px;
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
       align-items: stretch;
+      min-height: 52px;
 
       .val-group {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        gap: 6px;
+        padding: 8px 10px;
+        background: rgba(0, 0, 0, 0.12);
+        border-radius: 8px;
+        border: 1px solid rgba(45, 212, 191, 0.12);
+        min-width: 0;
 
         .label {
           font-size: 11px;
           color: #94a3b8;
+          line-height: 1.2;
         }
 
         .number {
-          font-size: 20px;
+          font-size: clamp(18px, 2.2vw, 24px);
           font-weight: 700;
           font-family: 'DIN Alternate', 'DIN', ui-monospace, sans-serif;
           font-variant-numeric: tabular-nums;
@@ -746,6 +773,13 @@ onUnmounted(() => {
         }
       }
     }
+  }
+}
+
+@media (max-width: 900px) {
+  .bottom-panel .coef-box .coef-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-height: auto;
   }
 }
 </style>

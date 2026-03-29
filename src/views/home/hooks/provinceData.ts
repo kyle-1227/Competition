@@ -224,6 +224,18 @@ export function scoreToColor(score: number): string {
 /** 绿色金融监测：地图下钻中的省级全称，空表示全国视角 */
 export const gfDrillProvince: Ref<string> = ref('');
 
+/** 下钻时地图当前悬停的地级市 Geo 名（与 L7 feature.properties.name 一致），空表示未悬停；仅市图层写入 */
+export const gfRadarCityHoverGeoName: Ref<string> = ref('');
+
+/** 在市数据中按 Geo 名匹配一行（与 useMap findCityRow 规则一致） */
+export function findCityRowByGeoName(geoName: string): ProvinceGreenFinance | undefined {
+  const g = String(geoName || '').trim();
+  if (!g) return undefined;
+  return realCityData.value.find(
+    (r) => r.province === g || g.startsWith(r.province) || r.province.startsWith(g),
+  );
+}
+
 export const selectedProvince: Ref<string> = ref('');
 export const selectedYear: Ref<number> = ref(2024);
 /** 底部时间轴滑块当前值（与角标一致）；松手 commit 后才会与接口数据年 selectedYear 对齐拉数 */
@@ -242,7 +254,11 @@ function toNum(v: unknown, fallback = 0): number {
 
 /** 将后端单条记录转为前端 ProvinceGreenFinance（兼容 snake_case / camelCase） */
 export function normalizeProvinceRecord(row: Record<string, unknown>): ProvinceGreenFinance {
-  const province = String(row.province ?? row.name ?? row.city ?? row.city_name ?? '');
+  const cityRaw = row.city;
+  const hasCity = cityRaw !== undefined && cityRaw !== null && String(cityRaw).trim() !== '';
+  const province = String(
+    hasCity ? cityRaw : (row.province ?? row.name ?? row.city_name ?? ''),
+  );
   return {
     province,
     score: toNum(row.score ?? row.total_score),
