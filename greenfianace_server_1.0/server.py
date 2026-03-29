@@ -199,19 +199,52 @@ def get_predict_data():
         df["年份"] = pd.to_numeric(df["年份"], errors="coerce").fillna(0).astype(int)
         df["碳排放强度"] = pd.to_numeric(df["碳排放强度"], errors="coerce")
 
+        # 兜底：如果有些自变量列不存在，填充为 0
+        for col in ["gfi_std", "ln_pop", "能源强度", "人均能源消耗"]:
+            if col not in df.columns:
+                df[col] = 0.0
+            else:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+
+        def _sf(x: Any) -> float:
+            try:
+                v = float(x)
+                if pd.isna(v):
+                    return 0.0
+                return v
+            except (TypeError, ValueError):
+                return 0.0
+
         history_data: dict[str, list[dict[str, Any]]] = {}
         for province in df["省份"].dropna().unique():
             prov_df = df[df["省份"] == province].sort_values("年份")
             history_data[str(province)] = [
-                {"year": int(row["年份"]), "value": float(row["碳排放强度"])}
+                {
+                    "year": int(row["年份"]),
+                    "value": float(row["碳排放强度"]),
+                    "gfi_std": _sf(row["gfi_std"]),
+                    "ln_pop": _sf(row["ln_pop"]),
+                    "energy_intensity": _sf(row["能源强度"]),
+                    "energy_per_capita": _sf(row["人均能源消耗"]),
+                }
                 for _, row in prov_df.iterrows()
                 if pd.notna(row["碳排放强度"])
             ]
 
-        national = df.groupby("年份", as_index=False)["碳排放强度"].mean()
+        national = df.groupby("年份", as_index=False)[
+            ["碳排放强度", "gfi_std", "ln_pop", "能源强度", "人均能源消耗"]
+        ].mean()
         national = national.sort_values("年份")
+        national = national.fillna(0.0)
         history_data["全国"] = [
-            {"year": int(row["年份"]), "value": float(row["碳排放强度"])}
+            {
+                "year": int(row["年份"]),
+                "value": float(row["碳排放强度"]),
+                "gfi_std": _sf(row["gfi_std"]),
+                "ln_pop": _sf(row["ln_pop"]),
+                "energy_intensity": _sf(row["能源强度"]),
+                "energy_per_capita": _sf(row["人均能源消耗"]),
+            }
             for _, row in national.iterrows()
             if pd.notna(row["碳排放强度"])
         ]

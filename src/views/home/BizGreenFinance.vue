@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { useGreenFinanceRadar, useGreenFinanceRose } from './hooks/useChart';
-import { useGreenFinanceMap } from './hooks/useMap';
+import {
+  useGreenFinanceMap,
+  createHiddenGfTooltip,
+  type GfMapTooltipState,
+} from './hooks/useMap';
 import {
   realProvinceData,
   gfDrillProvince,
@@ -13,6 +17,30 @@ import {
 const noDataRegionLabel = NO_PANEL_DATA_REGIONS_LEGEND;
 
 const selectedProv = ref('北京市');
+
+const mapAreaRef = ref<HTMLElement | null>(null);
+const gfMapTooltip = ref<GfMapTooltipState>(createHiddenGfTooltip());
+
+const gfTooltipStyle = computed(() => {
+  const t = gfMapTooltip.value;
+  const area = mapAreaRef.value;
+  if (!t.visible || !area) return { display: 'none' as const };
+  const pad = 10;
+  const estW = 292;
+  const estH = 400;
+  const aw = area.clientWidth;
+  const ah = area.clientHeight;
+  let left = t.left;
+  let top = t.top;
+  if (left + estW > aw - pad) left = Math.max(pad, aw - estW - pad);
+  if (top + estH > ah - pad) top = Math.max(pad, ah - estH - pad);
+  left = Math.max(pad, left);
+  top = Math.max(pad, top);
+  return {
+    left: `${left}px`,
+    top: `${top}px`,
+  };
+});
 
 function clearGfDrill() {
   gfDrillProvince.value = '';
@@ -31,7 +59,7 @@ watch(selectedProv, (v) => {
 });
 useGreenFinanceRadar(selectedProv);
 useGreenFinanceRose(selectedProv);
-useGreenFinanceMap(selectedProv);
+useGreenFinanceMap(selectedProv, gfMapTooltip);
 
 const provList = computed(() => {
   const rows = realProvinceData.value;
@@ -133,7 +161,7 @@ const displayProv = computed(() => selectedProv.value.replace(/(省|市|自治�
           </div>
         </div>
       </div>
-      <div class="map-area">
+      <div ref="mapAreaRef" class="map-area">
         <button
           v-if="gfDrillProvince"
           type="button"
@@ -143,6 +171,31 @@ const displayProv = computed(() => selectedProv.value.replace(/(省|市|自治�
           返回全国视角
         </button>
         <div id="gf-map" />
+        <div
+          v-show="gfMapTooltip.visible"
+          class="gf-map-tooltip"
+          :style="gfTooltipStyle"
+        >
+          <div class="gf-map-tooltip__head">
+            <span class="gf-map-tooltip__name">{{ gfMapTooltip.regionName }}</span>
+            <span class="gf-map-tooltip__year">{{ gfMapTooltip.year }} 年</span>
+          </div>
+          <div class="gf-map-tooltip__score-row">
+            <span class="gf-map-tooltip__score-label">综合指数</span>
+            <span class="gf-map-tooltip__score-val">{{ gfMapTooltip.scoreText }}</span>
+            <span v-if="gfMapTooltip.scoreText !== '—'" class="gf-map-tooltip__score-unit">分</span>
+          </div>
+          <div class="gf-map-tooltip__grid">
+            <div
+              v-for="(cell, idx) in gfMapTooltip.rows"
+              :key="idx"
+              class="gf-map-tooltip__cell"
+            >
+              <span class="gf-map-tooltip__cell-label">{{ cell.label }}</span>
+              <span class="gf-map-tooltip__cell-value">{{ cell.value }}</span>
+            </div>
+          </div>
+        </div>
         <div class="map-legend">
           <div class="legend-title">绿色金融综合指数</div>
           <div class="legend-bar" />
@@ -357,6 +410,102 @@ export default { name: 'BizGreenFinance' };
     color: rgba(255, 255, 255, 0.5);
     z-index: 999;
     font-size: 12px;
+  }
+  .gf-map-tooltip {
+    position: absolute;
+    z-index: 1001;
+    width: min(292px, calc(100% - 20px));
+    max-height: min(400px, calc(100% - 24px));
+    overflow: auto;
+    pointer-events: none;
+    padding: 12px 14px 14px;
+    border-radius: 10px;
+    background: rgba(10, 18, 40, 0.78);
+    border: 1px solid rgba(0, 229, 255, 0.42);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow:
+      0 0 24px rgba(0, 229, 255, 0.22),
+      0 8px 32px rgba(0, 0, 0, 0.45),
+      inset 0 0 28px rgba(0, 229, 255, 0.06);
+    &::-webkit-scrollbar {
+      width: 4px;
+    }
+    &::-webkit-scrollbar-thumb {
+      background: rgba(0, 229, 255, 0.2);
+      border-radius: 2px;
+    }
+  }
+  .gf-map-tooltip__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .gf-map-tooltip__name {
+    color: rgba(0, 229, 255, 0.92);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
+  }
+  .gf-map-tooltip__year {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: rgba(200, 220, 255, 0.55);
+    letter-spacing: 1px;
+  }
+  .gf-map-tooltip__score-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .gf-map-tooltip__score-label {
+    font-size: 11px;
+    color: rgba(200, 220, 255, 0.5);
+    letter-spacing: 1px;
+  }
+  .gf-map-tooltip__score-val {
+    font-size: 22px;
+    font-weight: 900;
+    font-family: 'DIN Alternate', 'DIN', 'Oswald', 'Rajdhani', 'Arial Black', sans-serif;
+    letter-spacing: -0.5px;
+    background: linear-gradient(180deg, #ffd54f, #ff8f00);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 8px rgba(255, 213, 79, 0.45));
+  }
+  .gf-map-tooltip__score-unit {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+  }
+  .gf-map-tooltip__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 12px;
+  }
+  .gf-map-tooltip__cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .gf-map-tooltip__cell-label {
+    font-size: 10px;
+    color: rgba(200, 210, 225, 0.55);
+    letter-spacing: 0.5px;
+  }
+  .gf-map-tooltip__cell-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(230, 240, 255, 0.92);
+    font-variant-numeric: tabular-nums;
   }
 }
 .sidebar-section {

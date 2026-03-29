@@ -40,6 +40,14 @@ export interface CarbonPredictCoefficients {
 export interface CarbonHistoryPoint {
   year: number;
   value: number;
+  /** 绿色金融指数（标准化） */
+  gfi_std?: number;
+  /** 人口对数 */
+  ln_pop?: number;
+  /** 能源强度 */
+  energy_intensity?: number;
+  /** 人均能源消耗 */
+  energy_per_capita?: number;
 }
 
 export interface CarbonPredictDataPayload {
