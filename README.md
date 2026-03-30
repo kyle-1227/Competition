@@ -1,93 +1,102 @@
 # 绿色金融与区域碳减排空间协同智能测算平台
 
-基于 Vue3 + Vite5 + AntV L7 构建的数据可视化大屏平台，用于展示绿色金融与区域碳减排的空间协同分析。
+基于 Vue 3 + Vite 5 + AntV L7 + ECharts 构建的数据可视化大屏，展示绿色金融与区域碳减排的空间协同分析；配套 FastAPI 后端提供省级/地级数据、宏观序列与 SDM 预测等接口。
 
-## 功能特性
+## 功能模块（首页 Tab）
 
-- 🗺️ AntV L7 3D 中国地图可视化（3D 挤出地图、飞线动画、柱状图、涟漪效果）
-- 📊 AntV G2 数据图表（柱状图、玫瑰图等）
-- 📐 px2vw 横向自适应 + 高度居中适配方案
-- ⌨️ Enter 键全屏模式切换
+- **绿色金融监测**：全国/省 3D 地图下钻、七维雷达与 Top10 堆叠柱、数据看板
+- **碳排放底色**：省级碳排放相关可视化
+- **碳排放强度预测**：SDM 模型情景推演与历史/预测曲线（ECharts）
+- **宏观经济动态**：GDP 与碳排放双轴趋势
 
 ## 技术栈
 
-- ⚡️ [Vue 3](https://github.com/vuejs/vue-next) + [Vite 5](https://github.com/vitejs/vite)
-- 💪 [TypeScript](https://www.typescriptlang.org/)
-- 🗺️ [AntV L7](https://l7.antv.antgroup.com/) - 地理空间数据可视化引擎
-- 📊 [AntV G2](https://g2.antv.antgroup.com/) - 可视化图表库
-- 🎉 [Element Plus](https://github.com/element-plus/element-plus) - UI 组件库
-- 🍍 [Pinia](https://pinia.esm.dev/) - 状态管理
-- 💡 [Vue Router 4](https://router.vuejs.org/zh/) - 路由管理
-- 📦 [unplugin-vue-components](https://github.com/antfu/unplugin-vue-components) - 组件自动按需加载
-- 📥 [unplugin-auto-import](https://github.com/antfu/unplugin-auto-import) - API 自动按需加载
+### 前端
 
-## 环境准备
+- Vue 3 + TypeScript + Vite 5
+- AntV L7 / L7-Maps（3D 地图）
+- ECharts 6
+- Element Plus 2
+- Axios、Vue Router 4
+- `unplugin-vue-components` / `unplugin-auto-import`（按需加载）
+- 屏幕适配：`ScreenAdapter` + postcss px-to-viewport
 
-### 1. 安装 Node.js
+### 后端（可选，本地联调）
 
-前往 [Node.js 官网](https://nodejs.org/zh-cn) 下载 **LTS（长期支持）** 版本并安装（>= 16）。
+- Python 3 + [FastAPI](https://fastapi.tiangolo.com/)
+- MySQL（`pymysql` + DBUtils 连接池）
+- 配置：`greenfianace_server/.env`（从 `.env.example` 复制），详见该目录内说明
 
-安装完成后，打开终端验证：
+## 环境准备（前端）
 
-```bash
-node -v
-npm -v
-```
-
-能正常输出版本号即表示安装成功。
-
-### 2. 安装 pnpm
-
-本项目使用 [pnpm](https://pnpm.io/zh/) 作为包管理器。在终端中执行：
-
-```bash
-npm install -g pnpm
-```
-
-验证安装：
-
-```bash
-pnpm -v
-```
-
-### 3. 安装项目依赖
-
-进入项目根目录，执行：
+1. 安装 [Node.js](https://nodejs.org/) LTS（建议 ≥ 18）
+2. 全局安装 pnpm：`npm install -g pnpm`
+3. 在项目根目录安装依赖：
 
 ```bash
 pnpm install
 ```
 
-## 运行与构建
+## 后端服务（大屏数据接口）
+
+目录：`greenfianace_server/`
 
 ```bash
-# 启动开发服务器（默认地址 http://localhost:5173）
+cd greenfianace_server
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+
+pip install -r requirements.txt
+# 复制 .env.example 为 .env 并填写数据库等配置（勿将 .env 提交仓库）
+# Windows: copy .env.example .env
+# macOS/Linux: cp .env.example .env
+uvicorn server:app --reload --host 0.0.0.0 --port 8000
+```
+
+开发环境下，Vite 将 `/api` 代理到 `http://127.0.0.1:8000`（若使用子路径部署 `VITE_BASE`，代理规则见 `vite.config.ts`）。
+
+## 运行与构建（前端）
+
+在项目根目录：
+
+```bash
+# 开发（默认 http://localhost:5173）
 pnpm run serve
 
-# 生产环境构建
+# 类型检查 + 生产构建
 pnpm run build
 
-# 本地预览构建产物
+# 预览构建产物
 pnpm run preview
 ```
 
-## 项目结构
+若部署在子路径，请在根目录配置 `.env` / `.env.production` 中的 `VITE_BASE`（与 `vite.config.ts` 中 `base` 一致）。
+
+## 项目结构（摘要）
 
 ```
-src/
-├── api/                  # API 接口与请求封装
-├── assets/               # 静态资源（字体、图片、样式）
-├── components/           # 通用组件（ScreenAdapter 屏幕适配）
-├── router/               # 路由配置
-├── store/                # Pinia 状态管理
-├── utils/                # 工具函数
-└── views/
-    └── home/             # 大屏首页
-        ├── index.vue     # 入口（标题 + 布局）
-        ├── BizWrap.vue   # 左中右三栏布局
-        └── hooks/
-            ├── useMap.ts      # 中心 3D 地图可视化
-            ├── useChart.ts    # 左右数据图表
-            └── provinceData.ts # 省份数据
+├── greenfianace_server/     # FastAPI 后端（MySQL、省级/地级、宏观、SDM 数据等）
+│   ├── server.py
+│   ├── requirements.txt
+│   ├── .env.example
+│   └── analysis_models/     # 计量/分析脚本（可选）
+├── src/
+│   ├── api/                 # HTTP 封装与接口模块
+│   ├── assets/styles/       # 全局样式（含大屏 Element 下拉等）
+│   ├── components/          # ScreenAdapter 等
+│   ├── router/
+│   └── views/home/
+│       ├── index.vue        # 大屏入口（Tab + 时间轴）
+│       ├── BizGreenFinance.vue
+│       ├── BizCarbon.vue
+│       ├── BizCarbonPrediction.vue
+│       ├── BizMacro.vue
+│       └── hooks/           # useMap、useChart、provinceData 等
+├── vite.config.ts
+└── package.json
 ```
 
+## 许可证
+
+MIT
