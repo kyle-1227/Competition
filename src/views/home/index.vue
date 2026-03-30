@@ -1,6 +1,6 @@
 <template>
   <ScreenAdapter>
-    <div class="title">绿色金融赋能新质生产力与区域协同减排</div>
+    <div class="title">绿色金融与区域碳减排空间协同智能测算平台</div>
     <!-- 科技风 Tab 导航栏 -->
     <div class="tab-nav">
       <div
