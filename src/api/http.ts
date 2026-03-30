@@ -1,7 +1,17 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { ElMessage } from 'element-plus';
 import showCodeMessage from '@/api/code';
+import type { ApiEnvelope } from '@/api/types';
 import { formatJsonToUrlParams, instanceObject } from '@/utils/format';
+
+function isBusinessEnvelope(data: unknown): data is ApiEnvelope<unknown> {
+  return (
+    data !== null &&
+    typeof data === 'object' &&
+    'code' in data &&
+    typeof (data as ApiEnvelope).code === 'number'
+  );
+}
 
 // 与 Vite base（如 /vue3-vite5-dashboard/）一致，避免请求落到 /api 根路径导致 404
 const axiosInstance: AxiosInstance = axios.create({
@@ -29,11 +39,19 @@ axiosInstance.interceptors.request.use(
 // 响应拦截器
 axiosInstance.interceptors.response.use(
   (response: AxiosResponse) => {
-    if (response.status === 200) {
-      return response.data;
+    if (response.status !== 200) {
+      ElMessage.info(JSON.stringify(response.status));
+      return response;
     }
-    ElMessage.info(JSON.stringify(response.status));
-    return response;
+    const data = response.data;
+    if (isBusinessEnvelope(data)) {
+      if (data.code !== 200) {
+        const msg = typeof data.msg === 'string' && data.msg ? data.msg : '请求失败';
+        ElMessage.error(msg);
+        return Promise.reject(new Error(msg));
+      }
+    }
+    return data;
   },
   (error: AxiosError) => {
     if (axios.isCancel(error)) {

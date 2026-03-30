@@ -5,11 +5,22 @@
         <span class="icon"></span> 碳排放强度动态预测 (SDM模型)
       </div>
       <div class="province-selector">
-        <span class="label">分析区域：</span>
-        <select v-model="selectedProvince" @change="onProvinceChange">
-          <option value="全国">全国 (平均值)</option>
-          <option v-for="prov in provinceList" :key="prov" :value="prov">{{ prov }}</option>
-        </select>
+        <div class="selector-label">分析区域</div>
+        <el-select
+          v-model="selectedProvince"
+          placeholder="选择区域"
+          size="default"
+          popper-class="dark-popper"
+          @change="onProvinceChange"
+        >
+          <el-option label="全国 (平均值)" value="全国" />
+          <el-option
+            v-for="prov in provinceList"
+            :key="prov"
+            :label="prov.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, '')"
+            :value="prov"
+          />
+        </el-select>
       </div>
     </div>
 
@@ -80,6 +91,11 @@ import {
   type CarbonHistoryPoint,
 } from '@/api/modules/dashboard';
 import { excludeProvincesWithoutPanelData, isProvinceExcludedFromPanel } from './hooks/provinceData';
+import { getCarbonPredictTooltipHtml } from './hooks/carbonPredictTooltip';
+import {
+  computeSdmPredictedSeries,
+  type SdmCoefficients,
+} from './hooks/useCarbonPredict';
 
 const chartRef = ref<HTMLElement | null>(null);
 const chartInstance = shallowRef<echarts.ECharts | null>(null);
@@ -137,24 +153,14 @@ const firstFutureYear = computed(() => yearsFuture[0] ?? 2025);
 
 const currentHistory = computed(() => seriesFor(selectedProvince.value).map((r) => r.value));
 
-const currentPrediction = computed(() => {
-  const hist = currentHistory.value;
-  const mc = modelCoef.value;
-  if (!hist.length) return [];
-  let currentVal = hist[hist.length - 1]!;
-  const predicted: number[] = [];
-  for (let i = 0; i < yearsFuture.length; i++) {
-    const deltaCore = (controls.value.core.value - 1) * mc.core;
-    const deltaControl = (controls.value.control.value - 1) * mc.control * 0.1;
-    const deltaPolicy = (controls.value.policy.value - 1) * mc.policy;
-    const deltaSpatial = (controls.value.spatial.value - 1) * mc.spatial;
-    const deltaMediator = (controls.value.mediator.value - 1) * mc.mediator;
-    const netEffect = -(deltaCore + deltaPolicy + deltaMediator - deltaControl - deltaSpatial);
-    currentVal = currentVal + netEffect - 0.015;
-    predicted.push(Number(Math.max(currentVal, 0.1).toFixed(4)));
-  }
-  return predicted;
-});
+const currentPrediction = computed(() =>
+  computeSdmPredictedSeries(
+    currentHistory.value,
+    modelCoef.value as SdmCoefficients,
+    controls.value,
+    yearsFuture.length,
+  ),
+);
 
 const finalPrediction = computed(() => currentPrediction.value[2] ?? 0);
 const predictionChange = computed(() => {
@@ -215,74 +221,13 @@ const updateChart = () => {
       backgroundColor: 'transparent',
       padding: 0,
       borderWidth: 0,
-      formatter: (params: any) => {
-        const year = params[0].axisValue;
-        const isPredict = Number(year) >= fy;
-        const rawVal = params.find((p: any) => p.value !== null && p.value !== undefined)?.value ?? 0;
-        const numVal = typeof rawVal === 'number' ? rawVal : Number(rawVal);
-        const rowData = yearToData.get(Number(year));
-
-        let detailsHtml = '';
-        if (isPredict) {
-          detailsHtml = `
-            <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-              <span style="color: #888;">绿色金融强度预设</span>
-              <span style="color: #00ffcc;">${(controls.value.core.value * 100).toFixed(0)}%</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-              <span style="color: #888;">政策及结构效能预设</span>
-              <span style="color: #ffaa00;">${(controls.value.policy.value * 100).toFixed(0)}%</span>
-            </div>
-          `;
-        } else {
-          const gfi = rowData?.gfi_std != null ? rowData.gfi_std.toFixed(4) : '—';
-          const lnPop = rowData?.ln_pop != null ? rowData.ln_pop.toFixed(4) : '—';
-          const ei = rowData?.energy_intensity != null ? rowData.energy_intensity.toFixed(4) : '—';
-          const epc = rowData?.energy_per_capita != null ? rowData.energy_per_capita.toFixed(4) : '—';
-          detailsHtml = `
-            <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-              <span style="color: #888;">绿色金融综合指数(X)</span>
-              <span style="color: #00ffcc;">${gfi}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-              <span style="color: #888;">人口对数(ln_pop)</span>
-              <span style="color: #cbd5e1;">${lnPop}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-              <span style="color: #888;">实际能源强度(Control)</span>
-              <span style="color: #cbd5e1;">${ei}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-              <span style="color: #888;">人均能源消耗(Control)</span>
-              <span style="color: #cbd5e1;">${epc}</span>
-            </div>
-          `;
-        }
-
-        return `
-          <div style="
-            background: rgba(13, 20, 36, 0.75);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(0, 255, 204, 0.4);
-            box-shadow: 0 0 20px rgba(0, 255, 204, 0.3), inset 0 0 10px rgba(0,255,204,0.1);
-            border-radius: 8px;
-            padding: 12px 16px;
-            color: #fff;
-            font-family: sans-serif;
-            min-width: 230px;
-          ">
-            <div style="border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 8px; margin-bottom: 8px; font-weight: bold; color: #00ffcc; font-size: 15px;">
-              📍 ${selectedProvince.value} | ${year}年 ${isPredict ? '(预测沙盘推演)' : '(历史真实实证)'}
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;">
-              <span style="color: #aaa;">碳排放强度 (因变量Y)</span>
-              <span style="color: #fff; font-weight: bold; font-size: 14px;">${Number.isFinite(numVal) ? numVal.toFixed(4) : String(rawVal)}</span>
-            </div>
-            ${detailsHtml}
-          </div>
-        `;
-      }
+      formatter: (params: unknown) =>
+        getCarbonPredictTooltipHtml(params, {
+          firstFutureYear: fy,
+          selectedProvince: selectedProvince.value,
+          controls: controls.value,
+          yearToData,
+        }),
     },
     grid: { top: 52, left: 12, right: 20, bottom: 28, containLabel: true },
     xAxis: {
@@ -417,21 +362,65 @@ onUnmounted(() => {
   }
 
   .province-selector {
-    display: flex;
-    align-items: center;
-    font-size: 13px;
-    .label { color: #8ba3c7; margin-right: 8px; }
-    select {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(0, 255, 204, 0.4);
-      color: #00ffcc;
-      padding: 4px 10px;
-      border-radius: 4px;
-      outline: none;
-      cursor: pointer;
+    flex: 0 0 auto;
+    min-width: 168px;
+    max-width: min(240px, 42vw);
+    background: rgba(10, 15, 30, 0.82);
+    border: 1px solid rgba(0, 229, 255, 0.22);
+    border-radius: 8px;
+    padding: 8px 12px;
+    backdrop-filter: blur(6px);
+    box-shadow:
+      0 0 16px rgba(0, 229, 255, 0.08),
+      inset 0 0 18px rgba(0, 229, 255, 0.04);
+    .selector-label {
+      color: rgba(0, 229, 255, 0.7);
+      font-size: 11px;
+      margin-bottom: 4px;
+      letter-spacing: 1px;
+    }
+    :deep(.el-select) {
+      width: 100%;
+    }
+    :deep(.el-select__wrapper) {
+      background: rgba(0, 229, 255, 0.06) !important;
+      border: 1px solid rgba(0, 229, 255, 0.25) !important;
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.08) !important;
+      border-radius: 6px !important;
+      transition: border-color 0.3s, box-shadow 0.3s;
+      &:hover,
+      &.is-focused {
+        border-color: rgba(0, 229, 255, 0.5) !important;
+        box-shadow: 0 0 12px rgba(0, 229, 255, 0.15) !important;
+      }
+    }
+    :deep(.el-select__selected-item) {
+      color: #00e5ff !important;
       font-weight: bold;
-      &:focus { border-color: #00ffcc; }
-      option { background: #0d1424; color: #fff; }
+    }
+    :deep(.el-select__placeholder) {
+      color: rgba(0, 229, 255, 0.5) !important;
+    }
+    :deep(.el-select__suffix) {
+      color: rgba(0, 229, 255, 0.6) !important;
+    }
+    :deep(.el-input__wrapper) {
+      background: rgba(0, 229, 255, 0.06) !important;
+      border: 1px solid rgba(0, 229, 255, 0.25) !important;
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.08) !important;
+      border-radius: 6px !important;
+      &:hover,
+      &.is-focus {
+        border-color: rgba(0, 229, 255, 0.5) !important;
+        box-shadow: 0 0 12px rgba(0, 229, 255, 0.15) !important;
+      }
+    }
+    :deep(.el-input__inner) {
+      color: #00e5ff !important;
+      font-weight: bold;
+    }
+    :deep(.el-input__suffix) {
+      color: rgba(0, 229, 255, 0.6) !important;
     }
   }
 }

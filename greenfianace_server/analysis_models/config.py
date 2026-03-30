@@ -7,7 +7,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ==================== 一、全局路径配置 ====================
-# config.py 位于 analysis_models/；服务器根目录为 greenfianace_server_1.0/
+# config.py 位于 analysis_models/；服务器根目录为 greenfianace_server/
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SERVER_DIR = os.path.dirname(BASE_DIR)
 DATA_DIR = os.path.join(SERVER_DIR, 'data')

@@ -1,6 +1,6 @@
 <template>
   <ScreenAdapter>
-    <div class="title">绿色金融赋能新质生产力与区域协同减排智能沙盘</div>
+    <div class="title">绿色金融赋能新质生产力与区域协同减排</div>
     <!-- 科技风 Tab 导航栏 -->
     <div class="tab-nav">
       <div
@@ -44,6 +44,8 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'HomePage' });
+
 import BizGreenFinance from './BizGreenFinance.vue';
 import BizCarbon from './BizCarbon.vue';
 import BizCarbonPrediction from './BizCarbonPrediction.vue';
@@ -85,10 +87,10 @@ watch(selectedProvince, (name) => {
 });
 
 const tabs = [
-  { key: 'greenFinance', label: '绿色金融监测', icon: '💹' },
+  { key: 'greenFinance', label: '绿色金融综合指数', icon: '💹' },
   { key: 'carbon', label: '碳排放底色', icon: '🏭' },
   { key: 'energy', label: '碳排放强度预测', icon: '⚡' },
-  { key: 'macro', label: '宏观经济动态', icon: '📈' },
+  { key: 'macro', label: '宏观经济', icon: '📈' },
 ];
 const activeTab = ref('greenFinance');
 
@@ -102,12 +104,6 @@ const yearMarks = {
 };
 
 provide('activeTab', activeTab);
-</script>
-
-<script lang="ts">
-export default {
-  name: 'HomePage',
-};
 </script>
 
 <style lang="scss" scoped>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: 'BizMacro' });
+
 import { useMacroChart } from './hooks/useChart';
 import { realProvinceData, excludeProvincesWithoutPanelData } from './hooks/provinceData';
 
@@ -33,9 +35,6 @@ useMacroChart(selectedProvince);
     </div>
   </div>
 </template>
-<script lang="ts">
-export default { name: 'BizMacro' };
-</script>
 <style lang="scss" scoped>
 .biz-wrap {
   display: flex;
@@ -49,12 +48,16 @@ export default { name: 'BizMacro' };
   top: 16px;
   left: 24px;
   z-index: 100;
-  background: rgba(10, 15, 30, 0.85);
-  border: 1px solid rgba(0, 229, 255, 0.2);
+  min-width: 168px;
+  max-width: min(240px, 42vw);
+  background: rgba(10, 15, 30, 0.82);
+  border: 1px solid rgba(0, 229, 255, 0.22);
   border-radius: 8px;
   padding: 8px 12px;
   backdrop-filter: blur(6px);
-  min-width: 160px;
+  box-shadow:
+    0 0 16px rgba(0, 229, 255, 0.08),
+    inset 0 0 18px rgba(0, 229, 255, 0.04);
   .selector-label {
     color: rgba(0, 229, 255, 0.7);
     font-size: 11px;
@@ -84,6 +87,24 @@ export default { name: 'BizMacro' };
     color: rgba(0, 229, 255, 0.5) !important;
   }
   :deep(.el-select__suffix) {
+    color: rgba(0, 229, 255, 0.6) !important;
+  }
+  :deep(.el-input__wrapper) {
+    background: rgba(0, 229, 255, 0.06) !important;
+    border: 1px solid rgba(0, 229, 255, 0.25) !important;
+    box-shadow: 0 0 8px rgba(0, 229, 255, 0.08) !important;
+    border-radius: 6px !important;
+    &:hover,
+    &.is-focus {
+      border-color: rgba(0, 229, 255, 0.5) !important;
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.15) !important;
+    }
+  }
+  :deep(.el-input__inner) {
+    color: #00e5ff !important;
+    font-weight: bold;
+  }
+  :deep(.el-input__suffix) {
     color: rgba(0, 229, 255, 0.6) !important;
   }
 }

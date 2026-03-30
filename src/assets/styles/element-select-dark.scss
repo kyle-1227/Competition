@@ -1,0 +1,55 @@
+/**
+ * 大屏 Element Plus Select 下拉：与面板青蓝科技风一致（绿色金融 / 宏观经济等共用 popper-class="dark-popper"）
+ */
+.el-select__popper.dark-popper,
+.el-popper.dark-popper {
+  background: rgba(10, 15, 30, 0.96) !important;
+  border: 1px solid rgba(0, 229, 255, 0.38) !important;
+  border-radius: 8px !important;
+  box-shadow:
+    0 0 24px rgba(0, 229, 255, 0.2),
+    0 8px 28px rgba(0, 0, 0, 0.45),
+    inset 0 0 22px rgba(0, 229, 255, 0.06) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.el-select__popper.dark-popper .el-select-dropdown__item,
+.el-popper.dark-popper .el-select-dropdown__item {
+  color: rgba(220, 235, 255, 0.92) !important;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 2px 6px;
+  border-radius: 6px;
+}
+
+.el-select__popper.dark-popper .el-select-dropdown__item.is-hovering,
+.el-select__popper.dark-popper .el-select-dropdown__item:hover,
+.el-popper.dark-popper .el-select-dropdown__item.is-hovering,
+.el-popper.dark-popper .el-select-dropdown__item:hover {
+  background: rgba(0, 229, 255, 0.14) !important;
+  color: #e8f4ff !important;
+}
+
+.el-select__popper.dark-popper .el-select-dropdown__item.is-selected,
+.el-popper.dark-popper .el-select-dropdown__item.is-selected {
+  color: #00e5ff !important;
+  font-weight: 600;
+  background: rgba(0, 229, 255, 0.1) !important;
+}
+
+.el-select__popper.dark-popper .el-select-dropdown__empty,
+.el-popper.dark-popper .el-select-dropdown__empty {
+  color: rgba(200, 220, 255, 0.45);
+  padding: 12px;
+}
+
+.el-select__popper.dark-popper .el-scrollbar__bar,
+.el-popper.dark-popper .el-scrollbar__bar {
+  opacity: 0.55;
+}
+
+.el-select__popper.dark-popper .el-select-dropdown__list,
+.el-popper.dark-popper .el-select-dropdown__list {
+  padding: 6px 4px;
+}

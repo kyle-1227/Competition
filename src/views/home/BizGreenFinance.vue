@@ -554,11 +554,14 @@ export default { name: 'BizGreenFinance' };
 .prov-selector {
   flex: 0 0 auto;
   margin-bottom: 4px;
-  background: rgba(10, 15, 30, 0.7);
-  border: 1px solid rgba(0, 229, 255, 0.15);
+  background: rgba(10, 15, 30, 0.82);
+  border: 1px solid rgba(0, 229, 255, 0.22);
   border-radius: 8px;
   padding: 8px 12px;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(6px);
+  box-shadow:
+    0 0 16px rgba(0, 229, 255, 0.08),
+    inset 0 0 18px rgba(0, 229, 255, 0.04);
   .selector-label {
     color: rgba(0, 229, 255, 0.7);
     font-size: 11px;

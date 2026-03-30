@@ -3,14 +3,41 @@
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Optional
 
+from dotenv import load_dotenv
+from dbutils.pooled_db import PooledDB
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import pymysql
 
 ROOT = Path(__file__).resolve().parent
+load_dotenv(ROOT / ".env")
+
+
+def _db_config_from_env() -> dict[str, Any]:
+    return {
+        "host": os.getenv("DB_HOST", "127.0.0.1"),
+        "user": os.getenv("DB_USER", "root"),
+        "password": os.getenv("DB_PASSWORD", ""),
+        "db": os.getenv("DB_NAME", "green_finance"),
+        "charset": os.getenv("DB_CHARSET", "utf8mb4"),
+    }
+
+
+DB_CONFIG = _db_config_from_env()
+
+# mincached=0：不在 import 时预连，避免无 .env 时启动失败；有稳定库后可改为 2 预热
+POOL = PooledDB(
+    creator=pymysql,
+    maxconnections=10,
+    mincached=0,
+    blocking=True,
+    cursorclass=pymysql.cursors.DictCursor,
+    **DB_CONFIG,
+)
 
 app = FastAPI(title="绿色金融碳减排可视化大屏 API")
 app.add_middleware(
@@ -22,21 +49,13 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
-# MySQL
+# MySQL（连接池：归还连接请调用 conn.close()）
 # ---------------------------------------------------------------------------
-DB_CONFIG = {
-    "host": "127.0.0.1",
-    "user": "root",
-    "password": "123456",
-    "db": "green_finance",
-    "charset": "utf8mb4",
-}
-
-
 def get_db_connection():
     try:
-        return pymysql.connect(**DB_CONFIG, cursorclass=pymysql.cursors.DictCursor)
-    except Exception:
+        return POOL.connection()
+    except Exception as e:
+        print(f"DB Error: {e}")
         return None
 
 
