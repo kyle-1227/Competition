@@ -13,8 +13,9 @@
 
  Date: 29/03/2026 17:13:52
 */
+drop database if exists green_finance;
 create database green_finance;
-
+use green_finance;
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
