@@ -8,6 +8,7 @@ import {
 import {
   realProvinceData,
   gfDrillProvince,
+  gfDrillCity,
   gfRadarCityHoverGeoName,
   fetchCityData,
   selectedYear,
@@ -44,9 +45,16 @@ const gfTooltipStyle = computed(() => {
 });
 
 function clearGfDrill() {
+  if (gfDrillCity.value) {
+    gfDrillCity.value = '';
+    gfRadarCityHoverGeoName.value = '';
+    return;
+  }
   gfDrillProvince.value = '';
   gfRadarCityHoverGeoName.value = '';
 }
+
+const backButtonText = computed(() => (gfDrillCity.value ? '返回市级视角' : '返回全国视角'));
 
 watch([gfDrillProvince, selectedYear], () => {
   if (gfDrillProvince.value) {
@@ -180,7 +188,7 @@ const top10Title = computed(() => {
           class="gf-back-map"
           @click="clearGfDrill"
         >
-          返回全国视角
+          {{ backButtonText }}
         </button>
         <div id="gf-map" />
         <div

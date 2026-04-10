@@ -194,22 +194,128 @@ export const provinceAdcodeMap: Record<string, string> = {
 };
 
 /** 按 public/geojson/下的「省级全称.geojson」加载，如 广东省.geojson */
-export async function fetchGeoJson(provinceFullName: string): Promise<{ type: string; features: unknown[] }> {
-  const base = import.meta.env.BASE_URL || '/';
-  const file = `${encodeURIComponent(provinceFullName)}.geojson`;
-  const path = `${base}geojson/${file}`.replace(/\/{2,}/g, '/');
-  const res = await fetch(path);
-  if (!res.ok) {
-    throw new Error(`GeoJSON 请求失败 ${provinceFullName}: ${res.status}`);
-  }
-  const json = (await res.json()) as { type: string; features?: unknown[] };
+export type LocalGeoJson = { type: string; features: any[] };
+
+const localGeoJsonCache = new Map<string, LocalGeoJson>();
+export const geoJsonCache = new Map<string, LocalGeoJson>();
+const cityAdcodeMap = new Map<string, string>();
+const countyGeoJsonPendingMap = new Map<string, Promise<LocalGeoJson>>();
+
+function normalizeGeoJsonPayload(json: { type: string; features?: any[] }, label: string): LocalGeoJson {
   if (json.type === 'FeatureCollection' && Array.isArray(json.features)) {
     return { type: 'FeatureCollection', features: json.features };
   }
   if (json.type === 'Feature') {
     return { type: 'FeatureCollection', features: [json] };
   }
-  throw new Error(`无效的 GeoJSON: ${provinceFullName}`);
+  throw new Error(`无效的 GeoJSON: ${label}`);
+}
+
+async function fetchLocalGeoJson(fileBaseName: string): Promise<LocalGeoJson> {
+  const hit = localGeoJsonCache.get(fileBaseName);
+  if (hit) return hit;
+
+  const base = import.meta.env.BASE_URL || '/';
+  const file = `${encodeURIComponent(fileBaseName)}.geojson`;
+  const path = `${base}geojson/${file}`.replace(/\/{2,}/g, '/');
+  const res = await fetch(path);
+  if (!res.ok) {
+    throw new Error(`GeoJSON 请求失败 ${fileBaseName}: ${res.status}`);
+  }
+  const json = (await res.json()) as { type: string; features?: any[] };
+  const fc = normalizeGeoJsonPayload(json, fileBaseName);
+  localGeoJsonCache.set(fileBaseName, fc);
+  return fc;
+}
+
+export async function fetchCountryGeoJson(): Promise<LocalGeoJson> {
+  return fetchLocalGeoJson('中华人民共和国');
+}
+
+export async function fetchGeoJson(provinceFullName: string): Promise<LocalGeoJson> {
+  return fetchLocalGeoJson(provinceFullName);
+}
+
+export function rememberCityAdcode(cityName: string, adcode: string | number): void {
+  const name = String(cityName || '').trim();
+  const code = String(adcode ?? '').trim();
+  if (!name || !code) return;
+  cityAdcodeMap.set(name, code);
+}
+
+export async function fetchCountyGeoJson(cityName: string): Promise<LocalGeoJson> {
+  const name = String(cityName || '').trim();
+  if (!name) throw new Error('城市名称不能为空');
+
+  const hit = geoJsonCache.get(name);
+  if (hit) return hit;
+
+  const pending = countyGeoJsonPendingMap.get(name);
+  if (pending) return pending;
+
+  const adcode = cityAdcodeMap.get(name);
+  if (!adcode) {
+    throw new Error(`未找到城市 adcode: ${name}`);
+  }
+
+  const req = (async () => {
+    const code = `${adcode}_full`;
+    const url = `https://geo.datav.aliyun.com/areas_v3/bound/geojson?code=${encodeURIComponent(code)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`县级 GeoJSON 请求失败 ${name}: ${res.status}`);
+    }
+    const json = (await res.json()) as { type: string; features?: any[] };
+    const fc = normalizeGeoJsonPayload(json, name);
+    geoJsonCache.set(name, fc);
+    return fc;
+  })();
+
+  countyGeoJsonPendingMap.set(name, req);
+  try {
+    return await req;
+  } finally {
+    countyGeoJsonPendingMap.delete(name);
+  }
+}
+
+function stableHash(input: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function seededFloat(seed: string, min: number, max: number): number {
+  const ratio = stableHash(seed) / 0xffffffff;
+  return min + ratio * (max - min);
+}
+
+function clamp01(v: number): number {
+  return Math.max(0.001, Math.min(0.999, v));
+}
+
+function buildCountyMockRow(cityName: string, countyName: string, year: number): ProvinceGreenFinance {
+  const key = `${cityName}|${countyName}|${year}`;
+  const score = seededFloat(`${key}|score`, 0.18, 0.92);
+  const factor = (name: string, min = 0.55, max = 1.15) =>
+    clamp01(score * seededFloat(`${key}|${name}`, min, max));
+
+  return {
+    province: countyName,
+    score,
+    greenCredit: factor('greenCredit'),
+    greenInvest: factor('greenInvest'),
+    greenInsurance: factor('greenInsurance', 0.35, 0.92),
+    greenBond: factor('greenBond', 0.45, 1.05),
+    greenExpend: factor('greenExpend', 0.5, 1.1),
+    greenFund: factor('greenFund', 0.4, 0.98),
+    greenEquity: factor('greenEquity', 0.42, 1.08),
+    carbonEmission: Math.round(seededFloat(`${key}|carbon`, 15000, 180000)),
+    gdp: Math.round(seededFloat(`${key}|gdp`, 120, 2200)),
+  };
 }
 
 /** 地图柱体配色（沙盘与绿色金融监测共用） */
@@ -223,6 +329,7 @@ export function scoreToColor(score: number): string {
 
 /** 绿色金融监测：地图下钻中的省级全称，空表示全国视角 */
 export const gfDrillProvince: Ref<string> = ref('');
+export const gfDrillCity: Ref<string> = ref('');
 
 /** 下钻时地图当前悬停的地级市 Geo 名（与 L7 feature.properties.name 一致），空表示未悬停；仅市图层写入 */
 export const gfRadarCityHoverGeoName: Ref<string> = ref('');
@@ -232,6 +339,14 @@ export function findCityRowByGeoName(geoName: string): ProvinceGreenFinance | un
   const g = String(geoName || '').trim();
   if (!g) return undefined;
   return realCityData.value.find(
+    (r) => r.province === g || g.startsWith(r.province) || r.province.startsWith(g),
+  );
+}
+
+export function findCountyRowByGeoName(geoName: string): ProvinceGreenFinance | undefined {
+  const g = String(geoName || '').trim();
+  if (!g) return undefined;
+  return realCountyData.value.find(
     (r) => r.province === g || g.startsWith(r.province) || r.province.startsWith(g),
   );
 }
@@ -246,6 +361,7 @@ export const apiProvinceYear = ref<number | null>(null);
 export const realProvinceData = ref<ProvinceGreenFinance[]>([]);
 /** 当前选中省份下的地级市数据（由 fetchCityData 填充） */
 export const realCityData = ref<ProvinceGreenFinance[]>([]);
+export const realCountyData = ref<ProvinceGreenFinance[]>([]);
 
 function toNum(v: unknown, fallback = 0): number {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
@@ -363,5 +479,28 @@ export const fetchCityData = async (province: string, year: number) => {
     if (myGen !== cityFetchGen) return;
     console.error('❌ 地级市数据拉取失败:', error);
     realCityData.value = [];
+  }
+};
+
+export const fetchCountyData = async (provinceName: string, cityName: string, year: number) => {
+  if (!provinceName || !cityName || provinceName !== '广东省') {
+    realCountyData.value = [];
+    return;
+  }
+
+  try {
+    const geoRes = await fetchCountyGeoJson(cityName);
+    const names = Array.from(
+      new Set(
+        geoRes.features
+          .map((f) => String(f?.properties?.name || '').trim())
+          .filter(Boolean),
+      ),
+    );
+    realCountyData.value = names.map((countyName) => buildCountyMockRow(cityName, countyName, year));
+    console.log(`✅ [${provinceName}/${cityName}] ${year} 年县级 Mock 数据 ${realCountyData.value.length} 条`);
+  } catch (error) {
+    console.error(`❌ [${provinceName}/${cityName}] 县级 Mock 数据生成失败`, error);
+    realCountyData.value = [];
   }
 };

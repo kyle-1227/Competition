@@ -10,6 +10,9 @@
     "preview": "vite preview",
     "prepare": "husky install"
   },
+  "x-disabledDependencies": {
+    "district-data": "^0.0.17"
+  },
   "dependencies": {
     "@antv/g2": "5.0.0-beta.5",
     "@antv/l7": "^2.19.11",
@@ -18,7 +21,6 @@
     "@fontsource/noto-sans-sc": "5.0.0",
     "@vueuse/core": "^8.9.4",
     "axios": "^0.27.2",
-    "district-data": "^0.0.17",
     "echarts": "^6.0.0",
     "element-plus": "^2.4.2",
     "normalize.css": "^8.0.1",

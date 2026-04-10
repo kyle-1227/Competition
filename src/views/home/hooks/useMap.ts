@@ -3,16 +3,21 @@
 import { onMounted, watch, type Ref } from 'vue';
 import { LineLayer, PolygonLayer, Scene } from '@antv/l7';
 import { Map } from '@antv/l7-maps';
-import { RDBSource } from 'district-data';
 import {
   realProvinceData,
   scoreToColor,
+  fetchCountryGeoJson,
   fetchGeoJson,
   fetchCityData,
+  fetchCountyGeoJson,
+  fetchCountyData,
   realCityData,
+  realCountyData,
   selectedYear,
   gfDrillProvince,
+  gfDrillCity,
   gfRadarCityHoverGeoName,
+  rememberCityAdcode,
   isProvinceExcludedFromPanel,
   indicatorKeys,
   indicatorLabels,
@@ -28,7 +33,7 @@ export interface GfMapTooltipState {
   year: number;
   scoreText: string;
   rows: { label: string; value: string }[];
-  mode: 'province' | 'city';
+  mode: 'province' | 'city' | 'county';
 }
 
 export function createHiddenGfTooltip(): GfMapTooltipState {
@@ -73,6 +78,14 @@ function findCityRow(geoName: string): ProvinceGreenFinance | undefined {
   );
 }
 
+function findCountyRow(geoName: string): ProvinceGreenFinance | undefined {
+  const g = String(geoName || '').trim();
+  if (!g) return undefined;
+  return realCountyData.value.find(
+    (r) => r.province === g || g.startsWith(r.province) || r.province.startsWith(g),
+  );
+}
+
 function buildTooltipRowsFromRow(row: ProvinceGreenFinance | undefined): { label: string; value: string }[] {
   return indicatorKeys.map((key) => ({
     label: indicatorLabels[key],
@@ -91,18 +104,25 @@ function attachGreenFinanceMapTooltip(
   mapAreaEl: HTMLElement,
   mapRootEl: HTMLElement,
   tooltipRef: Ref<GfMapTooltipState>,
-  mode: 'province' | 'city',
+  mode: 'province' | 'city' | 'county',
+  shouldHandle?: (e: any) => boolean,
 ) {
   const OFFSET_X = 14;
   const OFFSET_Y = 14;
 
-  const applyPayload = (name: string, lng: number, lat: number) => {
+  const applyPayload = (name: string, lng: number, lat: number, hasData = true) => {
     const pt = scene.lngLatToContainer([lng, lat]);
     const areaR = mapAreaEl.getBoundingClientRect();
     const mapR = mapRootEl.getBoundingClientRect();
     const left = mapR.left - areaR.left + pt.x + OFFSET_X;
     const top = mapR.top - areaR.top + pt.y + OFFSET_Y;
-    const row = mode === 'province' ? findProvinceRow(name) : findCityRow(name);
+    const row = mode === 'province'
+      ? findProvinceRow(name)
+      : mode === 'city'
+        ? findCityRow(name)
+        : hasData
+          ? findCountyRow(name)
+          : undefined;
     tooltipRef.value = {
       visible: true,
       left,
@@ -118,7 +138,18 @@ function attachGreenFinanceMapTooltip(
     }
   };
 
+  const hide = () => {
+    tooltipRef.value = createHiddenGfTooltip();
+    if (mode === 'city') {
+      gfRadarCityHoverGeoName.value = '';
+    }
+  };
+
   const onPick = (e: any) => {
+    if (shouldHandle && !shouldHandle(e)) {
+      hide();
+      return;
+    }
     const name = e.feature?.properties?.name;
     if (!name) return;
     if (mode === 'province' && isProvinceExcludedFromPanel(name)) return;
@@ -127,14 +158,8 @@ function attachGreenFinanceMapTooltip(
     const lng = typeof ll.lng === 'number' ? ll.lng : ll[0];
     const lat = typeof ll.lat === 'number' ? ll.lat : ll[1];
     if (typeof lng !== 'number' || typeof lat !== 'number') return;
-    applyPayload(name, lng, lat);
-  };
-
-  const hide = () => {
-    tooltipRef.value = createHiddenGfTooltip();
-    if (mode === 'city') {
-      gfRadarCityHoverGeoName.value = '';
-    }
+    const hasData = mode !== 'county' || e.feature?.properties?._hasData !== false;
+    applyPayload(name, lng, lat, hasData);
   };
 
   layer.on('mouseenter', onPick);
@@ -147,9 +172,43 @@ function attachGreenFinanceMapTooltip(
 /** 绿金 3D 柱体顶面外轮廓白线（与柱顶同高，区分邻省/市） */
 const GF_EXTRUDE_TOP_LINE_COLOR = 'rgba(255,255,255,0.9)';
 const GF_EXTRUDE_TOP_LINE_WIDTH = 1.15;
+const GF_BACKDROP_COLOR = 'rgba(40, 50, 70, 0.4)';
+const GF_BACKDROP_TOP_LINE_COLOR = 'rgba(180, 196, 220, 0.3)';
+const GF_BACKDROP_SCORE = 100;
 /** 与 PolygonLayer `.size('_score', range)` 一致 */
 const GF_PROVINCE_EXTRUDE_RANGE: [number, number] = [20000, 2000000];
 const GF_CITY_EXTRUDE_RANGE: [number, number] = [12000, 1800000];
+const GF_COUNTY_EXTRUDE_RANGE: [number, number] = [8000, 1000000];
+const COUNTY_NO_DATA_COLOR = '#5c6470';
+const PROVINCE_COLOR_RAMP = [
+  '#1a237e',
+  '#0d47a1',
+  '#01579b',
+  '#006064',
+  '#1b5e20',
+  '#827717',
+  '#f57f17',
+  '#ff6f00',
+  '#e65100',
+  '#ffab00',
+];
+const GF_CINEMATIC_PADDING = { top: 80, bottom: 80, left: 80, right: 80 };
+const GF_CINEMATIC_DRILL_CAMERA = {
+  pitch: 55,
+  bearing: 5,
+  duration: 1800,
+  curve: 1.414,
+  essential: true,
+};
+const GF_CINEMATIC_RESET_CAMERA = {
+  center: [104.195397, 35.86166] as [number, number],
+  zoom: 3.2,
+  pitch: 45,
+  bearing: 0,
+  duration: 1800,
+  essential: true,
+};
+const GF_ACTIVE_COLOR = 'rgba(0,229,255,0.45)';
 
 function buildProvinceScoreMap(): Record<string, number> {
   const scoreMap: Record<string, number> = {};
@@ -182,8 +241,7 @@ function extrudeHeightMForScores(
   });
   const [r0, r1] = range;
   if (!Number.isFinite(minS) || minS === maxS) {
-    const mid = (r0 + r1) / 2;
-    return () => mid;
+    return () => r0;
   }
   return (f) => {
     const s = f.properties?._score;
@@ -278,6 +336,17 @@ function boundsFromFeatures(features: { geometry?: { coordinates?: unknown } }[]
   ];
 }
 
+function cloneFeatureCollection(fc: { type: string; features: any[] }): { type: string; features: any[] } {
+  return {
+    type: fc.type,
+    features: fc.features.map((f) => ({
+      ...f,
+      properties: { ...(f.properties || {}) },
+      geometry: f.geometry ? JSON.parse(JSON.stringify(f.geometry)) : f.geometry,
+    })),
+  };
+}
+
 export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<GfMapTooltipState>) {
   onMounted(() => {
     const scene = new Scene({
@@ -295,18 +364,83 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
       const mapEl = document.getElementById('gf-map');
       if (mapEl) mapEl.style.background = '#131722';
       const mapAreaEl = mapEl?.parentElement instanceof HTMLElement ? mapEl.parentElement : null;
+      const nativeMap = scene.getMapService?.()?.map || scene.map;
+
+      nativeMap?.doubleClickZoom?.disable?.();
 
       let cityExtrudeLayer: PolygonLayer | null = null;
-      let topOutlineLayer: LineLayer | null = null;
-      let cityFcSnapshot: { type: string; features: any[] } | null = null;
+      let countyExtrudeLayer: PolygonLayer | null = null;
+      let provinceTopOutlineLayer: LineLayer | null = null;
+      let cityTopOutlineLayer: LineLayer | null = null;
+      let countyTopOutlineLayer: LineLayer | null = null;
+      let cityBaseSnapshot: { type: string; features: any[] } | null = null;
+      let cityFullSnapshot: { type: string; features: any[] } | null = null;
+      let countyBaseSnapshot: { type: string; features: any[] } | null = null;
+      let countyFullSnapshot: { type: string; features: any[] } | null = null;
+      let citySnapshotProvince = '';
+      let countySnapshotCity = '';
       let drillGen = 0;
+      let countyDrillGen = 0;
 
-      const source = new RDBSource({ version: 2023 });
-      source.getData({ level: 'province', precision: 'low' }).then((geoData) => {
+      const runNextFrame = (cb: () => void) => {
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(cb);
+          return;
+        }
+        setTimeout(cb, 16);
+      };
+
+      const runCinematicFit = (bounds: [[number, number], [number, number]] | null) => {
+        if (!bounds) return;
+        runNextFrame(() => {
+          nativeMap?.stop?.();
+          if (nativeMap?.fitBounds) {
+            nativeMap.fitBounds(bounds, {
+              padding: GF_CINEMATIC_PADDING,
+              ...GF_CINEMATIC_DRILL_CAMERA,
+            });
+            return;
+          }
+          scene.fitBounds(bounds, {
+            padding: 80,
+            duration: GF_CINEMATIC_DRILL_CAMERA.duration,
+          });
+          scene.setPitch(GF_CINEMATIC_DRILL_CAMERA.pitch);
+          scene.setRotation?.(GF_CINEMATIC_DRILL_CAMERA.bearing);
+        });
+      };
+
+      const runNationalResetFlight = () => {
+        runNextFrame(() => {
+          nativeMap?.stop?.();
+          if (nativeMap?.flyTo) {
+            nativeMap.flyTo({ ...GF_CINEMATIC_RESET_CAMERA });
+            return;
+          }
+          scene.setZoomAndCenter(GF_CINEMATIC_RESET_CAMERA.zoom, GF_CINEMATIC_RESET_CAMERA.center);
+          scene.setPitch(GF_CINEMATIC_RESET_CAMERA.pitch);
+          scene.setRotation?.(GF_CINEMATIC_RESET_CAMERA.bearing);
+        });
+      };
+
+      const stepOutOneLevel = () => {
+        tooltipRef.value = createHiddenGfTooltip();
+        gfRadarCityHoverGeoName.value = '';
+        if (gfDrillCity.value) {
+          gfDrillCity.value = '';
+          return;
+        }
+        if (gfDrillProvince.value) {
+          gfDrillProvince.value = '';
+        }
+      };
+
+      fetchCountryGeoJson().then((geoData) => {
         const features = geoData.features.filter((f) => f.properties.name);
         const noPanelFeats = features.filter((f) => isProvinceExcludedFromPanel(f.properties.name));
         const mainFeats = features.filter((f) => !isProvinceExcludedFromPanel(f.properties.name));
         const fullOutlineGeo = { type: 'FeatureCollection', features };
+        const provinceBaseSnapshot = cloneFeatureCollection({ type: 'FeatureCollection', features: mainFeats });
 
         const noPanelFillGeo = { type: 'FeatureCollection', features: noPanelFeats };
         const noPanelFill = new PolygonLayer({ zIndex: 4 })
@@ -316,40 +450,55 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
           .style({ opacity: 0.95 });
         scene.addLayer(noPanelFill);
 
-        const applyScores = () => {
+        const applyProvinceScoresToFc = (fc: { features: any[] }) => {
           const scoreMap = buildProvinceScoreMap();
-          mainFeats.forEach((f) => {
-            const s = scoreMap[f.properties.name] || 0;
+          fc.features.forEach((f) => {
+            const s = scoreMap[f.properties?.name || ''] || 0;
             f.properties._score = s ** 1.5;
             f.properties._rawScore = s;
+            f.properties._color = scoreToColor(s);
+            f.properties._isBackdrop = false;
           });
         };
-        applyScores();
-        const provinceGeo = { type: 'FeatureCollection', features: mainFeats };
+
+        let provinceFullSnapshot = cloneFeatureCollection(provinceBaseSnapshot);
+        applyProvinceScoresToFc(provinceFullSnapshot);
+
+        const restoreProvinceForegroundGeo = () => {
+          const fc = cloneFeatureCollection(provinceBaseSnapshot);
+          applyProvinceScoresToFc(fc);
+          provinceFullSnapshot = cloneFeatureCollection(fc);
+          return fc;
+        };
+
+        const buildProvinceBackdropGeo = (selectedProvince: string) => {
+          const fc = cloneFeatureCollection(provinceFullSnapshot);
+          fc.features = fc.features
+            .filter((f) => f.properties?.name !== selectedProvince)
+            .map((f) => ({
+              ...f,
+              properties: {
+                ...(f.properties || {}),
+                _score: GF_BACKDROP_SCORE,
+                _rawScore: 0,
+                _color: GF_BACKDROP_COLOR,
+                _isBackdrop: true,
+              },
+            }));
+          return fc;
+        };
 
         const extrudeLayer = new PolygonLayer({ zIndex: 5 })
-          .source(provinceGeo)
+          .source(provinceFullSnapshot)
           .shape('extrude')
           .size('_score', GF_PROVINCE_EXTRUDE_RANGE)
-          .color('_rawScore', [
-            '#1a237e',
-            '#0d47a1',
-            '#01579b',
-            '#006064',
-            '#1b5e20',
-            '#827717',
-            '#f57f17',
-            '#ff6f00',
-            '#e65100',
-            '#ffab00',
-          ])
+          .color('_rawScore', PROVINCE_COLOR_RAMP)
           .style({ heightfixed: true, pickLight: true, opacity: 0.88 })
-          .active({ color: 'rgba(0,229,255,0.45)' });
+          .active({ color: GF_ACTIVE_COLOR });
         scene.addLayer(extrudeLayer);
 
-        const provinceTopOutlineGeo = buildExtrudeTopOutlines(provinceGeo, GF_PROVINCE_EXTRUDE_RANGE);
-        topOutlineLayer = new LineLayer({ zIndex: 15 })
-          .source(provinceTopOutlineGeo)
+        provinceTopOutlineLayer = new LineLayer({ zIndex: 15 })
+          .source(buildExtrudeTopOutlines(provinceFullSnapshot, GF_PROVINCE_EXTRUDE_RANGE))
           .shape('line')
           .color(GF_EXTRUDE_TOP_LINE_COLOR)
           .size(GF_EXTRUDE_TOP_LINE_WIDTH)
@@ -359,7 +508,7 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
             vertexHeightScale: 1,
             depth: true,
           });
-        scene.addLayer(topOutlineLayer);
+        scene.addLayer(provinceTopOutlineLayer);
 
         const borderLayer = new LineLayer({ zIndex: 10 })
           .source(fullOutlineGeo)
@@ -369,16 +518,50 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
           .style({ opacity: 0.75 });
         scene.addLayer(borderLayer);
 
+        const setProvinceLayerData = (fc: { type: string; features: any[] }, backdrop = false) => {
+          const nextGeo = cloneFeatureCollection(fc);
+          extrudeLayer.setData(nextGeo);
+          if (backdrop) {
+            extrudeLayer.color('_color');
+            extrudeLayer.active(false);
+            provinceTopOutlineLayer?.color(GF_BACKDROP_TOP_LINE_COLOR);
+            borderLayer.color('rgba(140,168,190,0.18)');
+            borderLayer.style({ opacity: 0.45 });
+            noPanelFill.color('rgba(92,100,112,0.72)');
+            noPanelFill.style({ opacity: 0.72 });
+          } else {
+            extrudeLayer.color('_rawScore', PROVINCE_COLOR_RAMP);
+            extrudeLayer.active({ color: GF_ACTIVE_COLOR });
+            provinceTopOutlineLayer?.color(GF_EXTRUDE_TOP_LINE_COLOR);
+            borderLayer.color('rgba(0,229,255,0.38)');
+            borderLayer.style({ opacity: 0.75 });
+            noPanelFill.color('#5c6470');
+            noPanelFill.style({ opacity: 0.95 });
+          }
+          provinceTopOutlineLayer?.setData(buildExtrudeTopOutlines(nextGeo, GF_PROVINCE_EXTRUDE_RANGE));
+          extrudeLayer.show();
+          provinceTopOutlineLayer?.show();
+        };
+
         extrudeLayer.on('click', (e) => {
+          if (gfDrillProvince.value) return;
           const name = e.feature?.properties?.name;
-          if (name && !isProvinceExcludedFromPanel(name)) {
+          if (name && !isProvinceExcludedFromPanel(name) && e.feature?.properties?._isBackdrop !== true) {
             selectedProv.value = name;
             gfDrillProvince.value = name;
           }
         });
 
         if (mapAreaEl && mapEl) {
-          attachGreenFinanceMapTooltip(extrudeLayer, scene, mapAreaEl, mapEl, tooltipRef, 'province');
+          attachGreenFinanceMapTooltip(
+            extrudeLayer,
+            scene,
+            mapAreaEl,
+            mapEl,
+            tooltipRef,
+            'province',
+            () => !gfDrillProvince.value,
+          );
           mapEl.addEventListener('mouseleave', () => {
             tooltipRef.value = createHiddenGfTooltip();
             gfRadarCityHoverGeoName.value = '';
@@ -386,11 +569,15 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
         }
 
         watch(
-          [selectedYear, realProvinceData, realCityData],
+          [selectedYear, realProvinceData, realCityData, realCountyData],
           () => {
             const t = tooltipRef.value;
             if (!t.visible || !t.regionName) return;
-            const row = t.mode === 'province' ? findProvinceRow(t.regionName) : findCityRow(t.regionName);
+            const row = t.mode === 'province'
+              ? findProvinceRow(t.regionName)
+              : t.mode === 'city'
+                ? findCityRow(t.regionName)
+                : findCountyRow(t.regionName);
             tooltipRef.value = {
               ...t,
               year: selectedYear.value,
@@ -402,6 +589,8 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
         );
 
         watch(gfDrillProvince, () => {
+          gfDrillCity.value = '';
+          realCountyData.value = [];
           tooltipRef.value = createHiddenGfTooltip();
           gfRadarCityHoverGeoName.value = '';
         });
@@ -412,27 +601,185 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
             const geoName = f.properties?.name || '';
             const s = matchCityScore(geoName, rows);
             f.properties._score = s ** 1.5;
+            f.properties._rawScore = s;
             f.properties._color = scoreToColor(s);
+            f.properties._hasData = true;
+            f.properties._isBackdrop = false;
           });
         };
 
-        const refreshCityLayers = () => {
-          if (!gfDrillProvince.value || !cityExtrudeLayer || !topOutlineLayer || !cityFcSnapshot) return;
-          applyCityScoresToFc(cityFcSnapshot);
-          const newGeo = { type: 'FeatureCollection', features: [...cityFcSnapshot.features] };
-          cityExtrudeLayer.setData(newGeo);
-          topOutlineLayer.setData(buildExtrudeTopOutlines(newGeo, GF_CITY_EXTRUDE_RANGE));
-          scene.render();
+        const applyCountyScoresToFc = (fc: { features: any[] }) => {
+          const rows = realCountyData.value;
+          fc.features.forEach((f) => {
+            const geoName = String(f.properties?.name || '').trim();
+            const row = rows.find(
+              (r) => r.province === geoName || geoName.startsWith(r.province) || r.province.startsWith(geoName),
+            );
+            if (row) {
+              f.properties._hasData = true;
+              f.properties._rawScore = row.score;
+              f.properties._score = row.score ** 1.5;
+              f.properties._color = scoreToColor(row.score);
+            } else {
+              f.properties._hasData = false;
+              f.properties._rawScore = 0;
+              f.properties._score = 0.001;
+              f.properties._color = COUNTY_NO_DATA_COLOR;
+            }
+            f.properties._isBackdrop = false;
+          });
+        };
+
+        const restoreCityForegroundGeo = () => {
+          if (!cityBaseSnapshot) return null;
+          const fc = cloneFeatureCollection(cityBaseSnapshot);
+          applyCityScoresToFc(fc);
+          cityFullSnapshot = cloneFeatureCollection(fc);
+          return fc;
+        };
+
+        const buildCityBackdropGeo = (selectedCity: string) => {
+          if (!cityFullSnapshot) return null;
+          const fc = cloneFeatureCollection(cityFullSnapshot);
+          fc.features = fc.features
+            .filter((f) => f.properties?.name !== selectedCity)
+            .map((f) => ({
+              ...f,
+              properties: {
+                ...(f.properties || {}),
+                _score: GF_BACKDROP_SCORE,
+                _rawScore: 0,
+                _color: GF_BACKDROP_COLOR,
+                _isBackdrop: true,
+              },
+            }));
+          return fc;
+        };
+
+        const restoreCountyForegroundGeo = () => {
+          if (!countyBaseSnapshot) return null;
+          const fc = cloneFeatureCollection(countyBaseSnapshot);
+          applyCountyScoresToFc(fc);
+          countyFullSnapshot = cloneFeatureCollection(fc);
+          return fc;
+        };
+
+        const ensureCityLayers = (fc: { type: string; features: any[] }) => {
+          if (!cityExtrudeLayer) {
+            cityExtrudeLayer = new PolygonLayer({ zIndex: 6 })
+              .source(fc)
+              .shape('extrude')
+              .size('_score', GF_CITY_EXTRUDE_RANGE)
+              .color('_color')
+              .style({ heightfixed: true, pickLight: true, opacity: 0.88 })
+              .active({ color: GF_ACTIVE_COLOR });
+            scene.addLayer(cityExtrudeLayer);
+            cityExtrudeLayer.on('click', (e) => {
+              if (!gfDrillProvince.value || gfDrillCity.value) return;
+              const name = e.feature?.properties?.name;
+              if (name && e.feature?.properties?._isBackdrop !== true) {
+                gfDrillCity.value = name;
+              }
+            });
+            if (mapAreaEl && mapEl) {
+              attachGreenFinanceMapTooltip(
+                cityExtrudeLayer,
+                scene,
+                mapAreaEl,
+                mapEl,
+                tooltipRef,
+                'city',
+                () => !!gfDrillProvince.value && !gfDrillCity.value,
+              );
+            }
+          }
+          if (!cityTopOutlineLayer) {
+            cityTopOutlineLayer = new LineLayer({ zIndex: 16 })
+              .source(buildExtrudeTopOutlines(fc, GF_CITY_EXTRUDE_RANGE))
+              .shape('line')
+              .color(GF_EXTRUDE_TOP_LINE_COLOR)
+              .size(GF_EXTRUDE_TOP_LINE_WIDTH)
+              .style({
+                opacity: 0.94,
+                heightfixed: true,
+                vertexHeightScale: 1,
+                depth: true,
+              });
+            scene.addLayer(cityTopOutlineLayer);
+          }
+        };
+
+        const setCityLayerData = (fc: { type: string; features: any[] }, backdrop = false) => {
+          ensureCityLayers(fc);
+          const nextGeo = cloneFeatureCollection(fc);
+          cityExtrudeLayer?.setData(nextGeo);
+          if (backdrop) {
+            cityExtrudeLayer?.active(false);
+            cityTopOutlineLayer?.color(GF_BACKDROP_TOP_LINE_COLOR);
+          } else {
+            cityExtrudeLayer?.active({ color: GF_ACTIVE_COLOR });
+            cityTopOutlineLayer?.color(GF_EXTRUDE_TOP_LINE_COLOR);
+          }
+          cityTopOutlineLayer?.setData(buildExtrudeTopOutlines(nextGeo, GF_CITY_EXTRUDE_RANGE));
+          cityExtrudeLayer?.show();
+          cityTopOutlineLayer?.show();
+        };
+
+        const ensureCountyLayers = (fc: { type: string; features: any[] }) => {
+          if (!countyExtrudeLayer) {
+            countyExtrudeLayer = new PolygonLayer({ zIndex: 7 })
+              .source(fc)
+              .shape('extrude')
+              .size('_score', GF_COUNTY_EXTRUDE_RANGE)
+              .color('_color')
+              .style({ heightfixed: true, pickLight: true, opacity: 0.88 })
+              .active({ color: GF_ACTIVE_COLOR });
+            scene.addLayer(countyExtrudeLayer);
+            if (mapAreaEl && mapEl) {
+              attachGreenFinanceMapTooltip(
+                countyExtrudeLayer,
+                scene,
+                mapAreaEl,
+                mapEl,
+                tooltipRef,
+                'county',
+                () => !!gfDrillProvince.value && !!gfDrillCity.value,
+              );
+            }
+          }
+          if (!countyTopOutlineLayer) {
+            countyTopOutlineLayer = new LineLayer({ zIndex: 17 })
+              .source(buildExtrudeTopOutlines(fc, GF_COUNTY_EXTRUDE_RANGE))
+              .shape('line')
+              .color(GF_EXTRUDE_TOP_LINE_COLOR)
+              .size(GF_EXTRUDE_TOP_LINE_WIDTH)
+              .style({
+                opacity: 0.94,
+                heightfixed: true,
+                vertexHeightScale: 1,
+                depth: true,
+              });
+            scene.addLayer(countyTopOutlineLayer);
+          }
+        };
+
+        const setCountyLayerData = (fc: { type: string; features: any[] }) => {
+          ensureCountyLayers(fc);
+          const nextGeo = cloneFeatureCollection(fc);
+          countyExtrudeLayer?.setData(nextGeo);
+          countyTopOutlineLayer?.setData(buildExtrudeTopOutlines(nextGeo, GF_COUNTY_EXTRUDE_RANGE));
+          countyExtrudeLayer?.active({ color: GF_ACTIVE_COLOR });
+          countyTopOutlineLayer?.color(GF_EXTRUDE_TOP_LINE_COLOR);
+          countyExtrudeLayer?.show();
+          countyTopOutlineLayer?.show();
         };
 
         watch(
           realProvinceData,
           () => {
             if (gfDrillProvince.value) return;
-            applyScores();
-            const pg = { type: 'FeatureCollection', features: [...mainFeats] };
-            extrudeLayer.setData(pg);
-            topOutlineLayer?.setData(buildExtrudeTopOutlines(pg, GF_PROVINCE_EXTRUDE_RANGE));
+            const provinceGeo = restoreProvinceForegroundGeo();
+            setProvinceLayerData(provinceGeo, false);
             scene.render();
           },
           { deep: true, immediate: true },
@@ -441,37 +788,137 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
         watch(
           realCityData,
           () => {
-            if (!gfDrillProvince.value) return;
-            refreshCityLayers();
+            if (!gfDrillProvince.value || !cityBaseSnapshot || citySnapshotProvince !== gfDrillProvince.value) return;
+            const nextGeo = gfDrillCity.value ? buildCityBackdropGeo(gfDrillCity.value) : restoreCityForegroundGeo();
+            if (!nextGeo) return;
+            setCityLayerData(nextGeo, !!gfDrillCity.value);
           },
           { deep: true },
         );
 
-        watch(gfDrillProvince, async (prov) => {
-          const gen = ++drillGen;
+        watch(
+          realCountyData,
+          () => {
+            if (!gfDrillCity.value || !countyBaseSnapshot || countySnapshotCity !== gfDrillCity.value) return;
+            const countyGeo = restoreCountyForegroundGeo();
+            if (!countyGeo) return;
+            setCountyLayerData(countyGeo);
+          },
+          { deep: true },
+        );
 
-          if (!prov) {
-            cityExtrudeLayer?.hide();
-            cityFcSnapshot = null;
-            applyScores();
-            const pg = { type: 'FeatureCollection', features: [...mainFeats] };
-            extrudeLayer.setData(pg);
-            extrudeLayer.show();
-            topOutlineLayer?.setData(buildExtrudeTopOutlines(pg, GF_PROVINCE_EXTRUDE_RANGE));
-            topOutlineLayer?.show();
-            borderLayer.show();
-            noPanelFill.show();
-            scene.setZoomAndCenter(3.2, [104.195397, 35.86166]);
-            scene.setPitch(45);
-            fetchCityData('', selectedYear.value);
+        watch(selectedYear, () => {
+          if (!gfDrillProvince.value || !gfDrillCity.value) return;
+          fetchCountyData(gfDrillProvince.value, gfDrillCity.value, selectedYear.value);
+        });
+
+        scene.on('contextmenu', (e: any) => {
+          e?.preventDefault?.();
+          e?.originalEvent?.preventDefault?.();
+          stepOutOneLevel();
+        });
+
+        scene.on('dblclick', (e: any) => {
+          e?.preventDefault?.();
+          e?.originalEvent?.preventDefault?.();
+          if (e?.feature) return;
+          stepOutOneLevel();
+        });
+
+        watch(gfDrillCity, async (city) => {
+          const gen = ++countyDrillGen;
+          tooltipRef.value = createHiddenGfTooltip();
+          gfRadarCityHoverGeoName.value = '';
+
+          if (!city) {
+            countyExtrudeLayer?.hide();
+            countyTopOutlineLayer?.hide();
+            countyBaseSnapshot = null;
+            countyFullSnapshot = null;
+            countySnapshotCity = '';
+            if (!gfDrillProvince.value || !cityBaseSnapshot || citySnapshotProvince !== gfDrillProvince.value) {
+              scene.render();
+              return;
+            }
+            const cityGeo = restoreCityForegroundGeo();
+            if (!cityGeo) {
+              scene.render();
+              return;
+            }
+            setCityLayerData(cityGeo, false);
             scene.render();
+            runCinematicFit(boundsFromFeatures(cityGeo.features));
             return;
           }
 
-          extrudeLayer.hide();
-          topOutlineLayer?.hide();
-          borderLayer.hide();
-          noPanelFill.hide();
+          const prov = gfDrillProvince.value;
+          if (!prov || !cityBaseSnapshot || citySnapshotProvince !== prov) {
+            gfDrillCity.value = '';
+            return;
+          }
+
+          const cityBackdropGeo = buildCityBackdropGeo(city);
+          if (!cityBackdropGeo) {
+            gfDrillCity.value = '';
+            return;
+          }
+
+          setCityLayerData(cityBackdropGeo, true);
+          countyExtrudeLayer?.hide();
+          countyTopOutlineLayer?.hide();
+          countyBaseSnapshot = null;
+          countyFullSnapshot = null;
+          countySnapshotCity = '';
+          scene.render();
+
+          try {
+            const [geoRes] = await Promise.all([
+              fetchCountyGeoJson(city),
+              fetchCountyData(prov, city, selectedYear.value),
+            ]);
+            if (gen !== countyDrillGen) return;
+
+            countyBaseSnapshot = cloneFeatureCollection(geoRes);
+            countySnapshotCity = city;
+            const countyGeo = restoreCountyForegroundGeo();
+            if (!countyGeo) throw new Error('county geo snapshot missing');
+            setCountyLayerData(countyGeo);
+            scene.render();
+            runCinematicFit(boundsFromFeatures(countyGeo.features));
+            return;
+          } catch (err) {
+            console.error('绿色金融地图县级下钻失败:', err);
+            if (gen !== countyDrillGen) return;
+            gfDrillCity.value = '';
+          }
+        });
+
+        watch(gfDrillProvince, async (prov) => {
+          const gen = ++drillGen;
+          countyDrillGen += 1;
+          countyExtrudeLayer?.hide();
+          countyTopOutlineLayer?.hide();
+          countyBaseSnapshot = null;
+          countyFullSnapshot = null;
+          countySnapshotCity = '';
+
+          if (!prov) {
+            cityExtrudeLayer?.hide();
+            cityTopOutlineLayer?.hide();
+            cityBaseSnapshot = null;
+            cityFullSnapshot = null;
+            citySnapshotProvince = '';
+            const provinceGeo = restoreProvinceForegroundGeo();
+            setProvinceLayerData(provinceGeo, false);
+            fetchCityData('', selectedYear.value);
+            scene.render();
+            runNationalResetFlight();
+            return;
+          }
+
+          const provinceBackdropGeo = buildProvinceBackdropGeo(prov);
+          setProvinceLayerData(provinceBackdropGeo, true);
+          scene.render();
 
           try {
             await fetchCityData(prov, selectedYear.value);
@@ -479,48 +926,24 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
 
             const geoRes = await fetchGeoJson(prov);
             if (gen !== drillGen) return;
-
-            const fc = {
-              type: 'FeatureCollection',
-              features: geoRes.features.map((f: any) => ({
-                ...f,
-                properties: { ...(f.properties || {}) },
-              })),
-            };
-            applyCityScoresToFc(fc);
-            cityFcSnapshot = fc;
-
-            if (!cityExtrudeLayer) {
-              cityExtrudeLayer = new PolygonLayer({ zIndex: 6 })
-                .source(fc)
-                .shape('extrude')
-                .size('_score', GF_CITY_EXTRUDE_RANGE)
-                .color('_color')
-                .style({ heightfixed: true, pickLight: true, opacity: 0.88 })
-                .active({ color: 'rgba(0,229,255,0.45)' });
-              scene.addLayer(cityExtrudeLayer);
-              if (mapAreaEl && mapEl) {
-                attachGreenFinanceMapTooltip(cityExtrudeLayer, scene, mapAreaEl, mapEl, tooltipRef, 'city');
-              }
-            } else {
-              cityExtrudeLayer.setData(fc);
-            }
-
-            topOutlineLayer?.setData(buildExtrudeTopOutlines(fc, GF_CITY_EXTRUDE_RANGE));
-            cityExtrudeLayer.show();
-            topOutlineLayer?.show();
-
-            const bounds = boundsFromFeatures(fc.features);
-            if (bounds) {
-              scene.fitBounds(bounds, { padding: 50, duration: 600 });
-            }
-            scene.setPitch(50);
+            cityBaseSnapshot = cloneFeatureCollection(geoRes);
+            citySnapshotProvince = prov;
+            cityBaseSnapshot.features.forEach((f: any) => {
+              rememberCityAdcode(f.properties?.name || '', f.properties?.adcode ?? '');
+            });
+            const cityGeo = restoreCityForegroundGeo();
+            if (!cityGeo) throw new Error('city geo snapshot missing');
+            setCityLayerData(cityGeo, false);
             scene.render();
+            runCinematicFit(boundsFromFeatures(cityGeo.features));
+            return;
           } catch (err) {
             console.error('绿色金融地图下钻失败:', err);
             gfDrillProvince.value = '';
           }
         });
+      }).catch((err) => {
+        console.error('绿色金融地图省级 GeoJSON 加载失败:', err);
       });
     });
   });
@@ -542,8 +965,7 @@ export function useCarbonMap() {
       const mapEl = document.getElementById('carbon-map');
       if (mapEl) mapEl.style.background = '#131722';
 
-      const source = new RDBSource({ version: 2023 });
-      source.getData({ level: 'province', precision: 'low' }).then((geoData) => {
+      fetchCountryGeoJson().then((geoData) => {
         const features = geoData.features.filter((f) => f.properties.name);
         const noPanelFeats = features.filter((f) => isProvinceExcludedFromPanel(f.properties.name));
         const mainFeats = features.filter((f) => !isProvinceExcludedFromPanel(f.properties.name));
@@ -605,6 +1027,8 @@ export function useCarbonMap() {
           },
           { deep: true, immediate: true },
         );
+      }).catch((err) => {
+        console.error('碳排地图省级 GeoJSON 加载失败:', err);
       });
     });
   });
