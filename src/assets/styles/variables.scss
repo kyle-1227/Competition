@@ -1,1 +1,17 @@
-$theme-color: #2080F0FF
+// 主题色与强调色
+$theme-color: #2080F0;
+$tech-cyan: #00f8ff; // 典型科技青色（用于文字高亮、发光边框）
+$tech-green: #00ffaa; // 绿色金融代表色（用于增长、正面数据）
+$tech-orange: #ff9d00; // 碳排放警告色（用于高危、负面数据）
+
+// 背景与面板色彩
+$bg-dark: #0d0b1a;
+$panel-bg: rgba(20, 25, 46, 0.6); // 面板半透明背景，配合毛玻璃效果最佳
+$border-color: rgba(0, 248, 255, 0.3); // 面板边框色
+
+// 阴影与发光效果
+$glow-shadow: 0 0 10px rgba(0, 248, 255, 0.5), 0 0 20px rgba(0, 248, 255, 0.3);
+$box-shadow-panel: inset 0 0 20px rgba(0, 248, 255, 0.1), 0 4px 15px rgba(0, 0, 0, 0.5);
+
+// 字体层级
+$font-title: 'DIN Alternate', 'Noto Sans SC', sans-serif;

@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { useCarbonBar, getCarbonRowsFromApi } from './hooks/useChart';
 import { useCarbonMap } from './hooks/useMap';
-import { NO_PANEL_DATA_REGIONS_LEGEND } from './hooks/provinceData';
+import {
+  NO_PANEL_DATA_REGIONS_LEGEND,
+  fetchProvinceData,
+  fetchCityData,
+  selectedYear,
+  timelineYear,
+  selectedProvince,
+} from './hooks/provinceData';
 
 useCarbonBar();
 useCarbonMap();
@@ -17,6 +24,32 @@ const topProvince = computed(() => {
   const top = [...carbonRows.value].sort((a, b) => b.carbonEmission - a.carbonEmission)[0];
   return top ? top.province.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, '') : '—';
 });
+const yearMarks = {
+  2000: '2000',
+  2005: '2005',
+  2010: '2010',
+  2015: '2015',
+  2020: '2020',
+  2024: '2024',
+};
+
+function commitTimelineYear() {
+  const y = timelineYear.value;
+  if (y === selectedYear.value) return;
+  selectedYear.value = y;
+  fetchProvinceData(y);
+  if (selectedProvince.value) {
+    fetchCityData(selectedProvince.value, y);
+  }
+}
+
+watch(
+  selectedYear,
+  (y) => {
+    timelineYear.value = y;
+  },
+  { immediate: true },
+);
 </script>
 <template>
   <div class="biz-wrap">
@@ -42,6 +75,20 @@ const topProvince = computed(() => {
     </div>
     <div class="biz-wrap-map">
       <div id="carbon-map" />
+      <div class="map-timeline">
+        <span class="map-timeline__label">数据年份</span>
+        <el-slider
+          v-model="timelineYear"
+          :min="2000"
+          :max="2024"
+          :step="1"
+          :marks="yearMarks"
+          :format-tooltip="(v: number) => `${v}年`"
+          class="map-timeline__slider"
+          @change="commitTimelineYear"
+        />
+        <div class="map-timeline__badge">{{ timelineYear }}年</div>
+      </div>
       <div class="map-legend">
         <div class="legend-title">碳排放总量（万吨）</div>
         <div class="legend-bar" />
@@ -65,20 +112,23 @@ export default { name: 'BizCarbon' };
 .biz-wrap {
   display: flex;
   height: 100%;
-  padding: 10px 0 25px 0;
+  gap: 12px;
+  padding: 0;
   &-sidebar {
     flex: 0 0 25%;
     max-width: 25%;
-    padding: 6px 10px;
+    min-width: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
     gap: 6px;
     overflow-y: auto;
+    overflow-x: hidden;
     &::-webkit-scrollbar {
       width: 3px;
     }
     &::-webkit-scrollbar-thumb {
-      background: rgba(0, 229, 255, 0.2);
+      background: rgba($tech-cyan, 0.2);
       border-radius: 2px;
     }
   }
@@ -94,22 +144,80 @@ export default { name: 'BizCarbon' };
       top: 10px;
       left: 10px;
       z-index: 999;
-      background: rgba(10, 15, 30, 0.85);
-      border: 1px solid rgba(0, 229, 255, 0.2);
-      border-radius: 6px;
+      background: $panel-bg;
+      border: 1px solid $border-color;
+      border-radius: 10px;
       padding: 8px 12px;
-      backdrop-filter: blur(4px);
+      backdrop-filter: blur(10px);
+      box-shadow: $box-shadow-panel;
       width: min(220px, 40vw);
     }
+    .map-timeline {
+      position: absolute;
+      top: 10px;
+      left: 278px;
+      right: 36px;
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 48px;
+      padding: 8px 18px;
+      background: $panel-bg;
+      border: 1px solid $border-color;
+      border-radius: 10px;
+      backdrop-filter: blur(10px);
+      box-shadow: $box-shadow-panel;
+    }
+    .map-timeline__label {
+      color: rgba($tech-cyan, 0.84);
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      white-space: nowrap;
+    }
+    .map-timeline__slider {
+      flex: 1;
+      :deep(.el-slider__runway) {
+        background: rgba($tech-cyan, 0.12);
+      }
+      :deep(.el-slider__bar) {
+        background: linear-gradient(90deg, $theme-color, $tech-cyan, $tech-green, $tech-orange);
+      }
+      :deep(.el-slider__button) {
+        width: 14px;
+        height: 14px;
+        border: 2px solid $tech-cyan;
+        background: $bg-dark;
+        box-shadow: 0 0 0 4px rgba($tech-cyan, 0.08), 0 0 14px rgba($tech-cyan, 0.4);
+      }
+      :deep(.el-slider__marks-text) {
+        color: rgba(255, 255, 255, 0.45);
+        font-size: 10px;
+      }
+    }
+    .map-timeline__badge {
+      flex-shrink: 0;
+      background: rgba($tech-cyan, 0.12);
+      border: 1px solid rgba($tech-cyan, 0.4);
+      border-radius: 999px;
+      padding: 4px 12px;
+      color: $tech-cyan;
+      font-size: 14px;
+      font-weight: bold;
+      box-shadow: inset 0 0 14px rgba($tech-cyan, 0.08);
+      white-space: nowrap;
+    }
     .legend-title {
-      color: rgba(0, 229, 255, 0.8);
+      color: rgba($tech-cyan, 0.82);
       font-size: 11px;
+      letter-spacing: 0.14em;
       margin-bottom: 6px;
     }
     .legend-bar {
       height: 8px;
       border-radius: 4px;
-      background: linear-gradient(90deg, #1b5e20, #66bb6a, #ffcc80, #ff9800, #b71c1c);
+      background: linear-gradient(90deg, #0c8c61, $tech-green, #ffb74d, $tech-orange, #bf6700);
+      box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.12);
     }
     .legend-labels {
       display: flex;
@@ -154,6 +262,8 @@ export default { name: 'BizCarbon' };
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
 }
 .chart-section {
   flex: 1;
@@ -162,39 +272,47 @@ export default { name: 'BizCarbon' };
 .chart-box {
   flex: 1;
   min-height: 320px;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
 }
 .chart-title {
   text-align: center;
-  color: rgba(0, 229, 255, 0.85);
+  color: rgba($tech-cyan, 0.86);
   font-size: 13px;
+  font-family: $font-title;
   padding-bottom: 4px;
-  letter-spacing: 1px;
+  letter-spacing: 0.14em;
   flex-shrink: 0;
+  text-shadow: 0 0 10px rgba($tech-cyan, 0.16);
 }
 .info-card {
-  background: rgba(10, 15, 30, 0.7);
-  border: 1px solid rgba(0, 229, 255, 0.12);
-  border-radius: 6px;
+  background: $panel-bg;
+  border: 1px solid rgba($tech-cyan, 0.16);
+  border-radius: 12px;
   padding: 8px 12px;
+  box-shadow: $box-shadow-panel;
 }
 .info-label {
   color: rgba(200, 220, 255, 0.45);
   font-size: 10px;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.12em;
   margin-bottom: 2px;
 }
 .info-value {
   color: #fff;
   font-size: 18px;
   font-weight: bold;
-  font-family: 'DIN Alternate', 'DIN', sans-serif;
+  font-family: $font-title;
+  text-shadow: 0 0 10px rgba($tech-cyan, 0.14);
   .info-unit {
     font-size: 11px;
     color: rgba(255, 255, 255, 0.4);
     font-weight: normal;
   }
   &.highlight {
-    color: #ff6d00;
+    color: $tech-orange;
+    text-shadow: 0 0 12px rgba($tech-orange, 0.24);
   }
 }
 </style>

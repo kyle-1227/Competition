@@ -40,93 +40,116 @@ useMacroChart(selectedProvince);
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 10px 20px 25px;
+  padding: 0;
   position: relative;
+  background: none;
 }
 .province-selector {
   position: absolute;
-  top: 16px;
-  left: 24px;
+  top: 0;
+  left: 0;
   z-index: 100;
   min-width: 168px;
   max-width: min(240px, 42vw);
-  background: rgba(10, 15, 30, 0.82);
-  border: 1px solid rgba(0, 229, 255, 0.22);
-  border-radius: 8px;
+  background: $panel-bg;
+  border: 1px solid $border-color;
+  border-radius: 12px;
   padding: 8px 12px;
-  backdrop-filter: blur(6px);
-  box-shadow:
-    0 0 16px rgba(0, 229, 255, 0.08),
-    inset 0 0 18px rgba(0, 229, 255, 0.04);
+  backdrop-filter: blur(10px);
+  box-shadow: $box-shadow-panel;
   .selector-label {
-    color: rgba(0, 229, 255, 0.7);
+    color: rgba($tech-cyan, 0.74);
     font-size: 11px;
     margin-bottom: 4px;
-    letter-spacing: 1px;
+    letter-spacing: 0.14em;
   }
   :deep(.el-select) {
     width: 100%;
   }
   :deep(.el-select__wrapper) {
-    background: rgba(0, 229, 255, 0.06) !important;
-    border: 1px solid rgba(0, 229, 255, 0.25) !important;
-    box-shadow: 0 0 8px rgba(0, 229, 255, 0.08) !important;
-    border-radius: 6px !important;
+    background: rgba($tech-cyan, 0.06) !important;
+    border: 1px solid rgba($tech-cyan, 0.25) !important;
+    box-shadow: inset 0 0 10px rgba($tech-cyan, 0.08) !important;
+    border-radius: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    min-height: 40px !important;
+    padding: 0 12px !important;
     transition: border-color 0.3s, box-shadow 0.3s;
     &:hover,
     &.is-focused {
-      border-color: rgba(0, 229, 255, 0.5) !important;
-      box-shadow: 0 0 12px rgba(0, 229, 255, 0.15) !important;
+      border-color: rgba($tech-cyan, 0.5) !important;
+      box-shadow: 0 0 12px rgba($tech-cyan, 0.15) !important;
     }
   }
   :deep(.el-select__selected-item) {
-    color: #00e5ff !important;
+    color: $tech-cyan !important;
     font-weight: bold;
+    display: flex !important;
+    align-items: center !important;
+    min-height: 24px !important;
+    line-height: 1 !important;
   }
   :deep(.el-select__placeholder) {
-    color: rgba(0, 229, 255, 0.5) !important;
+    color: rgba($tech-cyan, 0.5) !important;
+    display: flex !important;
+    align-items: center !important;
+    min-height: 24px !important;
+    line-height: 1 !important;
   }
   :deep(.el-select__suffix) {
-    color: rgba(0, 229, 255, 0.6) !important;
+    color: rgba($tech-cyan, 0.6) !important;
   }
   :deep(.el-input__wrapper) {
-    background: rgba(0, 229, 255, 0.06) !important;
-    border: 1px solid rgba(0, 229, 255, 0.25) !important;
-    box-shadow: 0 0 8px rgba(0, 229, 255, 0.08) !important;
-    border-radius: 6px !important;
+    background: rgba($tech-cyan, 0.06) !important;
+    border: 1px solid rgba($tech-cyan, 0.25) !important;
+    box-shadow: inset 0 0 10px rgba($tech-cyan, 0.08) !important;
+    border-radius: 8px !important;
+    min-height: 40px !important;
+    padding: 0 12px !important;
     &:hover,
     &.is-focus {
-      border-color: rgba(0, 229, 255, 0.5) !important;
-      box-shadow: 0 0 12px rgba(0, 229, 255, 0.15) !important;
+      border-color: rgba($tech-cyan, 0.5) !important;
+      box-shadow: 0 0 12px rgba($tech-cyan, 0.15) !important;
     }
   }
   :deep(.el-input__inner) {
-    color: #00e5ff !important;
+    color: $tech-cyan !important;
     font-weight: bold;
+    line-height: 1 !important;
   }
   :deep(.el-input__suffix) {
-    color: rgba(0, 229, 255, 0.6) !important;
+    color: rgba($tech-cyan, 0.6) !important;
   }
 }
 .biz-wrap-content {
   flex: 1;
   display: flex;
   flex-direction: column;
+  background: $panel-bg;
+  border: 1px solid rgba($tech-cyan, 0.14);
+  border-radius: 16px;
+  box-shadow: $box-shadow-panel;
+  backdrop-filter: blur(10px);
+  padding: 60px 18px 14px;
 }
 .chart-header {
   text-align: center;
   flex-shrink: 0;
-  padding-bottom: 6px;
+  padding: 4px 0 10px;
 }
 .chart-title {
-  color: rgba(0, 229, 255, 0.85);
+  color: rgba($tech-cyan, 0.88);
   font-size: 15px;
-  letter-spacing: 1px;
+  font-family: $font-title;
+  letter-spacing: 0.14em;
+  text-shadow: 0 0 10px rgba($tech-cyan, 0.16);
 }
 .chart-desc {
   color: rgba(200, 220, 255, 0.4);
   font-size: 11px;
-  margin-top: 2px;
+  margin-top: 4px;
+  letter-spacing: 0.04em;
 }
 .chart-box {
   flex: 1;

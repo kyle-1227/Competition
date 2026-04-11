@@ -336,14 +336,15 @@ onUnmounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(165deg, rgba(13, 24, 42, 0.92) 0%, rgba(10, 18, 32, 0.88) 100%);
-  border: 1px solid rgba(0, 255, 204, 0.12);
-  border-radius: 12px;
-  padding: 14px 18px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
   box-sizing: border-box;
   overflow: hidden;
   color: #fff;
   font-family: 'Helvetica Neue', 'Noto Sans SC', Arial, sans-serif;
+  box-shadow: none;
 }
 
 /* 1. 顶部标题区域 */
@@ -357,7 +358,10 @@ onUnmounted(() => {
   .module-title {
     font-size: 16px;
     font-weight: 600;
-    color: #e2e8f0;
+    color: rgba(235, 246, 255, 0.95);
+    font-family: $font-title;
+    letter-spacing: 0.1em;
+    text-shadow: 0 0 14px rgba($tech-cyan, 0.18);
     .icon { margin-right: 6px; }
   }
 
@@ -365,62 +369,75 @@ onUnmounted(() => {
     flex: 0 0 auto;
     min-width: 168px;
     max-width: min(240px, 42vw);
-    background: rgba(10, 15, 30, 0.82);
-    border: 1px solid rgba(0, 229, 255, 0.22);
-    border-radius: 8px;
+    background: $panel-bg;
+    border: 1px solid $border-color;
+    border-radius: 12px;
     padding: 8px 12px;
-    backdrop-filter: blur(6px);
-    box-shadow:
-      0 0 16px rgba(0, 229, 255, 0.08),
-      inset 0 0 18px rgba(0, 229, 255, 0.04);
+    backdrop-filter: blur(10px);
+    box-shadow: $box-shadow-panel;
     .selector-label {
-      color: rgba(0, 229, 255, 0.7);
+      color: rgba($tech-cyan, 0.74);
       font-size: 11px;
       margin-bottom: 4px;
-      letter-spacing: 1px;
+      letter-spacing: 0.14em;
     }
     :deep(.el-select) {
       width: 100%;
     }
     :deep(.el-select__wrapper) {
-      background: rgba(0, 229, 255, 0.06) !important;
-      border: 1px solid rgba(0, 229, 255, 0.25) !important;
-      box-shadow: 0 0 8px rgba(0, 229, 255, 0.08) !important;
-      border-radius: 6px !important;
+      background: rgba($tech-cyan, 0.06) !important;
+      border: 1px solid rgba($tech-cyan, 0.25) !important;
+      box-shadow: inset 0 0 10px rgba($tech-cyan, 0.08) !important;
+      border-radius: 8px !important;
+      display: flex !important;
+      align-items: center !important;
+      min-height: 40px !important;
+      padding: 0 12px !important;
       transition: border-color 0.3s, box-shadow 0.3s;
       &:hover,
       &.is-focused {
-        border-color: rgba(0, 229, 255, 0.5) !important;
-        box-shadow: 0 0 12px rgba(0, 229, 255, 0.15) !important;
+        border-color: rgba($tech-cyan, 0.5) !important;
+        box-shadow: 0 0 12px rgba($tech-cyan, 0.15) !important;
       }
     }
     :deep(.el-select__selected-item) {
-      color: #00e5ff !important;
+      color: $tech-cyan !important;
       font-weight: bold;
+      display: flex !important;
+      align-items: center !important;
+      min-height: 24px !important;
+      line-height: 1 !important;
     }
     :deep(.el-select__placeholder) {
-      color: rgba(0, 229, 255, 0.5) !important;
+      color: rgba($tech-cyan, 0.5) !important;
+      display: flex !important;
+      align-items: center !important;
+      min-height: 24px !important;
+      line-height: 1 !important;
     }
     :deep(.el-select__suffix) {
-      color: rgba(0, 229, 255, 0.6) !important;
+      color: rgba($tech-cyan, 0.6) !important;
     }
     :deep(.el-input__wrapper) {
-      background: rgba(0, 229, 255, 0.06) !important;
-      border: 1px solid rgba(0, 229, 255, 0.25) !important;
-      box-shadow: 0 0 8px rgba(0, 229, 255, 0.08) !important;
-      border-radius: 6px !important;
+      background: rgba($tech-cyan, 0.06) !important;
+      border: 1px solid rgba($tech-cyan, 0.25) !important;
+      box-shadow: inset 0 0 10px rgba($tech-cyan, 0.08) !important;
+      border-radius: 8px !important;
+      min-height: 40px !important;
+      padding: 0 12px !important;
       &:hover,
       &.is-focus {
-        border-color: rgba(0, 229, 255, 0.5) !important;
-        box-shadow: 0 0 12px rgba(0, 229, 255, 0.15) !important;
+        border-color: rgba($tech-cyan, 0.5) !important;
+        box-shadow: 0 0 12px rgba($tech-cyan, 0.15) !important;
       }
     }
     :deep(.el-input__inner) {
-      color: #00e5ff !important;
+      color: $tech-cyan !important;
       font-weight: bold;
+      line-height: 1 !important;
     }
     :deep(.el-input__suffix) {
-      color: rgba(0, 229, 255, 0.6) !important;
+      color: rgba($tech-cyan, 0.6) !important;
     }
   }
 }
@@ -477,8 +494,8 @@ onUnmounted(() => {
   }
 
   .lg-hist .lg-swatch {
-    background: linear-gradient(90deg, #4facfe, #38bdf8);
-    box-shadow: 0 0 8px rgba(79, 172, 254, 0.45);
+    background: linear-gradient(90deg, $theme-color, $tech-cyan);
+    box-shadow: 0 0 8px rgba($tech-cyan, 0.34);
   }
 
   .lg-pred .lg-swatch--dash {
@@ -490,7 +507,7 @@ onUnmounted(() => {
       transparent 5px
     );
     height: 2px;
-    box-shadow: 0 0 8px rgba(45, 212, 191, 0.4);
+    box-shadow: 0 0 8px rgba($tech-green, 0.36);
   }
 }
 
@@ -499,9 +516,10 @@ onUnmounted(() => {
   min-height: 0;
   position: relative;
   background: rgba(0, 0, 0, 0.18);
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  border-radius: 10px;
+  border: 1px solid rgba($tech-cyan, 0.12);
+  border-radius: 12px;
   overflow: hidden;
+  box-shadow: inset 0 0 20px rgba($tech-cyan, 0.04);
 
   .echarts-container {
     width: 100%;
@@ -517,18 +535,19 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  border-radius: 10px;
+  background: $panel-bg;
+  border: 1px solid rgba($tech-cyan, 0.14);
+  border-radius: 12px;
+  box-shadow: $box-shadow-panel;
 }
 
 .controls-title {
   font-size: 12px;
   font-weight: 600;
-  color: #5eead4;
+  color: $tech-cyan;
   margin-bottom: 10px;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(94, 234, 212, 0.15);
+  border-bottom: 1px solid rgba($tech-cyan, 0.15);
 }
 
 .control-panel {
@@ -544,13 +563,13 @@ onUnmounted(() => {
     width: 4px;
   }
   &::-webkit-scrollbar-thumb {
-    background: rgba(94, 234, 212, 0.25);
+    background: rgba($tech-cyan, 0.25);
     border-radius: 2px;
   }
 
   .control-item {
     background: rgba(15, 23, 42, 0.45);
-    border: 1px solid rgba(148, 163, 184, 0.12);
+    border: 1px solid rgba($tech-cyan, 0.12);
     border-radius: 8px;
     padding: 8px 10px;
     display: flex;
@@ -576,7 +595,7 @@ onUnmounted(() => {
         flex-shrink: 0;
         font-weight: 700;
         font-family: 'DIN Alternate', 'DIN', ui-monospace, sans-serif;
-        color: #5eead4;
+        color: $tech-cyan;
         font-variant-numeric: tabular-nums;
       }
     }
@@ -585,7 +604,7 @@ onUnmounted(() => {
       width: 100%;
       height: 5px;
       border-radius: 3px;
-      background: linear-gradient(90deg, rgba(94, 234, 212, 0.15), rgba(56, 189, 248, 0.15));
+      background: linear-gradient(90deg, rgba($tech-green, 0.15), rgba($tech-cyan, 0.15));
       outline: none;
       appearance: none;
 
@@ -594,11 +613,11 @@ onUnmounted(() => {
         width: 14px;
         height: 14px;
         border-radius: 50%;
-        background: radial-gradient(circle at 30% 30%, #5eead4, #14b8a6);
+        background: radial-gradient(circle at 30% 30%, $tech-cyan, #00bf79);
         cursor: pointer;
         box-shadow:
           0 0 0 2px rgba(15, 23, 42, 0.9),
-          0 0 12px rgba(45, 212, 191, 0.55);
+          0 0 12px rgba($tech-cyan, 0.55);
       }
 
       &::-moz-range-thumb {
@@ -606,7 +625,7 @@ onUnmounted(() => {
         height: 14px;
         border: none;
         border-radius: 50%;
-        background: #5eead4;
+        background: $tech-cyan;
         cursor: pointer;
       }
     }
@@ -655,7 +674,8 @@ onUnmounted(() => {
   .coef-box {
     flex: 2.2;
     background: rgba(15, 23, 42, 0.55);
-    border: 1px solid rgba(56, 189, 248, 0.2);
+    border: 1px solid rgba($tech-cyan, 0.2);
+    box-shadow: inset 0 0 24px rgba($tech-cyan, 0.04);
 
     .box-title {
       color: #94a3b8;
@@ -689,8 +709,8 @@ onUnmounted(() => {
         min-width: 0;
 
         b {
-          color: #7dd3fc;
-          font-family: 'DIN Alternate', 'DIN', ui-monospace, sans-serif;
+          color: $tech-cyan;
+          font-family: $font-title;
           font-weight: 600;
           margin-top: 2px;
           font-size: 12px;
@@ -702,11 +722,11 @@ onUnmounted(() => {
   .result-box {
     flex: 1;
     min-width: 200px;
-    background: linear-gradient(135deg, rgba(13, 148, 136, 0.12) 0%, rgba(15, 23, 42, 0.6) 100%);
-    border: 1px solid rgba(45, 212, 191, 0.35);
+    background: linear-gradient(135deg, rgba($tech-green, 0.14) 0%, rgba(15, 23, 42, 0.6) 100%);
+    border: 1px solid rgba($tech-green, 0.35);
 
     .box-title {
-      color: #5eead4;
+      color: $tech-green;
       font-size: 12px;
       margin-bottom: 8px;
       font-weight: 600;
@@ -731,7 +751,7 @@ onUnmounted(() => {
         padding: 8px 10px;
         background: rgba(0, 0, 0, 0.12);
         border-radius: 8px;
-        border: 1px solid rgba(45, 212, 191, 0.12);
+        border: 1px solid rgba($tech-green, 0.12);
         min-width: 0;
 
         .label {
@@ -743,21 +763,21 @@ onUnmounted(() => {
         .number {
           font-size: clamp(18px, 2.2vw, 24px);
           font-weight: 700;
-          font-family: 'DIN Alternate', 'DIN', ui-monospace, sans-serif;
+          font-family: $font-title;
           font-variant-numeric: tabular-nums;
           line-height: 1.2;
 
           &.highlight {
             color: #f1f5f9;
-            text-shadow: 0 0 16px rgba(45, 212, 191, 0.35);
+            text-shadow: 0 0 16px rgba($tech-green, 0.35);
           }
 
           &.decrease {
-            color: #5eead4;
+            color: $tech-green;
           }
 
           &.increase {
-            color: #fbbf24;
+            color: #ffbb36;
           }
         }
       }

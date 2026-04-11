@@ -17,16 +17,18 @@
     </div>
 
     <!-- 绿色金融监测 -->
-    <BizGreenFinance v-show="activeTab === 'greenFinance'" class="content" />
+    <div class="content-shell">
+      <BizGreenFinance v-show="activeTab === 'greenFinance'" class="content" />
     <!-- 碳排放底色 -->
     <BizCarbon v-show="activeTab === 'carbon'" class="content" />
     <!-- 碳减排效率预测（energy Tab：碳排放强度动态预测沙盘 BizCarbonPrediction） -->
     <BizCarbonPrediction v-show="activeTab === 'energy'" class="content" />
     <!-- 宏观经济动态 -->
-    <BizMacro v-show="activeTab === 'macro'" class="content" />
+      <BizMacro v-show="activeTab === 'macro'" class="content" />
+    </div>
 
     <!-- 底部年份时间轴（宏观经济动态与碳排放强度预测 Tab 不展示） -->
-    <div v-show="activeTab !== 'macro' && activeTab !== 'energy'" class="timeline-bar">
+    <div v-if="false" v-show="activeTab === 'carbon'" class="timeline-bar">
       <span class="timeline-label">数据年份</span>
       <el-slider
         v-model="timelineYear"
@@ -109,39 +111,68 @@ provide('activeTab', activeTab);
 <style lang="scss" scoped>
 .title {
   flex: 0 0 72px;
+  position: relative;
   line-height: 72px;
-  font-size: 24px;
-  font-family: var(--el-font-family);
-  letter-spacing: 0.02em;
+  font-size: 28px;
+  font-family: $font-title;
+  letter-spacing: 0.18em;
+  color: rgba(235, 246, 255, 0.95);
+  text-shadow: 0 0 18px rgba($tech-cyan, 0.24);
+
+  &::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    width: min(580px, 42vw);
+    height: 2px;
+    transform: translateX(-50%);
+    background: linear-gradient(90deg, transparent, rgba($tech-cyan, 0.85), transparent);
+    box-shadow: $glow-shadow;
+  }
 }
 .content {
   flex: 1;
+  min-height: 0;
+}
+.content-shell {
+  flex: 1;
+  min-height: 0;
+  margin: 0 14px 14px;
+  padding: 14px;
+  background: $panel-bg;
+  border: 1px solid rgba($tech-cyan, 0.16);
+  border-radius: 20px;
+  backdrop-filter: blur(12px);
+  box-shadow: $box-shadow-panel;
+  overflow: hidden;
 }
 /* ===== 科技风 Tab 导航栏 ===== */
 .tab-nav {
   flex: 0 0 auto;
   display: flex;
   justify-content: center;
-  gap: 6px;
-  padding: 0 40px 8px;
+  gap: 10px;
+  padding: 0 40px 10px;
   position: relative;
   z-index: 50;
-  font-family: var(--el-font-family);
+  font-family: $font-title;
 }
 .tab-item {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 22px;
+  gap: 8px;
+  padding: 10px 24px;
   cursor: pointer;
-  border: 1px solid rgba(0, 229, 255, 0.15);
-  border-radius: 6px;
-  background: rgba(10, 15, 30, 0.6);
-  backdrop-filter: blur(8px);
-  color: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba($tech-cyan, 0.18);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(4, 10, 24, 0.72));
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 0 22px rgba($tech-cyan, 0.04);
+  color: rgba(255, 255, 255, 0.58);
   font-size: 13px;
-  letter-spacing: 0;
+  letter-spacing: 0.06em;
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   .tab-icon {
@@ -152,19 +183,23 @@ provide('activeTab', activeTab);
   .tab-label {
     position: relative;
     z-index: 1;
-    letter-spacing: 0;
+    text-transform: uppercase;
   }
   .tab-glow {
     position: absolute;
     inset: 0;
     opacity: 0;
-    background: radial-gradient(ellipse at 50% 100%, rgba(0, 229, 255, 0.15) 0%, transparent 70%);
+    background:
+      radial-gradient(ellipse at 50% 100%, rgba($tech-cyan, 0.18) 0%, transparent 70%),
+      linear-gradient(90deg, transparent, rgba($tech-cyan, 0.08), transparent);
     transition: opacity 0.35s;
   }
   &:hover {
-    border-color: rgba(0, 229, 255, 0.35);
-    color: rgba(255, 255, 255, 0.8);
-    background: rgba(10, 15, 30, 0.8);
+    transform: translateY(-2px);
+    border-color: rgba($tech-cyan, 0.38);
+    color: rgba(255, 255, 255, 0.88);
+    background: linear-gradient(180deg, rgba($tech-cyan, 0.08), rgba(4, 10, 24, 0.84));
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35), inset 0 0 18px rgba($tech-cyan, 0.06);
     .tab-icon {
       filter: grayscale(0);
     }
@@ -173,13 +208,13 @@ provide('activeTab', activeTab);
     }
   }
   &.active {
-    border-color: rgba(0, 229, 255, 0.6);
+    border-color: rgba($tech-cyan, 0.62);
     color: #fff;
-    background: linear-gradient(180deg, rgba(0, 229, 255, 0.08) 0%, rgba(10, 15, 30, 0.9) 100%);
-    box-shadow: 0 0 12px rgba(0, 229, 255, 0.2), inset 0 1px 0 rgba(0, 229, 255, 0.3);
-    text-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+    background: linear-gradient(180deg, rgba($tech-cyan, 0.14) 0%, rgba(4, 10, 24, 0.92) 100%);
+    box-shadow: $glow-shadow, inset 0 1px 0 rgba($tech-cyan, 0.3);
+    text-shadow: 0 0 8px rgba($tech-cyan, 0.5);
     .tab-icon {
-      filter: grayscale(0) drop-shadow(0 0 4px rgba(0, 229, 255, 0.6));
+      filter: grayscale(0) drop-shadow(0 0 4px rgba($tech-cyan, 0.6));
     }
     .tab-glow {
       opacity: 1;
@@ -191,8 +226,8 @@ provide('activeTab', activeTab);
       left: 20%;
       right: 20%;
       height: 2px;
-      background: linear-gradient(90deg, transparent, #00e5ff, transparent);
-      box-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+      background: linear-gradient(90deg, transparent, $tech-cyan, transparent);
+      box-shadow: 0 0 8px rgba($tech-cyan, 0.6);
     }
   }
 }
@@ -207,30 +242,33 @@ provide('activeTab', activeTab);
   align-items: center;
   gap: 12px;
   z-index: 100;
-  background: rgba(10, 15, 30, 0.85);
-  border: 1px solid rgba(0, 229, 255, 0.2);
-  border-radius: 8px;
-  padding: 6px 20px;
-  backdrop-filter: blur(6px);
+  background: $panel-bg;
+  border: 1px solid $border-color;
+  border-radius: 12px;
+  padding: 8px 20px;
+  backdrop-filter: blur(10px);
+  box-shadow: $box-shadow-panel;
 }
 .timeline-label {
-  color: rgba(0, 229, 255, 0.8);
+  color: rgba($tech-cyan, 0.84);
   font-size: 12px;
+  letter-spacing: 0.16em;
   white-space: nowrap;
 }
 .timeline-slider {
   flex: 1;
   :deep(.el-slider__runway) {
-    background: rgba(0, 229, 255, 0.12);
+    background: rgba($tech-cyan, 0.12);
   }
   :deep(.el-slider__bar) {
-    background: linear-gradient(90deg, #00e5ff, #7c4dff);
+    background: linear-gradient(90deg, $tech-cyan, $tech-green, $theme-color);
   }
   :deep(.el-slider__button) {
     width: 14px;
     height: 14px;
-    border: 2px solid #00e5ff;
-    background: #131722;
+    border: 2px solid $tech-cyan;
+    background: $bg-dark;
+    box-shadow: 0 0 0 4px rgba($tech-cyan, 0.08), 0 0 14px rgba($tech-cyan, 0.4);
   }
   :deep(.el-slider__marks-text) {
     color: rgba(255, 255, 255, 0.45);
@@ -238,13 +276,14 @@ provide('activeTab', activeTab);
   }
 }
 .year-badge {
-  background: rgba(0, 229, 255, 0.15);
-  border: 1px solid rgba(0, 229, 255, 0.4);
-  border-radius: 4px;
-  padding: 2px 10px;
-  color: #00e5ff;
+  background: rgba($tech-cyan, 0.12);
+  border: 1px solid rgba($tech-cyan, 0.4);
+  border-radius: 999px;
+  padding: 4px 12px;
+  color: $tech-cyan;
   font-size: 14px;
   font-weight: bold;
+  box-shadow: inset 0 0 14px rgba($tech-cyan, 0.08);
   white-space: nowrap;
 }
 </style>

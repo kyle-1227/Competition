@@ -11,7 +11,9 @@ import {
   gfDrillCity,
   gfRadarCityHoverGeoName,
   fetchCityData,
+  fetchProvinceData,
   selectedYear,
+  timelineYear,
   excludeProvincesWithoutPanelData,
   NO_PANEL_DATA_REGIONS_LEGEND,
 } from './hooks/provinceData';
@@ -54,6 +56,22 @@ function clearGfDrill() {
   gfRadarCityHoverGeoName.value = '';
 }
 
+const yearMarks = {
+  2000: '2000',
+  2005: '2005',
+  2010: '2010',
+  2015: '2015',
+  2020: '2020',
+  2024: '2024',
+};
+
+function commitTimelineYear() {
+  const y = timelineYear.value;
+  if (y === selectedYear.value) return;
+  selectedYear.value = y;
+  fetchProvinceData(y);
+}
+
 const backButtonText = computed(() => (gfDrillCity.value ? '返回市级视角' : '返回全国视角'));
 
 watch([gfDrillProvince, selectedYear], () => {
@@ -61,6 +79,14 @@ watch([gfDrillProvince, selectedYear], () => {
     fetchCityData(gfDrillProvince.value, selectedYear.value);
   }
 });
+
+watch(
+  selectedYear,
+  (y) => {
+    timelineYear.value = y;
+  },
+  { immediate: true },
+);
 
 watch(selectedProv, (v) => {
   if (gfDrillProvince.value && v !== gfDrillProvince.value) {
@@ -191,6 +217,20 @@ const top10Title = computed(() => {
           {{ backButtonText }}
         </button>
         <div id="gf-map" />
+        <div class="map-timeline">
+          <span class="map-timeline__label">数据年份</span>
+          <el-slider
+            v-model="timelineYear"
+            :min="2000"
+            :max="2024"
+            :step="1"
+            :marks="yearMarks"
+            :format-tooltip="(v: number) => `${v}年`"
+            class="map-timeline__slider"
+            @change="commitTimelineYear"
+          />
+          <div class="map-timeline__badge">{{ timelineYear }}年</div>
+        </div>
         <div
           v-show="gfMapTooltip.visible"
           class="gf-map-tooltip"
@@ -240,20 +280,23 @@ export default { name: 'BizGreenFinance' };
 .biz-wrap {
   display: flex;
   height: 100%;
-  padding: 10px 0 25px 0;
+  gap: 12px;
+  padding: 0;
   &-sidebar {
     flex: 0 0 25%;
     max-width: 25%;
-    padding: 6px 10px;
+    min-width: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
     gap: 4px;
     overflow-y: auto;
+    overflow-x: hidden;
     &::-webkit-scrollbar {
       width: 3px;
     }
     &::-webkit-scrollbar-thumb {
-      background: rgba(0, 229, 255, 0.2);
+      background: rgba($tech-cyan, 0.2);
       border-radius: 2px;
     }
   }
@@ -270,11 +313,12 @@ export default { name: 'BizGreenFinance' };
   align-items: center;
   justify-content: center;
   padding: 8px 16px;
-  margin: 0 10px 6px;
-  background: rgba(10, 15, 30, 0.8);
-  border: 1px solid rgba(0, 229, 255, 0.15);
-  border-radius: 8px;
-  backdrop-filter: blur(6px);
+  margin: 0 0 10px;
+  background: $panel-bg;
+  border: 1px solid $border-color;
+  border-radius: 14px;
+  backdrop-filter: blur(10px);
+  box-shadow: $box-shadow-panel;
 }
 .board-item {
   flex: 1;
@@ -284,7 +328,7 @@ export default { name: 'BizGreenFinance' };
 .board-label {
   color: rgba(200, 220, 255, 0.5);
   font-size: 11px;
-  letter-spacing: 1px;
+  letter-spacing: 0.18em;
   margin-bottom: 2px;
 }
 .board-value {
@@ -296,7 +340,7 @@ export default { name: 'BizGreenFinance' };
 .board-num {
   font-size: 26px;
   font-weight: 900;
-  font-family: 'DIN Alternate', 'DIN', 'Oswald', 'Rajdhani', 'Arial Black', sans-serif;
+  font-family: $font-title;
   letter-spacing: -0.5px;
 }
 .board-unit {
@@ -305,64 +349,62 @@ export default { name: 'BizGreenFinance' };
   font-weight: normal;
 }
 .board-value.cyan .board-num {
-  background: linear-gradient(180deg, #00ffff, #0088aa);
+  background: linear-gradient(180deg, #29fbff, #00849a);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.4));
+  filter: drop-shadow(0 0 8px rgba($tech-cyan, 0.4));
 }
 .board-value.green .board-num {
-  background: linear-gradient(180deg, #00ff88, #00aa44);
+  background: linear-gradient(180deg, #2fffc0, #009a68);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: drop-shadow(0 0 8px rgba(0, 255, 136, 0.4));
+  filter: drop-shadow(0 0 8px rgba($tech-green, 0.4));
 }
 .board-value.gold .board-num {
-  background: linear-gradient(180deg, #ffd54f, #ff8f00);
+  background: linear-gradient(180deg, #ffc66a, $tech-orange);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: drop-shadow(0 0 8px rgba(255, 213, 79, 0.4));
+  filter: drop-shadow(0 0 8px rgba($tech-orange, 0.34));
 }
 .board-value.purple .board-num {
-  background: linear-gradient(180deg, #ce93d8, #7b1fa2);
+  background: linear-gradient(180deg, #7fb8ff, #0b5cbe);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: drop-shadow(0 0 8px rgba(206, 147, 216, 0.4));
+  filter: drop-shadow(0 0 8px rgba($theme-color, 0.4));
 }
 .board-divider {
   width: 1px;
   height: 36px;
-  background: linear-gradient(180deg, transparent, rgba(0, 229, 255, 0.25), transparent);
+  background: linear-gradient(180deg, transparent, rgba($tech-cyan, 0.25), transparent);
   flex-shrink: 0;
 }
 .gf-back-map {
   position: absolute;
-  top: 10px;
+  top: 88px;
   right: 10px;
   z-index: 1000;
   padding: 8px 16px;
   font-size: 12px;
   letter-spacing: 1px;
-  color: #00e5ff;
+  color: $tech-cyan;
   cursor: pointer;
-  background: rgba(10, 18, 40, 0.92);
-  border: 1px solid rgba(0, 229, 255, 0.45);
-  border-radius: 6px;
-  box-shadow:
-    0 0 12px rgba(0, 229, 255, 0.25),
-    inset 0 0 20px rgba(0, 229, 255, 0.06);
+  background: rgba(8, 14, 32, 0.92);
+  border: 1px solid rgba($tech-cyan, 0.45);
+  border-radius: 999px;
+  box-shadow: $box-shadow-panel;
   transition:
     box-shadow 0.2s,
-    border-color 0.2s;
+    border-color 0.2s,
+    transform 0.2s;
 }
 .gf-back-map:hover {
-  border-color: rgba(0, 255, 255, 0.8);
-  box-shadow:
-    0 0 18px rgba(0, 229, 255, 0.45),
-    inset 0 0 24px rgba(0, 229, 255, 0.1);
+  transform: translateY(-1px);
+  border-color: rgba($tech-cyan, 0.8);
+  box-shadow: $glow-shadow, inset 0 0 24px rgba($tech-cyan, 0.1);
 }
 .map-area {
   flex: 1;
@@ -377,12 +419,68 @@ export default { name: 'BizGreenFinance' };
     top: 10px;
     left: 10px;
     z-index: 999;
-    background: rgba(10, 15, 30, 0.85);
-    border: 1px solid rgba(0, 229, 255, 0.2);
-    border-radius: 6px;
+    background: $panel-bg;
+    border: 1px solid $border-color;
+    border-radius: 10px;
     padding: 8px 12px;
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(10px);
+    box-shadow: $box-shadow-panel;
     width: min(240px, 42vw);
+  }
+  .map-timeline {
+    position: absolute;
+    top: 10px;
+    left: 286px;
+    right: 34px;
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    padding: 8px 18px;
+    background: $panel-bg;
+    border: 1px solid $border-color;
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+    box-shadow: $box-shadow-panel;
+  }
+  .map-timeline__label {
+    color: rgba($tech-cyan, 0.84);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    white-space: nowrap;
+  }
+  .map-timeline__slider {
+    flex: 1;
+    :deep(.el-slider__runway) {
+      background: rgba($tech-cyan, 0.12);
+    }
+    :deep(.el-slider__bar) {
+      background: linear-gradient(90deg, $theme-color, $tech-cyan, $tech-green, $tech-orange);
+    }
+    :deep(.el-slider__button) {
+      width: 14px;
+      height: 14px;
+      border: 2px solid $tech-cyan;
+      background: $bg-dark;
+      box-shadow: 0 0 0 4px rgba($tech-cyan, 0.08), 0 0 14px rgba($tech-cyan, 0.4);
+    }
+    :deep(.el-slider__marks-text) {
+      color: rgba(255, 255, 255, 0.45);
+      font-size: 10px;
+    }
+  }
+  .map-timeline__badge {
+    flex-shrink: 0;
+    background: rgba($tech-cyan, 0.12);
+    border: 1px solid rgba($tech-cyan, 0.4);
+    border-radius: 999px;
+    padding: 4px 12px;
+    color: $tech-cyan;
+    font-size: 14px;
+    font-weight: bold;
+    box-shadow: inset 0 0 14px rgba($tech-cyan, 0.08);
+    white-space: nowrap;
   }
   .legend-note {
     display: flex;
@@ -407,14 +505,16 @@ export default { name: 'BizGreenFinance' };
     background: #5c6470;
   }
   .legend-title {
-    color: rgba(0, 229, 255, 0.8);
+    color: rgba($tech-cyan, 0.84);
     font-size: 11px;
+    letter-spacing: 0.14em;
     margin-bottom: 6px;
   }
   .legend-bar {
     height: 8px;
     border-radius: 4px;
-    background: linear-gradient(90deg, #1a237e, #01579b, #006064, #827717, #f57f17, #ffab00);
+    background: linear-gradient(90deg, #0a4fae, $theme-color, $tech-green, $tech-orange);
+    box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.12);
   }
   .legend-labels {
     display: flex;
@@ -430,6 +530,7 @@ export default { name: 'BizGreenFinance' };
     color: rgba(255, 255, 255, 0.5);
     z-index: 999;
     font-size: 12px;
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.4);
   }
   .gf-map-tooltip {
     position: absolute;
@@ -440,19 +541,19 @@ export default { name: 'BizGreenFinance' };
     pointer-events: none;
     padding: 12px 14px 14px;
     border-radius: 10px;
-    background: rgba(10, 18, 40, 0.78);
-    border: 1px solid rgba(0, 229, 255, 0.42);
+    background: rgba(9, 16, 34, 0.82);
+    border: 1px solid rgba($tech-cyan, 0.42);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     box-shadow:
-      0 0 24px rgba(0, 229, 255, 0.22),
+      0 0 24px rgba($tech-cyan, 0.22),
       0 8px 32px rgba(0, 0, 0, 0.45),
-      inset 0 0 28px rgba(0, 229, 255, 0.06);
+      inset 0 0 28px rgba($tech-cyan, 0.06);
     &::-webkit-scrollbar {
       width: 4px;
     }
     &::-webkit-scrollbar-thumb {
-      background: rgba(0, 229, 255, 0.2);
+      background: rgba($tech-cyan, 0.2);
       border-radius: 2px;
     }
   }
@@ -466,11 +567,11 @@ export default { name: 'BizGreenFinance' };
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
   .gf-map-tooltip__name {
-    color: rgba(0, 229, 255, 0.92);
+    color: rgba($tech-cyan, 0.92);
     font-size: 14px;
     font-weight: 700;
     letter-spacing: 0.5px;
-    text-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
+    text-shadow: 0 0 12px rgba($tech-cyan, 0.35);
   }
   .gf-map-tooltip__year {
     flex-shrink: 0;
@@ -492,13 +593,13 @@ export default { name: 'BizGreenFinance' };
   .gf-map-tooltip__score-val {
     font-size: 22px;
     font-weight: 900;
-    font-family: 'DIN Alternate', 'DIN', 'Oswald', 'Rajdhani', 'Arial Black', sans-serif;
+    font-family: $font-title;
     letter-spacing: -0.5px;
-    background: linear-gradient(180deg, #ffd54f, #ff8f00);
+    background: linear-gradient(180deg, #ffc66a, $tech-orange);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    filter: drop-shadow(0 0 8px rgba(255, 213, 79, 0.45));
+    filter: drop-shadow(0 0 8px rgba($tech-orange, 0.42));
   }
   .gf-map-tooltip__score-unit {
     font-size: 11px;
@@ -531,19 +632,26 @@ export default { name: 'BizGreenFinance' };
 .sidebar-charts {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  overflow: hidden;
 }
 .sidebar-section {
   flex: 1 1 50%;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 .chart-box {
   flex: 1;
   min-height: 120px;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
 }
 .chart-box--top10 {
   min-height: 160px;
@@ -553,71 +661,86 @@ export default { name: 'BizGreenFinance' };
 }
 .chart-title {
   text-align: center;
-  color: rgba(0, 229, 255, 0.85);
+  color: rgba($tech-cyan, 0.85);
   font-size: 13px;
+  font-family: $font-title;
   padding-bottom: 4px;
-  letter-spacing: 1px;
+  letter-spacing: 0.14em;
   flex-shrink: 0;
+  text-shadow: 0 0 10px rgba($tech-cyan, 0.18);
 }
 .prov-selector {
   flex: 0 0 auto;
   margin-bottom: 4px;
-  background: rgba(10, 15, 30, 0.82);
-  border: 1px solid rgba(0, 229, 255, 0.22);
-  border-radius: 8px;
+  background: $panel-bg;
+  border: 1px solid $border-color;
+  border-radius: 12px;
   padding: 8px 12px;
-  backdrop-filter: blur(6px);
-  box-shadow:
-    0 0 16px rgba(0, 229, 255, 0.08),
-    inset 0 0 18px rgba(0, 229, 255, 0.04);
+  backdrop-filter: blur(10px);
+  box-shadow: $box-shadow-panel;
   .selector-label {
-    color: rgba(0, 229, 255, 0.7);
+    color: rgba($tech-cyan, 0.74);
     font-size: 11px;
     margin-bottom: 4px;
-    letter-spacing: 1px;
+    letter-spacing: 0.14em;
   }
   :deep(.el-select) {
     width: 100%;
   }
   :deep(.el-select__wrapper) {
-    background: rgba(0, 229, 255, 0.06) !important;
-    border: 1px solid rgba(0, 229, 255, 0.25) !important;
-    box-shadow: 0 0 8px rgba(0, 229, 255, 0.08) !important;
-    border-radius: 6px !important;
+    background: rgba($tech-cyan, 0.06) !important;
+    border: 1px solid rgba($tech-cyan, 0.25) !important;
+    box-shadow: inset 0 0 10px rgba($tech-cyan, 0.08) !important;
+    border-radius: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    min-height: 40px !important;
+    padding: 0 12px !important;
     transition: border-color 0.3s, box-shadow 0.3s;
     &:hover,
     &.is-focused {
-      border-color: rgba(0, 229, 255, 0.5) !important;
-      box-shadow: 0 0 12px rgba(0, 229, 255, 0.15) !important;
+      border-color: rgba($tech-cyan, 0.5) !important;
+      box-shadow: 0 0 12px rgba($tech-cyan, 0.15) !important;
     }
   }
   :deep(.el-select__selected-item) {
-    color: #00e5ff !important;
+    color: $tech-cyan !important;
     font-weight: bold;
+    display: flex !important;
+    align-items: center !important;
+    min-height: 24px !important;
+    line-height: 1 !important;
   }
   :deep(.el-select__placeholder) {
-    color: rgba(0, 229, 255, 0.5) !important;
+    color: rgba($tech-cyan, 0.5) !important;
+    display: flex !important;
+    align-items: center !important;
+    min-height: 24px !important;
+    line-height: 1 !important;
   }
   :deep(.el-select__suffix) {
-    color: rgba(0, 229, 255, 0.6) !important;
+    color: rgba($tech-cyan, 0.6) !important;
   }
   :deep(.el-input__wrapper) {
-    background: rgba(0, 229, 255, 0.06) !important;
-    border: 1px solid rgba(0, 229, 255, 0.25) !important;
-    box-shadow: 0 0 8px rgba(0, 229, 255, 0.08) !important;
-    border-radius: 6px !important;
+    background: rgba($tech-cyan, 0.06) !important;
+    border: 1px solid rgba($tech-cyan, 0.25) !important;
+    box-shadow: inset 0 0 10px rgba($tech-cyan, 0.08) !important;
+    border-radius: 8px !important;
+    min-height: 40px !important;
+    padding: 0 12px !important;
     &:hover,
     &.is-focus {
-      border-color: rgba(0, 229, 255, 0.5) !important;
-      box-shadow: 0 0 12px rgba(0, 229, 255, 0.15) !important;
+      border-color: rgba($tech-cyan, 0.5) !important;
+      box-shadow: 0 0 12px rgba($tech-cyan, 0.15) !important;
     }
   }
   :deep(.el-input__inner) {
-    color: #00e5ff !important;
+    color: $tech-cyan !important;
     font-weight: bold;
+    line-height: 1 !important;
   }
   :deep(.el-input__suffix) {
-    color: rgba(0, 229, 255, 0.6) !important;
+    color: rgba($tech-cyan, 0.6) !important;
   }
 }
 </style>

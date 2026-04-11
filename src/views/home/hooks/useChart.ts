@@ -121,6 +121,8 @@ export function useGreenFinanceTop10Bar() {
       return;
     }
     const categories = rows.map((r) => shortRegionLabel(r.province));
+    const totals = rows.map((r) => indicatorKeys.reduce((sum, key) => sum + Number(r[key] ?? 0), 0) * 100);
+    const axisMax = Math.max(50, Math.ceil((Math.max(...totals, 0) + 2) / 5) * 5);
     const series = indicatorKeys.map((key, si) => ({
       name: indicatorLabels[key],
       type: 'bar' as const,
@@ -142,7 +144,7 @@ export function useGreenFinanceTop10Bar() {
         shadowColor: GF_TOP10_RAINBOW[si % GF_TOP10_RAINBOW.length],
         borderRadius: [2, 2, 2, 2],
       },
-      data: rows.map((r) => Number(r[key] ?? 0)),
+      data: rows.map((r) => Number(r[key] ?? 0) * 100),
     }));
     if (!chart) {
       const el = document.getElementById('gf-gf-top10-bar');
@@ -161,15 +163,22 @@ export function useGreenFinanceTop10Bar() {
           formatter: (p: unknown) => {
             const x = p as { seriesName?: string; name?: string; value?: number; marker?: string };
             const v = typeof x.value === 'number' && Number.isFinite(x.value) ? x.value : 0;
-            const pct = (v * 100).toFixed(2);
+            const points = v.toFixed(2);
+            const pct = points;
             const region = x.name ?? '';
             const dim = x.seriesName ?? '';
+            return `<div style="font-weight:600;color:#00e5ff;margin-bottom:6px">${region}</div>${x.marker ?? ''}<span style="color:#aaa">${dim}</span> <b style="color:#fff">${points}</b> <span style="color:rgba(255,255,255,0.45)">分</span>`;
             return `<div style="font-weight:600;color:#00e5ff;margin-bottom:6px">${region}</div>${x.marker ?? ''}<span style="color:#aaa">${dim}</span> <b style="color:#fff">${pct}</b> <span style="color:rgba(255,255,255,0.45)">分</span>`;
           },
         },
         grid: { left: 6, right: 14, top: 8, bottom: 4, containLabel: true },
         xAxis: {
           type: 'value',
+          min: 0,
+          max: axisMax,
+          nameLocation: 'end',
+          nameGap: 8,
+          nameTextStyle: { color: 'rgba(200,220,255,0.45)', fontSize: 9 },
           axisLabel: { color: 'rgba(200,220,255,0.45)', fontSize: 9 },
           splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
         },
@@ -300,6 +309,23 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
           backgroundColor: 'rgba(10,15,30,0.9)',
           borderColor: 'rgba(0,229,255,0.3)',
           textStyle: { color: '#fff', fontSize: 12 },
+          position(point: number[], _params: unknown, dom: HTMLElement, _rect: unknown, size: { viewSize: number[] }) {
+            const gap = 18;
+            const viewWidth = size.viewSize[0];
+            const viewHeight = size.viewSize[1];
+            const boxWidth = dom.offsetWidth;
+            const boxHeight = dom.offsetHeight;
+            let left = point[0] + gap;
+            let top = point[1] - boxHeight / 2;
+            if (left + boxWidth > viewWidth - 8) {
+              left = Math.max(8, point[0] - boxWidth - gap);
+            }
+            if (top < 8) top = 8;
+            if (top + boxHeight > viewHeight - 8) {
+              top = Math.max(8, viewHeight - boxHeight - 8);
+            }
+            return [left, top];
+          },
           formatter() {
             let s = `<b style="color:#00e5ff">${item.province}</b><br/>`;
             greenFinanceIndicators.forEach((ind, i) => {
@@ -307,9 +333,8 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
               s += `<div style="display:flex;align-items:center;gap:4px;margin:2px 0">`;
               s += `<span style="color:#aaa;width:56px;font-size:11px">${ind.label}</span>`;
               s += `<div style="flex:1;height:4px;background:rgba(0,255,255,0.1);border-radius:2px">`;
-              s += `<div style="width:${
-                (values[i] / 0.18) * 100
-              }%;height:100%;background:linear-gradient(90deg,#00e5ff,#00FF00);border-radius:2px"></div></div>`;
+              s += `<div style="width:${(values[i] / 0.18) * 100
+                }%;height:100%;background:linear-gradient(90deg,#00e5ff,#00FF00);border-radius:2px"></div></div>`;
               s += `<span style="color:#0f0;font-size:11px;width:40px;text-align:right">${pct}</span></div>`;
             });
             s += `<div style="margin-top:4px;border-top:1px solid rgba(0,229,255,0.2);padding-top:4px;text-align:center;color:#FFD54F;font-weight:bold">综合得分: ${(

@@ -31,13 +31,13 @@ export default defineConfig((env) => {
       proxy: {
         ...(normalizedBase
           ? {
-              [`${normalizedBase}/api`]: {
-                target: 'http://127.0.0.1:8000',
-                changeOrigin: true,
-                rewrite: (path) =>
-                  path.replace(new RegExp(`^${normalizedBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api`), '/api'),
-              },
-            }
+            [`${normalizedBase}/api`]: {
+              target: 'http://127.0.0.1:8000',
+              changeOrigin: true,
+              rewrite: (path) =>
+                path.replace(new RegExp(`^${normalizedBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/api`), '/api'),
+            },
+          }
           : {}),
         '/api': {
           target: 'http://127.0.0.1:8000',
@@ -81,7 +81,7 @@ export default defineConfig((env) => {
         plugins: [
           postcsspxtoviewport({
             unitToConvert: 'px', // 要转化的单位
-            viewportWidth: 1600, // UI设计稿的宽度
+            viewportWidth: 1920, // UI设计稿的宽度
             unitPrecision: 6, // 转换后的精度，即小数点位数
             propList: ['*'], // 指定转换的css属性的单位，*代表全部css属性的单位都进行转换
             viewportUnit: 'vw', // 指定需要转换成的视窗单位，默认vw
