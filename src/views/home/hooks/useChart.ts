@@ -12,8 +12,6 @@ import {
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import {
-  indicatorLabels,
-  indicatorKeys,
   selectedYear,
   realProvinceData,
   realCityData,
@@ -42,16 +40,86 @@ echarts.use([
 ]);
 
 type GfValueKey = keyof Omit<GreenFinanceMonitorRow, 'province' | 'score'>;
+type ProvinceIndicatorKey =
+  | 'greenCredit'
+  | 'greenInvest'
+  | 'greenInsurance'
+  | 'greenBond'
+  | 'greenExpend'
+  | 'greenFund'
+  | 'greenEquity';
+
+type WeightedScoreBreakdown = {
+  totalScore: number;
+  rawValueByKey: Record<GfValueKey, number>;
+  weightedRawByKey: Record<GfValueKey, number>;
+  segmentScoreByKey: Record<GfValueKey, number>;
+};
+
+const GF_WEIGHT_CONFIG: Array<{
+  monitorKey: GfValueKey;
+  sourceKey: ProvinceIndicatorKey;
+  label: string;
+  weight: number;
+}> = [
+  { monitorKey: 'greenCredit', sourceKey: 'greenCredit', label: '绿色信贷', weight: 0.1236 },
+  { monitorKey: 'greenInvest', sourceKey: 'greenInvest', label: '绿色投资', weight: 0.1572 },
+  { monitorKey: 'greenInsurance', sourceKey: 'greenInsurance', label: '绿色保险', weight: 0.1303 },
+  { monitorKey: 'greenBond', sourceKey: 'greenBond', label: '绿色债券', weight: 0.186 },
+  { monitorKey: 'greenSupport', sourceKey: 'greenExpend', label: '绿色支持', weight: 0.1711 },
+  { monitorKey: 'greenFund', sourceKey: 'greenFund', label: '绿色基金', weight: 0.1218 },
+  { monitorKey: 'greenEquity', sourceKey: 'greenEquity', label: '绿色权益', weight: 0.1099 },
+];
 
 function gfVal(item: GreenFinanceMonitorRow, key: string): number {
   return item[key as GfValueKey];
+}
+
+function toScorePoints(score: number): number {
+  return Number(score ?? 0) * 100;
+}
+
+function calcScoreAxisMax(values: number[]): number {
+  const maxValue = Math.max(...values, 0);
+  if (maxValue <= 10) return 10;
+  if (maxValue <= 20) return Math.ceil(maxValue / 2) * 2;
+  if (maxValue <= 50) return Math.ceil(maxValue / 5) * 5;
+  return Math.ceil(maxValue / 10) * 10;
+}
+
+function buildWeightedScoreBreakdown(row: ProvinceGreenFinance): WeightedScoreBreakdown {
+  const rawValueByKey = {} as Record<GfValueKey, number>;
+  const weightedRawByKey = {} as Record<GfValueKey, number>;
+  const segmentScoreByKey = {} as Record<GfValueKey, number>;
+  let weightedRawSum = 0;
+
+  GF_WEIGHT_CONFIG.forEach((config) => {
+    const rawValue = Number(row[config.sourceKey] ?? 0);
+    const weightedRaw = rawValue * config.weight;
+    rawValueByKey[config.monitorKey] = rawValue;
+    weightedRawByKey[config.monitorKey] = weightedRaw;
+    weightedRawSum += weightedRaw;
+  });
+
+  const totalScore = Number(row.score ?? 0);
+  GF_WEIGHT_CONFIG.forEach((config) => {
+    segmentScoreByKey[config.monitorKey] =
+      weightedRawSum > 0 ? totalScore * (weightedRawByKey[config.monitorKey] / weightedRawSum) : 0;
+  });
+
+  return {
+    totalScore,
+    rawValueByKey,
+    weightedRawByKey,
+    segmentScoreByKey,
+  };
 }
 
 /** 接口省级记录 → 屏二雷达/玫瑰图结构（七维键与 greenFinanceIndicators 一致） */
 export function provinceToGfMonitorRow(p: ProvinceGreenFinance): GreenFinanceMonitorRow {
   return {
     province: p.province,
-    score: p.score,
+    score: Number(p.score ?? 0),
     greenCredit: p.greenCredit,
     greenInvest: p.greenInvest,
     greenInsurance: p.greenInsurance,
@@ -87,7 +155,7 @@ function getGreenFinanceChartItem(selectedProv: Ref<string>): GreenFinanceMonito
       ? findCityRowByGeoName(gfRadarCityHoverGeoName.value)
       : undefined;
     if (hovered) return provinceToGfMonitorRow(hovered);
-    const top = [...realCityData.value].sort((a, b) => b.score - a.score)[0];
+    const top = [...realCityData.value].sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0))[0];
     return provinceToGfMonitorRow(top);
   }
   const rows = getGfMonitorRows();
@@ -135,19 +203,23 @@ export function useGreenFinanceTop10Bar() {
     const drill = gfDrillProvince.value;
     let rows: ProvinceGreenFinance[];
     if (drill && realCityData.value.length > 0) {
-      rows = [...realCityData.value].sort((a, b) => b.score - a.score).slice(0, 10);
+      rows = [...realCityData.value].sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0)).slice(0, 10);
     } else {
-      rows = [...realProvinceData.value].sort((a, b) => b.score - a.score).slice(0, 10);
+      rows = [...realProvinceData.value].sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0)).slice(0, 10);
     }
     if (!rows.length) {
       chart?.clear();
       return;
     }
-    const categories = rows.map((r) => shortRegionLabel(r.province));
-    const totals = rows.map((r) => indicatorKeys.reduce((sum, key) => sum + Number(r[key] ?? 0), 0) * 100);
-    const axisMax = Math.max(50, Math.ceil((Math.max(...totals, 0) + 2) / 5) * 5);
-    const series = indicatorKeys.map((key, si) => ({
-      name: indicatorLabels[key],
+    const rankedRows = rows.map((row) => ({
+      row,
+      breakdown: buildWeightedScoreBreakdown(row),
+    }));
+    const categories = rankedRows.map(({ row }) => shortRegionLabel(row.province));
+    const totals = rankedRows.map(({ breakdown }) => toScorePoints(breakdown.totalScore));
+    const axisMax = calcScoreAxisMax(totals);
+    const series = GF_WEIGHT_CONFIG.map((config, si) => ({
+      name: config.label,
       type: 'bar' as const,
       stack: 'gf7',
       emphasis: {
@@ -167,7 +239,12 @@ export function useGreenFinanceTop10Bar() {
         shadowColor: GF_TOP10_RAINBOW[si % GF_TOP10_RAINBOW.length],
         borderRadius: [2, 2, 2, 2],
       },
-      data: rows.map((r) => Number(r[key] ?? 0) * 100),
+      data: rankedRows.map(({ breakdown }) => ({
+        value: toScorePoints(breakdown.segmentScoreByKey[config.monitorKey]),
+        rawValue: breakdown.rawValueByKey[config.monitorKey],
+        weightedScore: toScorePoints(breakdown.segmentScoreByKey[config.monitorKey]),
+        totalScore: toScorePoints(breakdown.totalScore),
+      })),
     }));
     if (!chart) {
       const el = document.getElementById('gf-gf-top10-bar');
@@ -184,8 +261,42 @@ export function useGreenFinanceTop10Bar() {
           borderColor: 'rgba(0,229,255,0.35)',
           textStyle: { color: '#fff', fontSize: 12 },
           formatter: (p: unknown) => {
+            const payload = p as {
+              seriesName?: string;
+              name?: string;
+              marker?: string;
+              data?: {
+                rawValue?: number;
+                weightedScore?: number;
+                totalScore?: number;
+              };
+            };
+            const payloadRegion = payload.name ?? '';
+            const payloadDim = payload.seriesName ?? '';
+            const rawValue = Number(payload.data?.rawValue ?? 0);
+            const weightedScore = Number(payload.data?.weightedScore ?? 0);
+            const totalScore = Number(payload.data?.totalScore ?? 0);
+            return `
+              <div style="font-weight:600;color:#00e5ff;margin-bottom:8px">${payloadRegion}</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                ${payload.marker ?? ''}
+                <span style="color:#aaa">${payloadDim}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;gap:16px;margin:2px 0">
+                <span style="color:rgba(255,255,255,0.6)">原始数据</span>
+                <b style="color:#fff">${rawValue.toFixed(4)}</b>
+              </div>
+              <div style="display:flex;justify-content:space-between;gap:16px;margin:2px 0">
+                <span style="color:rgba(255,255,255,0.6)">加权分数</span>
+                <b style="color:#fff">${weightedScore.toFixed(2)} 分</b>
+              </div>
+              <div style="display:flex;justify-content:space-between;gap:16px;margin:2px 0">
+                <span style="color:rgba(255,255,255,0.45)">综合分</span>
+                <span style="color:#ffd54f">${totalScore.toFixed(2)} 分</span>
+              </div>
+            `;
             const x = p as { seriesName?: string; name?: string; value?: number; marker?: string };
-            const v = typeof x.value === 'number' && Number.isFinite(x.value) ? x.value : 0;
+            const v = Number(typeof x.value === 'number' && Number.isFinite(x.value) ? x.value : 0);
             const points = v.toFixed(2);
             const pct = points;
             const region = x.name ?? '';
@@ -314,6 +425,7 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
     const item = getGreenFinanceChartItem(selectedProv);
     if (!item) return;
     const values = greenFinanceIndicators.map((ind) => gfVal(item, ind.key));
+    const totalScore = Number(item.score ?? 0);
     // 动态计算每个维度的最大值，让数据更接近边缘
     const maxValue = Math.max(...values);
     const dynamicMax = maxValue > 0 ? maxValue * 1.05 : 0.18; // 使用1.25倍最大值，让数据更接近边缘
@@ -361,7 +473,7 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
               s += `<span style="color:#0f0;font-size:11px;width:40px;text-align:right">${pct}</span></div>`;
             });
             s += `<div style="margin-top:4px;border-top:1px solid rgba(0,229,255,0.2);padding-top:4px;text-align:center;color:#FFD54F;font-weight:bold">综合得分: ${(
-              item.score * 100
+              totalScore * 100
             ).toFixed(2)}</div>`;
             return s;
           },
