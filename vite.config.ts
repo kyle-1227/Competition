@@ -1,10 +1,42 @@
 import { defineConfig, loadEnv } from 'vite';
 import { resolve } from 'path';
 import postcsspxtoviewport from 'postcss-px-to-viewport';
+import viteCompression from 'vite-plugin-compression';
 
 import presets from './presets/presets';
 
 const pathSrc = resolve(__dirname, 'src');
+
+function manualChunks(id: string) {
+  if (!id.includes('node_modules')) return undefined;
+
+  if (id.includes('echarts')) return 'vendor-echarts';
+
+  if (
+    id.includes('@antv/l7')
+    || id.includes('@antv/l7-maps')
+    || id.includes('@antv/l7-three')
+    || id.includes(`${resolve(__dirname, 'node_modules/three')}`)
+    || id.includes('/three/')
+    || id.includes('\\three\\')
+  ) {
+    return 'vendor-l7';
+  }
+
+  if (id.includes('element-plus')) return 'vendor-element';
+
+  if (
+    id.includes('/vue/')
+    || id.includes('\\vue\\')
+    || id.includes('vue-router')
+    || id.includes('pinia')
+    || id.includes('@vueuse/core')
+  ) {
+    return 'vendor-vue';
+  }
+
+  return 'vendor-misc';
+}
 
 // https://vitejs.dev/config/
 export default defineConfig((env) => {
@@ -15,7 +47,17 @@ export default defineConfig((env) => {
   return {
     base: viteEnv.VITE_BASE,
     // 插件
-    plugins: [presets(env)],
+    plugins: [
+      presets(env),
+      viteCompression({
+        verbose: true,
+        disable: false,
+        threshold: 10240,
+        algorithm: 'gzip',
+        ext: '.gz',
+        filter: /\.(js|css|json|geojson|html)$/i,
+      }),
+    ],
     // 别名设置
     resolve: {
       alias: {
@@ -61,6 +103,7 @@ export default defineConfig((env) => {
       // 静态资源打包到dist下的不同目录
       rollupOptions: {
         output: {
+          manualChunks,
           chunkFileNames: 'static/js/[name]-[hash].js',
           entryFileNames: 'static/js/[name]-[hash].js',
           assetFileNames: 'static/[ext]/[name]-[hash].[ext]',

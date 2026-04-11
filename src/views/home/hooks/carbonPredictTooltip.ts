@@ -1,4 +1,4 @@
-import type { CarbonHistoryPoint } from '@/api/modules/dashboard';
+import type { CarbonHistoryPoint } from '@/api/modules/dashboard-carbon-predict';
 
 export interface CarbonPredictTooltipCtx {
   firstFutureYear: number;

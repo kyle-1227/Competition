@@ -84,12 +84,20 @@
 <script setup lang="ts">
 import { ref, onMounted, shallowRef, computed, onUnmounted, nextTick, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import * as echarts from 'echarts';
+import * as echarts from 'echarts/core';
+import type { EChartsCoreOption, EChartsType } from 'echarts/core';
+import { LineChart } from 'echarts/charts';
+import {
+  GridComponent,
+  TitleComponent,
+  TooltipComponent,
+} from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
 import {
   getCarbonPredictData,
   type CarbonPredictCoefficients,
   type CarbonHistoryPoint,
-} from '@/api/modules/dashboard';
+} from '@/api/modules/dashboard-carbon-predict';
 import { excludeProvincesWithoutPanelData, isProvinceExcludedFromPanel } from './hooks/provinceData';
 import { getCarbonPredictTooltipHtml } from './hooks/carbonPredictTooltip';
 import {
@@ -97,8 +105,16 @@ import {
   type SdmCoefficients,
 } from './hooks/useCarbonPredict';
 
+echarts.use([
+  GridComponent,
+  TitleComponent,
+  TooltipComponent,
+  LineChart,
+  CanvasRenderer,
+]);
+
 const chartRef = ref<HTMLElement | null>(null);
-const chartInstance = shallowRef<echarts.ECharts | null>(null);
+const chartInstance = shallowRef<EChartsType | null>(null);
 
 /** 后端拉取：省份 -> 年序列（含面板自变量） */
 const historyPayload = ref<Record<string, CarbonHistoryPoint[]>>({});
@@ -214,7 +230,7 @@ const updateChart = () => {
   const connectedPrediction = [...padding, historyData[historyData.length - 1]!, ...predictData];
 
   const fy = firstFutureYear.value;
-  const option = {
+  const option: EChartsCoreOption = {
     title: { show: false },
     tooltip: {
       trigger: 'axis',

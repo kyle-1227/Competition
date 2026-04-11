@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <ScreenAdapter>
     <div class="title">绿色金融与区域碳减排空间协同智能测算平台</div>
     <!-- 科技风 Tab 导航栏 -->
@@ -8,26 +8,31 @@
         :key="tab.key"
         class="tab-item"
         :class="{ active: activeTab === tab.key }"
-        @click="activeTab = tab.key"
+        @click="setActiveTab(tab.key)"
       >
-        <span class="tab-icon">{{ tab.icon }}</span>
         <span class="tab-label">{{ tab.label }}</span>
         <div class="tab-glow" />
       </div>
     </div>
 
-    <!-- 绿色金融监测 -->
+    <!-- 页面内容区 -->
     <div class="content-shell">
-      <BizGreenFinance v-show="activeTab === 'greenFinance'" class="content" />
-    <!-- 碳排放底色 -->
-    <BizCarbon v-show="activeTab === 'carbon'" class="content" />
-    <!-- 碳减排效率预测（energy Tab：碳排放强度动态预测沙盘 BizCarbonPrediction） -->
-    <BizCarbonPrediction v-show="activeTab === 'energy'" class="content" />
-    <!-- 宏观经济动态 -->
-      <BizMacro v-show="activeTab === 'macro'" class="content" />
+      <div class="content-stage">
+        <div
+          v-for="tab in tabs"
+          :key="tab.key"
+          class="content-panel"
+          :class="{ 'is-active': activeTab === tab.key }"
+        >
+          <component
+            v-if="visitedTabs[tab.key]"
+            :is="tabComponents[tab.key]"
+            class="content"
+          />
+        </div>
+      </div>
     </div>
-
-    <!-- 底部年份时间轴（宏观经济动态与碳排放强度预测 Tab 不展示） -->
+    <!-- 底部年份时间轴：当前保留结构，但默认不展示 -->
     <div v-if="false" v-show="activeTab === 'carbon'" class="timeline-bar">
       <span class="timeline-label">数据年份</span>
       <el-slider
@@ -48,10 +53,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'HomePage' });
 
-import BizGreenFinance from './BizGreenFinance.vue';
-import BizCarbon from './BizCarbon.vue';
-import BizCarbonPrediction from './BizCarbonPrediction.vue';
-import BizMacro from './BizMacro.vue';
+import { defineAsyncComponent, onMounted, provide, reactive, ref, watch } from 'vue';
 import {
   selectedYear,
   timelineYear,
@@ -59,6 +61,22 @@ import {
   fetchProvinceData,
   fetchCityData,
 } from './hooks/provinceData';
+
+type HomeTabKey = 'greenFinance' | 'carbon' | 'energy' | 'macro';
+
+const tabComponents: Record<HomeTabKey, ReturnType<typeof defineAsyncComponent>> = {
+  greenFinance: defineAsyncComponent(() => import('./BizGreenFinance.vue')),
+  carbon: defineAsyncComponent(() => import('./BizCarbon.vue')),
+  energy: defineAsyncComponent(() => import('./BizCarbonPrediction.vue')),
+  macro: defineAsyncComponent(() => import('./BizMacro.vue')),
+};
+
+const visitedTabs = reactive<Record<HomeTabKey, boolean>>({
+  greenFinance: true,
+  carbon: false,
+  energy: false,
+  macro: false,
+});
 
 function commitTimelineYear() {
   const y = timelineYear.value;
@@ -89,12 +107,18 @@ watch(selectedProvince, (name) => {
 });
 
 const tabs = [
-  { key: 'greenFinance', label: '绿色金融综合指数', icon: '💹' },
-  { key: 'carbon', label: '碳排放底色', icon: '🏭' },
-  { key: 'energy', label: '碳排放强度预测', icon: '⚡' },
-  { key: 'macro', label: '宏观经济', icon: '📈' },
-];
-const activeTab = ref('greenFinance');
+  { key: 'greenFinance', label: '绿色金融综合指数' },
+  { key: 'carbon', label: '碳排放底色' },
+  { key: 'energy', label: '碳排放强度预测' },
+  { key: 'macro', label: '宏观经济' },
+] as Array<{ key: HomeTabKey; label: string }>;
+const activeTab = ref<HomeTabKey>('greenFinance');
+
+function setActiveTab(tabKey: string) {
+  const nextTab = tabKey as HomeTabKey;
+  visitedTabs[nextTab] = true;
+  activeTab.value = nextTab;
+}
 
 const yearMarks = {
   2000: '2000',
@@ -132,12 +156,14 @@ provide('activeTab', activeTab);
   }
 }
 .content {
-  flex: 1;
+  width: 100%;
+  height: 100%;
   min-height: 0;
 }
 .content-shell {
   flex: 1;
   min-height: 0;
+  position: relative;
   margin: 0 14px 14px;
   padding: 14px;
   background: $panel-bg;
@@ -146,6 +172,30 @@ provide('activeTab', activeTab);
   backdrop-filter: blur(12px);
   box-shadow: $box-shadow-panel;
   overflow: hidden;
+}
+.content-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.content-panel {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(12px) scale(0.995);
+  transition:
+    opacity 0.24s ease,
+    transform 0.24s ease,
+    visibility 0.24s ease;
+  will-change: opacity, transform;
+}
+.content-panel.is-active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
 }
 /* ===== 科技风 Tab 导航栏 ===== */
 .tab-nav {
@@ -162,7 +212,6 @@ provide('activeTab', activeTab);
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
   padding: 10px 24px;
   cursor: pointer;
   border: 1px solid rgba($tech-cyan, 0.18);
@@ -175,11 +224,6 @@ provide('activeTab', activeTab);
   letter-spacing: 0.06em;
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
-  .tab-icon {
-    font-size: 15px;
-    filter: grayscale(0.8);
-    transition: filter 0.35s;
-  }
   .tab-label {
     position: relative;
     z-index: 1;
@@ -200,9 +244,6 @@ provide('activeTab', activeTab);
     color: rgba(255, 255, 255, 0.88);
     background: linear-gradient(180deg, rgba($tech-cyan, 0.08), rgba(4, 10, 24, 0.84));
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35), inset 0 0 18px rgba($tech-cyan, 0.06);
-    .tab-icon {
-      filter: grayscale(0);
-    }
     .tab-glow {
       opacity: 0.6;
     }
@@ -213,9 +254,6 @@ provide('activeTab', activeTab);
     background: linear-gradient(180deg, rgba($tech-cyan, 0.14) 0%, rgba(4, 10, 24, 0.92) 100%);
     box-shadow: $glow-shadow, inset 0 1px 0 rgba($tech-cyan, 0.3);
     text-shadow: 0 0 8px rgba($tech-cyan, 0.5);
-    .tab-icon {
-      filter: grayscale(0) drop-shadow(0 0 4px rgba($tech-cyan, 0.6));
-    }
     .tab-glow {
       opacity: 1;
     }

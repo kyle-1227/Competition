@@ -2,7 +2,7 @@
 // @ts-nocheck
 import axios from 'axios';
 import { ref, type Ref } from 'vue';
-import { getProvinceDataApi, getCityDataApi } from '@/api/modules/dashboard';
+import { getProvinceDataApi, getCityDataApi } from '@/api/modules/dashboard-green-finance';
 
 export interface ProvinceGreenFinance {
   province: string;

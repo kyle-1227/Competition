@@ -1,6 +1,16 @@
 import { onMounted, onUnmounted, watch, inject, nextTick, type Ref } from 'vue';
-import type { EChartsOption } from 'echarts';
-import * as echarts from 'echarts';
+import * as echarts from 'echarts/core';
+import type { EChartsCoreOption, EChartsType } from 'echarts/core';
+import { BarChart, LineChart, RadarChart } from 'echarts/charts';
+import {
+  TitleComponent,
+  TooltipComponent,
+  GridComponent,
+  LegendComponent,
+  GraphicComponent,
+  RadarComponent,
+} from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
 import {
   indicatorLabels,
   indicatorKeys,
@@ -17,6 +27,19 @@ import {
   greenFinanceIndicators,
   type GreenFinanceMonitorRow,
 } from './greenFinanceMeta';
+
+echarts.use([
+  TitleComponent,
+  TooltipComponent,
+  GridComponent,
+  LegendComponent,
+  GraphicComponent,
+  RadarComponent,
+  BarChart,
+  LineChart,
+  RadarChart,
+  CanvasRenderer,
+]);
 
 type GfValueKey = keyof Omit<GreenFinanceMonitorRow, 'province' | 'score'>;
 
@@ -106,7 +129,7 @@ const GF_TOP10_RAINBOW = [
 ];
 
 export function useGreenFinanceTop10Bar() {
-  let chart: echarts.ECharts | null = null;
+  let chart: EChartsType | null = null;
   let hooksReady = false;
   function render() {
     const drill = gfDrillProvince.value;
@@ -217,7 +240,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options?: UseChartOp
   const theme = options?.theme ?? 'dark';
   const tabKey = options?.tabKey;
   const activeTab = inject<Ref<string> | undefined>('activeTab', undefined);
-  let chart: echarts.ECharts | null = null;
+  let chart: EChartsType | null = null;
 
   function onWindowResize() {
     chart?.resize();
@@ -245,7 +268,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options?: UseChartOp
     chart?.resize();
   }
 
-  function setOption(option: EChartsOption, notMerge = true) {
+  function setOption(option: EChartsCoreOption, notMerge = true) {
     const apply = () => {
       if (!tryInit()) return false;
       chart!.setOption(option, notMerge);
@@ -285,7 +308,7 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options?: UseChartOp
  * 绿色金融监测 - 七维雷达图（增强版）
  * ======================================================================== */
 export function useGreenFinanceRadar(selectedProv: Ref<string>) {
-  let chart: echarts.ECharts | null = null;
+  let chart: EChartsType | null = null;
   let hooksReady = false;
   function render() {
     const item = getGreenFinanceChartItem(selectedProv);
@@ -439,7 +462,7 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
  * 碳排放底色 - 横向柱状图 TOP 10
  * ======================================================================== */
 export function useCarbonBar() {
-  let chart: echarts.ECharts | null = null;
+  let chart: EChartsType | null = null;
   let hooksReady = false;
   function render() {
     const source = getCarbonRowsFromApi();
@@ -522,12 +545,12 @@ export function useCarbonBar() {
  * 宏观经济动态 - 双 Y 轴混合图（GDP 柱 + 碳排放折线）
  * ======================================================================== */
 export function useMacroChart(selectedProv: Ref<string>) {
-  let chart: echarts.ECharts | null = null;
+  let chart: EChartsType | null = null;
   let hooksReady = false;
 
   async function fetchMacroData(province: string) {
     try {
-      const { getMacroDataApi } = await import('@/api/modules/dashboard');
+      const { getMacroDataApi } = await import('@/api/modules/dashboard-macro');
       const res: unknown = await getMacroDataApi(province === '全国' ? undefined : province);
       const raw = extractList(res);
       return raw.map((r) => {
