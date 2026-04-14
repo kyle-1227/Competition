@@ -54,13 +54,13 @@ useMacroChart(selectedProvince);
   background: $panel-bg;
   border: 1px solid $border-color;
   border-radius: 12px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   backdrop-filter: blur(10px);
   box-shadow: $box-shadow-panel;
   .selector-label {
     color: rgba($tech-cyan, 0.74);
-    font-size: 11px;
-    margin-bottom: 4px;
+    font-size: 15px;
+    margin-bottom: 6px;
     letter-spacing: 0.14em;
   }
   :deep(.el-select) {
@@ -73,8 +73,8 @@ useMacroChart(selectedProvince);
     border-radius: 8px !important;
     display: flex !important;
     align-items: center !important;
-    min-height: 40px !important;
-    padding: 0 12px !important;
+    min-height: 48px !important;
+    padding: 0 14px !important;
     transition: border-color 0.3s, box-shadow 0.3s;
     &:hover,
     &.is-focused {
@@ -84,17 +84,19 @@ useMacroChart(selectedProvince);
   }
   :deep(.el-select__selected-item) {
     color: $tech-cyan !important;
+    font-size: 17px !important;
     font-weight: bold;
     display: flex !important;
     align-items: center !important;
-    min-height: 24px !important;
+    min-height: 28px !important;
     line-height: 1 !important;
   }
   :deep(.el-select__placeholder) {
     color: rgba($tech-cyan, 0.5) !important;
+    font-size: 17px !important;
     display: flex !important;
     align-items: center !important;
-    min-height: 24px !important;
+    min-height: 28px !important;
     line-height: 1 !important;
   }
   :deep(.el-select__suffix) {
@@ -105,8 +107,8 @@ useMacroChart(selectedProvince);
     border: 1px solid rgba($tech-cyan, 0.25) !important;
     box-shadow: inset 0 0 10px rgba($tech-cyan, 0.08) !important;
     border-radius: 8px !important;
-    min-height: 40px !important;
-    padding: 0 12px !important;
+    min-height: 48px !important;
+    padding: 0 14px !important;
     &:hover,
     &.is-focus {
       border-color: rgba($tech-cyan, 0.5) !important;
@@ -115,6 +117,7 @@ useMacroChart(selectedProvince);
   }
   :deep(.el-input__inner) {
     color: $tech-cyan !important;
+    font-size: 17px !important;
     font-weight: bold;
     line-height: 1 !important;
   }
@@ -139,16 +142,16 @@ useMacroChart(selectedProvince);
   padding: 4px 0 10px;
 }
 .chart-title {
-  color: rgba($tech-cyan, 0.88);
-  font-size: 15px;
+    color: rgba($tech-cyan, 0.88);
+  font-size: 19px;
   font-family: $font-title;
   letter-spacing: 0.14em;
   text-shadow: 0 0 10px rgba($tech-cyan, 0.16);
 }
 .chart-desc {
-  color: rgba(200, 220, 255, 0.4);
-  font-size: 11px;
-  margin-top: 4px;
+    color: rgba(200, 220, 255, 0.4);
+  font-size: 15px;
+  margin-top: 6px;
   letter-spacing: 0.04em;
 }
 .chart-box {

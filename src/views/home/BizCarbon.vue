@@ -147,22 +147,22 @@ export default { name: 'BizCarbon' };
       background: $panel-bg;
       border: 1px solid $border-color;
       border-radius: 10px;
-      padding: 8px 12px;
+      padding: 10px 14px;
       backdrop-filter: blur(10px);
       box-shadow: $box-shadow-panel;
-      width: min(220px, 40vw);
+      width: min(268px, 42vw);
     }
     .map-timeline {
       position: absolute;
       top: 10px;
-      left: 278px;
+      left: 322px;
       right: 36px;
       z-index: 999;
       display: flex;
       align-items: center;
-      gap: 12px;
-      min-height: 48px;
-      padding: 8px 18px;
+      gap: 14px;
+      min-height: 56px;
+      padding: 10px 18px;
       background: $panel-bg;
       border: 1px solid $border-color;
       border-radius: 10px;
@@ -171,7 +171,7 @@ export default { name: 'BizCarbon' };
     }
     .map-timeline__label {
       color: rgba($tech-cyan, 0.84);
-      font-size: 12px;
+      font-size: 16px;
       letter-spacing: 0.14em;
       white-space: nowrap;
     }
@@ -184,15 +184,15 @@ export default { name: 'BizCarbon' };
         background: linear-gradient(90deg, $theme-color, $tech-cyan, $tech-green, $tech-orange);
       }
       :deep(.el-slider__button) {
-        width: 14px;
-        height: 14px;
+        width: 18px;
+        height: 18px;
         border: 2px solid $tech-cyan;
         background: $bg-dark;
         box-shadow: 0 0 0 4px rgba($tech-cyan, 0.08), 0 0 14px rgba($tech-cyan, 0.4);
       }
       :deep(.el-slider__marks-text) {
         color: rgba(255, 255, 255, 0.45);
-        font-size: 10px;
+        font-size: 14px;
       }
     }
     .map-timeline__badge {
@@ -200,16 +200,16 @@ export default { name: 'BizCarbon' };
       background: rgba($tech-cyan, 0.12);
       border: 1px solid rgba($tech-cyan, 0.4);
       border-radius: 999px;
-      padding: 4px 12px;
+      padding: 6px 14px;
       color: $tech-cyan;
-      font-size: 14px;
+      font-size: 18px;
       font-weight: bold;
       box-shadow: inset 0 0 14px rgba($tech-cyan, 0.08);
       white-space: nowrap;
     }
     .legend-title {
       color: rgba($tech-cyan, 0.82);
-      font-size: 11px;
+      font-size: 15px;
       letter-spacing: 0.14em;
       margin-bottom: 6px;
     }
@@ -223,7 +223,7 @@ export default { name: 'BizCarbon' };
       display: flex;
       justify-content: space-between;
       color: rgba(255, 255, 255, 0.5);
-      font-size: 10px;
+      font-size: 14px;
       margin-top: 2px;
     }
     .legend-note {
@@ -234,7 +234,7 @@ export default { name: 'BizCarbon' };
       padding-top: 6px;
       border-top: 1px solid rgba(255, 255, 255, 0.08);
       color: rgba(200, 210, 225, 0.85);
-      font-size: 10px;
+      font-size: 14px;
       line-height: 1.35;
     }
     .swatch {
@@ -254,7 +254,7 @@ export default { name: 'BizCarbon' };
       right: 10px;
       color: rgba(255, 255, 255, 0.5);
       z-index: 999;
-      font-size: 12px;
+      font-size: 16px;
     }
   }
 }
@@ -279,7 +279,7 @@ export default { name: 'BizCarbon' };
 .chart-title {
   text-align: center;
   color: rgba($tech-cyan, 0.86);
-  font-size: 13px;
+  font-size: 17px;
   font-family: $font-title;
   padding-bottom: 4px;
   letter-spacing: 0.14em;
@@ -290,23 +290,23 @@ export default { name: 'BizCarbon' };
   background: $panel-bg;
   border: 1px solid rgba($tech-cyan, 0.16);
   border-radius: 12px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   box-shadow: $box-shadow-panel;
 }
 .info-label {
   color: rgba(200, 220, 255, 0.45);
-  font-size: 10px;
+  font-size: 14px;
   letter-spacing: 0.12em;
   margin-bottom: 2px;
 }
 .info-value {
   color: #fff;
-  font-size: 18px;
+  font-size: 23px;
   font-weight: bold;
   font-family: $font-title;
   text-shadow: 0 0 10px rgba($tech-cyan, 0.14);
   .info-unit {
-    font-size: 11px;
+    font-size: 15px;
     color: rgba(255, 255, 255, 0.4);
     font-weight: normal;
   }

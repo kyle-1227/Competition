@@ -368,11 +368,11 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   flex-shrink: 0;
 
   .module-title {
-    font-size: 16px;
+    font-size: 20px;
     font-weight: 600;
     color: rgba(235, 246, 255, 0.95);
     font-family: $font-title;
@@ -388,13 +388,13 @@ onUnmounted(() => {
     background: $panel-bg;
     border: 1px solid $border-color;
     border-radius: 12px;
-    padding: 8px 12px;
+    padding: 10px 14px;
     backdrop-filter: blur(10px);
     box-shadow: $box-shadow-panel;
     .selector-label {
       color: rgba($tech-cyan, 0.74);
-      font-size: 11px;
-      margin-bottom: 4px;
+      font-size: 15px;
+      margin-bottom: 6px;
       letter-spacing: 0.14em;
     }
     :deep(.el-select) {
@@ -407,8 +407,8 @@ onUnmounted(() => {
       border-radius: 8px !important;
       display: flex !important;
       align-items: center !important;
-      min-height: 40px !important;
-      padding: 0 12px !important;
+      min-height: 48px !important;
+      padding: 0 14px !important;
       transition: border-color 0.3s, box-shadow 0.3s;
       &:hover,
       &.is-focused {
@@ -418,17 +418,19 @@ onUnmounted(() => {
     }
     :deep(.el-select__selected-item) {
       color: $tech-cyan !important;
+      font-size: 17px !important;
       font-weight: bold;
       display: flex !important;
       align-items: center !important;
-      min-height: 24px !important;
+      min-height: 28px !important;
       line-height: 1 !important;
     }
     :deep(.el-select__placeholder) {
       color: rgba($tech-cyan, 0.5) !important;
+      font-size: 17px !important;
       display: flex !important;
       align-items: center !important;
-      min-height: 24px !important;
+      min-height: 28px !important;
       line-height: 1 !important;
     }
     :deep(.el-select__suffix) {
@@ -439,8 +441,8 @@ onUnmounted(() => {
       border: 1px solid rgba($tech-cyan, 0.25) !important;
       box-shadow: inset 0 0 10px rgba($tech-cyan, 0.08) !important;
       border-radius: 8px !important;
-      min-height: 40px !important;
-      padding: 0 12px !important;
+      min-height: 48px !important;
+      padding: 0 14px !important;
       &:hover,
       &.is-focus {
         border-color: rgba($tech-cyan, 0.5) !important;
@@ -449,6 +451,7 @@ onUnmounted(() => {
     }
     :deep(.el-input__inner) {
       color: $tech-cyan !important;
+      font-size: 17px !important;
       font-weight: bold;
       line-height: 1 !important;
     }
@@ -463,7 +466,7 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   display: flex;
-  gap: 16px;
+  gap: 18px;
   margin-top: 4px;
 }
 
@@ -480,8 +483,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  padding: 0 4px 8px;
-  font-size: 12px;
+  padding: 0 6px 10px;
+  font-size: 16px;
   color: #8ba3c7;
 
   .toolbar-hint {
@@ -490,7 +493,7 @@ onUnmounted(() => {
 
   .toolbar-legend {
     display: flex;
-    gap: 14px;
+    gap: 18px;
   }
 
   .lg-item {
@@ -498,7 +501,7 @@ onUnmounted(() => {
     align-items: center;
     gap: 6px;
     color: #cbd5e1;
-    font-size: 11px;
+    font-size: 15px;
 
     .lg-swatch {
       display: inline-block;
@@ -545,12 +548,12 @@ onUnmounted(() => {
 }
 
 .controls-column {
-  width: 300px;
+  width: 340px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 10px 12px;
+  padding: 12px 14px;
   background: $panel-bg;
   border: 1px solid rgba($tech-cyan, 0.14);
   border-radius: 12px;
@@ -558,18 +561,18 @@ onUnmounted(() => {
 }
 
 .controls-title {
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 600;
   color: $tech-cyan;
-  margin-bottom: 10px;
-  padding-bottom: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
   border-bottom: 1px solid rgba($tech-cyan, 0.15);
 }
 
 .control-panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -587,7 +590,7 @@ onUnmounted(() => {
     background: rgba(15, 23, 42, 0.45);
     border: 1px solid rgba($tech-cyan, 0.12);
     border-radius: 8px;
-    padding: 8px 10px;
+    padding: 10px 12px;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -596,9 +599,9 @@ onUnmounted(() => {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      gap: 8px;
-      margin-bottom: 8px;
-      font-size: 11px;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 15px;
       line-height: 1.35;
 
       .ctrl-name {
@@ -626,8 +629,8 @@ onUnmounted(() => {
 
       &::-webkit-slider-thumb {
         appearance: none;
-        width: 14px;
-        height: 14px;
+        width: 18px;
+        height: 18px;
         border-radius: 50%;
         background: radial-gradient(circle at 30% 30%, $tech-cyan, #00bf79);
         cursor: pointer;
@@ -637,8 +640,8 @@ onUnmounted(() => {
       }
 
       &::-moz-range-thumb {
-        width: 14px;
-        height: 14px;
+        width: 18px;
+        height: 18px;
         border: none;
         border-radius: 50%;
         background: $tech-cyan;
@@ -675,12 +678,12 @@ onUnmounted(() => {
   gap: 14px;
   margin-top: 12px;
   flex-shrink: 0;
-  min-height: 96px;
+  min-height: 120px;
 
   .coef-box,
   .result-box {
     border-radius: 8px;
-    padding: 10px 14px;
+    padding: 12px 16px;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
@@ -695,8 +698,8 @@ onUnmounted(() => {
 
     .box-title {
       color: #94a3b8;
-      font-size: 12px;
-      margin-bottom: 8px;
+      font-size: 16px;
+      margin-bottom: 10px;
       font-weight: 500;
       flex-shrink: 0;
     }
@@ -705,9 +708,9 @@ onUnmounted(() => {
       flex: 1;
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
+      gap: 10px;
       align-items: stretch;
-      min-height: 52px;
+      min-height: 68px;
 
       .tag {
         display: flex;
@@ -715,11 +718,11 @@ onUnmounted(() => {
         align-items: center;
         justify-content: center;
         text-align: center;
-        font-size: 11px;
+        font-size: 15px;
         line-height: 1.35;
         color: #e2e8f0;
         background: rgba(255, 255, 255, 0.06);
-        padding: 8px 6px;
+        padding: 10px 8px;
         border-radius: 6px;
         border: 1px solid rgba(148, 163, 184, 0.12);
         min-width: 0;
@@ -729,7 +732,7 @@ onUnmounted(() => {
           font-family: $font-title;
           font-weight: 600;
           margin-top: 2px;
-          font-size: 12px;
+          font-size: 16px;
         }
       }
     }
@@ -743,8 +746,8 @@ onUnmounted(() => {
 
     .box-title {
       color: $tech-green;
-      font-size: 12px;
-      margin-bottom: 8px;
+      font-size: 16px;
+      margin-bottom: 10px;
       font-weight: 600;
       flex-shrink: 0;
     }
@@ -755,7 +758,7 @@ onUnmounted(() => {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
       align-items: stretch;
-      min-height: 52px;
+      min-height: 68px;
 
       .val-group {
         display: flex;
@@ -763,21 +766,21 @@ onUnmounted(() => {
         align-items: center;
         justify-content: center;
         text-align: center;
-        gap: 6px;
-        padding: 8px 10px;
+        gap: 8px;
+        padding: 10px 12px;
         background: rgba(0, 0, 0, 0.12);
         border-radius: 8px;
         border: 1px solid rgba($tech-green, 0.12);
         min-width: 0;
 
         .label {
-          font-size: 11px;
+          font-size: 15px;
           color: #94a3b8;
           line-height: 1.2;
         }
 
         .number {
-          font-size: clamp(18px, 2.2vw, 24px);
+          font-size: clamp(23px, 2.5vw, 29px);
           font-weight: 700;
           font-family: $font-title;
           font-variant-numeric: tabular-nums;

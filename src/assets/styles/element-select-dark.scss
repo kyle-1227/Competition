@@ -17,10 +17,10 @@
 .el-select__popper.dark-popper .el-select-dropdown__item,
 .el-popper.dark-popper .el-select-dropdown__item {
   color: rgba(220, 235, 255, 0.92) !important;
-  font-size: 13px;
-  height: 36px;
-  line-height: 36px;
-  padding: 0 14px !important;
+  font-size: 17px;
+  height: 46px;
+  line-height: 46px;
+  padding: 0 18px !important;
   margin: 0;
   border-radius: 8px;
   box-sizing: border-box;
@@ -44,7 +44,8 @@
 .el-select__popper.dark-popper .el-select-dropdown__empty,
 .el-popper.dark-popper .el-select-dropdown__empty {
   color: rgba(200, 220, 255, 0.45);
-  padding: 12px;
+  padding: 14px;
+  font-size: 15px;
 }
 
 .el-select__popper.dark-popper .el-scrollbar__bar,
@@ -54,5 +55,5 @@
 
 .el-select__popper.dark-popper .el-select-dropdown__list,
 .el-popper.dark-popper .el-select-dropdown__list {
-  padding: 6px;
+  padding: 8px;
 }

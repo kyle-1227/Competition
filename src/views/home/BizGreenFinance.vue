@@ -312,7 +312,7 @@ export default { name: 'BizGreenFinance' };
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 16px;
+  padding: 12px 18px;
   margin: 0 0 10px;
   background: $panel-bg;
   border: 1px solid $border-color;
@@ -323,13 +323,13 @@ export default { name: 'BizGreenFinance' };
 .board-item {
   flex: 1;
   text-align: center;
-  padding: 2px 12px;
+  padding: 4px 14px;
 }
 .board-label {
   color: rgba(200, 220, 255, 0.5);
-  font-size: 11px;
+  font-size: 15px;
   letter-spacing: 0.18em;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 .board-value {
   display: flex;
@@ -338,13 +338,13 @@ export default { name: 'BizGreenFinance' };
   gap: 4px;
 }
 .board-num {
-  font-size: 26px;
+  font-size: 31px;
   font-weight: 900;
   font-family: $font-title;
   letter-spacing: -0.5px;
 }
 .board-unit {
-  font-size: 11px;
+  font-size: 15px;
   color: rgba(255, 255, 255, 0.4);
   font-weight: normal;
 }
@@ -378,7 +378,7 @@ export default { name: 'BizGreenFinance' };
 }
 .board-divider {
   width: 1px;
-  height: 36px;
+  height: 52px;
   background: linear-gradient(180deg, transparent, rgba($tech-cyan, 0.25), transparent);
   flex-shrink: 0;
 }
@@ -387,8 +387,8 @@ export default { name: 'BizGreenFinance' };
   top: 88px;
   right: 10px;
   z-index: 1000;
-  padding: 8px 16px;
-  font-size: 12px;
+  padding: 10px 18px;
+  font-size: 16px;
   letter-spacing: 1px;
   color: $tech-cyan;
   cursor: pointer;
@@ -422,22 +422,22 @@ export default { name: 'BizGreenFinance' };
     background: $panel-bg;
     border: 1px solid $border-color;
     border-radius: 10px;
-    padding: 8px 12px;
+    padding: 10px 14px;
     backdrop-filter: blur(10px);
     box-shadow: $box-shadow-panel;
-    width: min(240px, 42vw);
+    width: min(292px, 46vw);
   }
   .map-timeline {
     position: absolute;
     top: 10px;
-    left: 286px;
+    left: 352px;
     right: 34px;
     z-index: 999;
     display: flex;
     align-items: center;
-    gap: 12px;
-    min-height: 48px;
-    padding: 8px 18px;
+    gap: 14px;
+    min-height: 56px;
+    padding: 10px 18px;
     background: $panel-bg;
     border: 1px solid $border-color;
     border-radius: 10px;
@@ -446,7 +446,7 @@ export default { name: 'BizGreenFinance' };
   }
   .map-timeline__label {
     color: rgba($tech-cyan, 0.84);
-    font-size: 12px;
+    font-size: 16px;
     letter-spacing: 0.14em;
     white-space: nowrap;
   }
@@ -459,15 +459,15 @@ export default { name: 'BizGreenFinance' };
       background: linear-gradient(90deg, $theme-color, $tech-cyan, $tech-green, $tech-orange);
     }
     :deep(.el-slider__button) {
-      width: 14px;
-      height: 14px;
+      width: 18px;
+      height: 18px;
       border: 2px solid $tech-cyan;
       background: $bg-dark;
       box-shadow: 0 0 0 4px rgba($tech-cyan, 0.08), 0 0 14px rgba($tech-cyan, 0.4);
     }
     :deep(.el-slider__marks-text) {
       color: rgba(255, 255, 255, 0.45);
-      font-size: 10px;
+      font-size: 14px;
     }
   }
   .map-timeline__badge {
@@ -475,9 +475,9 @@ export default { name: 'BizGreenFinance' };
     background: rgba($tech-cyan, 0.12);
     border: 1px solid rgba($tech-cyan, 0.4);
     border-radius: 999px;
-    padding: 4px 12px;
+    padding: 6px 14px;
     color: $tech-cyan;
-    font-size: 14px;
+    font-size: 18px;
     font-weight: bold;
     box-shadow: inset 0 0 14px rgba($tech-cyan, 0.08);
     white-space: nowrap;
@@ -490,7 +490,7 @@ export default { name: 'BizGreenFinance' };
     padding-top: 6px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     color: rgba(200, 210, 225, 0.85);
-    font-size: 10px;
+    font-size: 14px;
     line-height: 1.35;
   }
   .swatch {
@@ -506,7 +506,7 @@ export default { name: 'BizGreenFinance' };
   }
   .legend-title {
     color: rgba($tech-cyan, 0.84);
-    font-size: 11px;
+    font-size: 15px;
     letter-spacing: 0.14em;
     margin-bottom: 6px;
   }
@@ -520,7 +520,7 @@ export default { name: 'BizGreenFinance' };
     display: flex;
     justify-content: space-between;
     color: rgba(255, 255, 255, 0.5);
-    font-size: 10px;
+    font-size: 14px;
     margin-top: 2px;
   }
   .map-approve {
@@ -529,17 +529,17 @@ export default { name: 'BizGreenFinance' };
     right: 10px;
     color: rgba(255, 255, 255, 0.5);
     z-index: 999;
-    font-size: 12px;
+    font-size: 16px;
     text-shadow: 0 0 8px rgba(0, 0, 0, 0.4);
   }
   .gf-map-tooltip {
     position: absolute;
     z-index: 1001;
-    width: min(292px, calc(100% - 20px));
+    width: min(360px, calc(100% - 20px));
     max-height: min(400px, calc(100% - 24px));
     overflow: auto;
     pointer-events: none;
-    padding: 12px 14px 14px;
+    padding: 14px 16px 16px;
     border-radius: 10px;
     background: rgba(9, 16, 34, 0.82);
     border: 1px solid rgba($tech-cyan, 0.42);
@@ -568,14 +568,14 @@ export default { name: 'BizGreenFinance' };
   }
   .gf-map-tooltip__name {
     color: rgba($tech-cyan, 0.92);
-    font-size: 14px;
+    font-size: 18px;
     font-weight: 700;
     letter-spacing: 0.5px;
     text-shadow: 0 0 12px rgba($tech-cyan, 0.35);
   }
   .gf-map-tooltip__year {
     flex-shrink: 0;
-    font-size: 11px;
+    font-size: 15px;
     color: rgba(200, 220, 255, 0.55);
     letter-spacing: 1px;
   }
@@ -586,12 +586,12 @@ export default { name: 'BizGreenFinance' };
     margin-bottom: 10px;
   }
   .gf-map-tooltip__score-label {
-    font-size: 11px;
+    font-size: 15px;
     color: rgba(200, 220, 255, 0.5);
     letter-spacing: 1px;
   }
   .gf-map-tooltip__score-val {
-    font-size: 22px;
+    font-size: 27px;
     font-weight: 900;
     font-family: $font-title;
     letter-spacing: -0.5px;
@@ -602,28 +602,28 @@ export default { name: 'BizGreenFinance' };
     filter: drop-shadow(0 0 8px rgba($tech-orange, 0.42));
   }
   .gf-map-tooltip__score-unit {
-    font-size: 11px;
+    font-size: 15px;
     color: rgba(255, 255, 255, 0.4);
   }
   .gf-map-tooltip__grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px 12px;
+    gap: 8px 14px;
   }
   .gf-map-tooltip__cell {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 6px 0;
+    gap: 4px;
+    padding: 8px 0;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
   .gf-map-tooltip__cell-label {
-    font-size: 10px;
+    font-size: 14px;
     color: rgba(200, 210, 225, 0.55);
     letter-spacing: 0.5px;
   }
   .gf-map-tooltip__cell-value {
-    font-size: 12px;
+    font-size: 16px;
     font-weight: 600;
     color: rgba(230, 240, 255, 0.92);
     font-variant-numeric: tabular-nums;
@@ -635,7 +635,7 @@ export default { name: 'BizGreenFinance' };
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 16px;
   overflow: hidden;
 }
 .sidebar-section {
@@ -646,6 +646,15 @@ export default { name: 'BizGreenFinance' };
   min-width: 0;
   overflow: hidden;
 }
+.sidebar-section--top {
+  padding-bottom: 4px;
+}
+.sidebar-section--bottom {
+  padding-top: 6px;
+}
+.sidebar-section--bottom .chart-title {
+  padding-top: 2px;
+}
 .chart-box {
   flex: 1;
   min-height: 120px;
@@ -654,17 +663,17 @@ export default { name: 'BizGreenFinance' };
   overflow: hidden;
 }
 .chart-box--top10 {
-  min-height: 160px;
+  min-height: 180px;
 }
 .chart-box--radar {
-  min-height: 200px;
+  min-height: 220px;
 }
 .chart-title {
   text-align: center;
   color: rgba($tech-cyan, 0.85);
-  font-size: 13px;
+  font-size: 17px;
   font-family: $font-title;
-  padding-bottom: 4px;
+  padding-bottom: 6px;
   letter-spacing: 0.14em;
   flex-shrink: 0;
   text-shadow: 0 0 10px rgba($tech-cyan, 0.18);
@@ -675,13 +684,13 @@ export default { name: 'BizGreenFinance' };
   background: $panel-bg;
   border: 1px solid $border-color;
   border-radius: 12px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   backdrop-filter: blur(10px);
   box-shadow: $box-shadow-panel;
   .selector-label {
     color: rgba($tech-cyan, 0.74);
-    font-size: 11px;
-    margin-bottom: 4px;
+    font-size: 15px;
+    margin-bottom: 6px;
     letter-spacing: 0.14em;
   }
   :deep(.el-select) {
@@ -694,8 +703,8 @@ export default { name: 'BizGreenFinance' };
     border-radius: 8px !important;
     display: flex !important;
     align-items: center !important;
-    min-height: 40px !important;
-    padding: 0 12px !important;
+    min-height: 48px !important;
+    padding: 0 14px !important;
     transition: border-color 0.3s, box-shadow 0.3s;
     &:hover,
     &.is-focused {
@@ -705,17 +714,19 @@ export default { name: 'BizGreenFinance' };
   }
   :deep(.el-select__selected-item) {
     color: $tech-cyan !important;
+    font-size: 17px !important;
     font-weight: bold;
     display: flex !important;
     align-items: center !important;
-    min-height: 24px !important;
+    min-height: 28px !important;
     line-height: 1 !important;
   }
   :deep(.el-select__placeholder) {
     color: rgba($tech-cyan, 0.5) !important;
+    font-size: 17px !important;
     display: flex !important;
     align-items: center !important;
-    min-height: 24px !important;
+    min-height: 28px !important;
     line-height: 1 !important;
   }
   :deep(.el-select__suffix) {
@@ -726,8 +737,8 @@ export default { name: 'BizGreenFinance' };
     border: 1px solid rgba($tech-cyan, 0.25) !important;
     box-shadow: inset 0 0 10px rgba($tech-cyan, 0.08) !important;
     border-radius: 8px !important;
-    min-height: 40px !important;
-    padding: 0 12px !important;
+    min-height: 48px !important;
+    padding: 0 14px !important;
     &:hover,
     &.is-focus {
       border-color: rgba($tech-cyan, 0.5) !important;
@@ -736,6 +747,7 @@ export default { name: 'BizGreenFinance' };
   }
   :deep(.el-input__inner) {
     color: $tech-cyan !important;
+    font-size: 17px !important;
     font-weight: bold;
     line-height: 1 !important;
   }

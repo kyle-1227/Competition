@@ -137,7 +137,7 @@ provide('activeTab', activeTab);
   flex: 0 0 72px;
   position: relative;
   line-height: 72px;
-  font-size: 28px;
+  font-size: 33px;
   font-family: $font-title;
   letter-spacing: 0.18em;
   color: rgba(235, 246, 255, 0.95);
@@ -202,8 +202,9 @@ provide('activeTab', activeTab);
   flex: 0 0 auto;
   display: flex;
   justify-content: center;
-  gap: 10px;
-  padding: 0 40px 10px;
+  gap: 14px;
+  padding: 4px 40px 14px;
+  flex-wrap: wrap;
   position: relative;
   z-index: 50;
   font-family: $font-title;
@@ -212,7 +213,8 @@ provide('activeTab', activeTab);
   position: relative;
   display: flex;
   align-items: center;
-  padding: 10px 24px;
+  padding: 13px 30px;
+  min-height: 52px;
   cursor: pointer;
   border: 1px solid rgba($tech-cyan, 0.18);
   border-radius: 10px;
@@ -220,8 +222,8 @@ provide('activeTab', activeTab);
   backdrop-filter: blur(10px);
   box-shadow: inset 0 0 22px rgba($tech-cyan, 0.04);
   color: rgba(255, 255, 255, 0.58);
-  font-size: 13px;
-  letter-spacing: 0.06em;
+  font-size: 17px;
+  letter-spacing: 0.04em;
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   .tab-label {
@@ -278,18 +280,18 @@ provide('activeTab', activeTab);
   right: 340px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   z-index: 100;
   background: $panel-bg;
   border: 1px solid $border-color;
   border-radius: 12px;
-  padding: 8px 20px;
+  padding: 10px 22px;
   backdrop-filter: blur(10px);
   box-shadow: $box-shadow-panel;
 }
 .timeline-label {
   color: rgba($tech-cyan, 0.84);
-  font-size: 12px;
+  font-size: 16px;
   letter-spacing: 0.16em;
   white-space: nowrap;
 }
@@ -302,24 +304,24 @@ provide('activeTab', activeTab);
     background: linear-gradient(90deg, $tech-cyan, $tech-green, $theme-color);
   }
   :deep(.el-slider__button) {
-    width: 14px;
-    height: 14px;
+    width: 18px;
+    height: 18px;
     border: 2px solid $tech-cyan;
     background: $bg-dark;
     box-shadow: 0 0 0 4px rgba($tech-cyan, 0.08), 0 0 14px rgba($tech-cyan, 0.4);
   }
   :deep(.el-slider__marks-text) {
     color: rgba(255, 255, 255, 0.45);
-    font-size: 10px;
+    font-size: 14px;
   }
 }
 .year-badge {
   background: rgba($tech-cyan, 0.12);
   border: 1px solid rgba($tech-cyan, 0.4);
   border-radius: 999px;
-  padding: 4px 12px;
+  padding: 6px 14px;
   color: $tech-cyan;
-  font-size: 14px;
+  font-size: 18px;
   font-weight: bold;
   box-shadow: inset 0 0 14px rgba($tech-cyan, 0.08);
   white-space: nowrap;
