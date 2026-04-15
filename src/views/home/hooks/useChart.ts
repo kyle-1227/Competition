@@ -1,4 +1,4 @@
-import { onMounted, onUnmounted, watch, inject, nextTick, ref, type Ref } from 'vue';
+﻿import { onMounted, onUnmounted, watch, inject, nextTick, ref, type Ref } from 'vue';
 import * as echarts from 'echarts/core';
 import type { EChartsCoreOption, EChartsType } from 'echarts/core';
 import { BarChart, LineChart, RadarChart } from 'echarts/charts';
@@ -571,100 +571,8 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
   });
 }
 /* ========================================================================
- * 碳排放底色 - 横向柱状图 TOP 10
- * ======================================================================== */
-export function useCarbonBar(onProvinceClick?: (provinceName: string) => void) {
-  let chart: EChartsType | null = null;
-  let hooksReady = false;
-  let currentSorted: { province: string; carbonEmission: number }[] = [];
-  function render() {
-    const source = getCarbonRowsFromApi();
-    const sorted = [...source]
-      .sort((a, b) => b.carbonEmission - a.carbonEmission)
-      .slice(0, 10)
-      .reverse();
-    currentSorted = sorted;
-    const provinces = sorted.map((d) => d.province.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, ''));
-    const values = sorted.map((d) => d.carbonEmission);
-    if (!chart) {
-      const el = document.getElementById('carbon-bar');
-      if (!el || el.clientWidth === 0) return;
-      chart = echarts.init(el, 'dark');
-      chart.on('click', (params: { componentType?: string; dataIndex?: number }) => {
-        if (params.componentType !== 'series' || typeof params.dataIndex !== 'number') return;
-        const row = currentSorted[params.dataIndex];
-        if (row) onProvinceClick?.(row.province);
-      });
-      window.addEventListener('resize', () => chart?.resize());
-    }
-    chart.setOption(
-      {
-        backgroundColor: 'transparent',
-        tooltip: {
-          trigger: 'axis',
-          axisPointer: { type: 'shadow' },
-          formatter: (params: { name: string; value: number }[]) =>
-            `<b>${params[0].name}</b><br/>碳排放: ${params[0].value.toLocaleString()} 万吨`,
-        },
-        grid: { left: 10, right: 30, top: 20, bottom: 10, containLabel: true },
-        xAxis: {
-          type: 'value',
-          axisLabel: { color: '#aaa', fontSize: 9 },
-          splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
-        },
-        yAxis: {
-          type: 'category',
-          data: provinces,
-          axisLabel: { color: '#ccc', fontSize: 10 },
-          axisLine: { lineStyle: { color: '#333' } },
-        },
-        series: [
-          {
-            type: 'bar',
-            cursor: 'pointer',
-            data: values.map((v, i) => {
-              let endColor = '#ffcc80';
-              if (i >= 7) endColor = '#ff4444';
-              else if (i >= 4) endColor = '#ff9800';
-              return {
-                value: v,
-                itemStyle: {
-                  color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                    { offset: 0, color: 'rgba(255,80,80,0.2)' },
-                    { offset: 1, color: endColor },
-                  ]),
-                  borderRadius: [0, 4, 4, 0],
-                  shadowColor: 'rgba(255,80,80,0.3)',
-                  shadowBlur: 6,
-                },
-              };
-            }),
-            barWidth: '55%',
-            label: {
-              show: true,
-              position: 'right',
-              color: 'rgba(255,180,180,0.8)',
-              fontSize: 10,
-              formatter: (p: { value: number }) => p.value.toLocaleString(),
-            },
-          },
-        ],
-      },
-      true,
-    );
-  }
-  useDeferredChart('carbon', () => {
-    render();
-    if (!hooksReady) {
-      hooksReady = true;
-      watch(realProvinceData, render, { deep: true });
-    }
-  });
-}
-/* ========================================================================
  * 宏观经济动态 - 双 Y 轴混合图（GDP 柱 + 碳排放折线）
  * ======================================================================== */
-<<<<<<< HEAD
 export interface MacroSeriesPoint {
   year: number;
   gdp: number;
@@ -673,21 +581,18 @@ export interface MacroSeriesPoint {
 
 export const macroSeriesState = ref<Record<string, MacroSeriesPoint[]>>({});
 
-export function useMacroChart(selectedProv: Ref<string>) {
-=======
 export interface UseMacroChartOptions {
   chartId?: string;
-  tabKey?: string;
+  tabKey?: 'greenFinance' | 'carbon' | 'energy';
   selectedCity?: Ref<string>;
 }
 
 export function useMacroChart(selectedProv: Ref<string>, options: UseMacroChartOptions = {}) {
->>>>>>> origin/main
   let chart: EChartsType | null = null;
   let hooksReady = false;
   let resizeAttached = false;
   const chartId = options.chartId ?? 'macro-chart';
-  const tabKey = options.tabKey ?? 'macro';
+  const tabKey = options.tabKey ?? 'carbon';
 
   function onWindowResize() {
     chart?.resize();
@@ -717,6 +622,7 @@ export function useMacroChart(selectedProv: Ref<string>, options: UseMacroChartO
   }
 
   async function fetchMacroData(province: string, city: string) {
+    const seriesKey = city ? `${province}::${city}` : province;
     try {
       const { getMacroDataApi } = await import('@/api/modules/dashboard-macro');
       const res: unknown = await getMacroDataApi({
@@ -734,14 +640,14 @@ export function useMacroChart(selectedProv: Ref<string>, options: UseMacroChartO
       });
       macroSeriesState.value = {
         ...macroSeriesState.value,
-        [province]: data,
+        [seriesKey]: data,
       };
       return data;
     } catch (error) {
       console.error('❌ 宏观经济数据拉取失败:', error);
       macroSeriesState.value = {
         ...macroSeriesState.value,
-        [province]: [],
+        [seriesKey]: [],
       };
       return null;
     }
@@ -881,3 +787,4 @@ export function useMacroChart(selectedProv: Ref<string>, options: UseMacroChartO
     }
   });
 }
+

@@ -1,13 +1,13 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
+defineOptions({ name: 'BizCarbon' });
+
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import {
   getCityCarbonDataApi,
-  getCountyCarbonDataApi,
   type CityCarbonPayload,
   type CityCarbonRow,
-  type CountyCarbonPayload,
-  type CountyCarbonRow,
 } from '@/api/modules/dashboard-carbon';
-import { useCarbonBar, getCarbonRowsFromApi } from './hooks/useChart';
+import { getCarbonRowsFromApi } from './hooks/useChart';
 import { useAiAssistant } from './hooks/aiAssistant';
 import { useCarbonMap } from './hooks/useMap';
 import BizMacro from './BizMacro.vue';
@@ -15,96 +15,38 @@ import {
   NO_PANEL_DATA_REGIONS_LEGEND,
   fetchProvinceData,
   fetchCityData,
+  realProvinceData,
   selectedYear,
   timelineYear,
-  selectedProvince,
+  selectedProvince as gfSelectedProvince,
 } from './hooks/provinceData';
 
-<<<<<<< HEAD
-useCarbonBar();
-useCarbonMap();
-const { registerPageContext } = useAiAssistant();
-=======
-type CarbonViewMode = 'carbon' | 'gdp';
+type CarbonViewMode = 'map-carbon' | 'map-gdp' | 'macro';
+type CarbonMapMetric = 'carbon' | 'gdp';
+type CarbonSidebarAction = 'province' | null;
 
-const activeCarbonView = ref<CarbonViewMode>('carbon');
+interface CarbonSidebarRow {
+  key: string;
+  name: string;
+  subLabel: string;
+  value: number;
+  clickable: boolean;
+  action: CarbonSidebarAction;
+  targetName: string;
+}
+
+const { registerPageContext } = useAiAssistant();
+const noPanelRegionsLegend = NO_PANEL_DATA_REGIONS_LEGEND;
+
+const activeCarbonView = ref<CarbonViewMode>('map-carbon');
+const lastMapView = ref<'map-carbon' | 'map-gdp'>('map-carbon');
 const selectedCarbonProvince = ref('');
-const selectedCarbonCity = ref('');
 const cityCarbonRows = ref<CityCarbonRow[]>([]);
 const cityCarbonTotalWanTon = ref(0);
 const cityCarbonLoading = ref(false);
 const cityCarbonError = ref('');
-const countyCarbonRows = ref<CountyCarbonRow[]>([]);
-const countyCarbonTotalWanTon = ref(0);
-const countyCarbonLoading = ref(false);
-const countyCarbonError = ref('');
+
 let cityCarbonFetchSeq = 0;
-let countyCarbonFetchSeq = 0;
-
-function selectCarbonProvince(provinceName: string) {
-  selectedCarbonProvince.value = provinceName;
-  selectedCarbonCity.value = '';
-  resetCountyCarbon();
-}
-
-function selectCarbonCity(cityName: string) {
-  selectedCarbonCity.value = cityName;
-}
-
-useCarbonBar(selectCarbonProvince);
-useCarbonMap({
-  selectedProvince: selectedCarbonProvince,
-  selectedCity: selectedCarbonCity,
-  cityRows: cityCarbonRows,
-  countyRows: countyCarbonRows,
-  onProvinceClick: selectCarbonProvince,
-  onCityClick: selectCarbonCity,
-});
->>>>>>> origin/main
-
-const noPanelRegionsLegend = NO_PANEL_DATA_REGIONS_LEGEND;
-
-const carbonRows = computed(() => getCarbonRowsFromApi());
-const totalCarbon = computed(() => carbonRows.value.reduce((s, d) => s + d.carbonEmission, 0));
-const avgCarbon = computed(() =>
-  carbonRows.value.length ? Math.round(totalCarbon.value / carbonRows.value.length) : 0,
-);
-const topProvince = computed(() => {
-  const top = [...carbonRows.value].sort((a, b) => b.carbonEmission - a.carbonEmission)[0];
-  return top ? top.province.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, '') : '—';
-});
-const selectedProvinceShortName = computed(() => shortRegionName(selectedCarbonProvince.value));
-const selectedCityShortName = computed(() => shortRegionName(selectedCarbonCity.value));
-const selectedProvinceDbCarbon = computed(
-  () => carbonRows.value.find((d) => d.province === selectedCarbonProvince.value)?.carbonEmission || 0,
-);
-const selectedProvinceCarbonWanTon = computed(() => cityCarbonTotalWanTon.value || selectedProvinceDbCarbon.value);
-const selectedCityCarbonWanTon = computed(
-  () =>
-    cityCarbonRows.value.find((d) => d.city === selectedCarbonCity.value)?.carbonEmissionWanTon ||
-    countyCarbonTotalWanTon.value,
-);
-const topCityCarbon = computed(() => cityCarbonRows.value[0] || null);
-const topCountyCarbon = computed(() => countyCarbonRows.value[0] || null);
-const yearMarks = {
-  2000: '2000',
-  2005: '2005',
-  2010: '2010',
-  2015: '2015',
-  2020: '2020',
-  2024: '2024',
-};
-
-const carbonViewToggleLabel = computed(() =>
-  activeCarbonView.value === 'carbon' ? '切换 GDP 数据' : '返回碳排放底色',
-);
-
-function toggleCarbonView() {
-  activeCarbonView.value = activeCarbonView.value === 'carbon' ? 'gdp' : 'carbon';
-  nextTick(() => {
-    window.dispatchEvent(new Event('resize'));
-  });
-}
 
 function shortRegionName(name: string) {
   return name.replace(/(特别行政区|维吾尔自治区|壮族自治区|回族自治区|自治区|省|市)$/g, '');
@@ -124,26 +66,177 @@ function resetCityCarbon() {
   cityCarbonError.value = '';
 }
 
-function resetCountyCarbon() {
-  countyCarbonRows.value = [];
-  countyCarbonTotalWanTon.value = 0;
-  countyCarbonLoading.value = false;
-  countyCarbonError.value = '';
+function selectCarbonProvince(provinceName: string) {
+  selectedCarbonProvince.value = provinceName;
+  resetCityCarbon();
 }
 
 function clearCarbonProvince() {
   cityCarbonFetchSeq += 1;
-  countyCarbonFetchSeq += 1;
   selectedCarbonProvince.value = '';
-  selectedCarbonCity.value = '';
   resetCityCarbon();
-  resetCountyCarbon();
 }
 
-function backToCityCarbon() {
-  countyCarbonFetchSeq += 1;
-  selectedCarbonCity.value = '';
-  resetCountyCarbon();
+const currentMapView = computed<'map-carbon' | 'map-gdp'>(() =>
+  activeCarbonView.value === 'macro' ? lastMapView.value : activeCarbonView.value,
+);
+const currentMetric = computed<CarbonMapMetric>(() => (currentMapView.value === 'map-gdp' ? 'gdp' : 'carbon'));
+
+useCarbonMap({
+  metric: currentMetric,
+  selectedProvince: selectedCarbonProvince,
+  cityRows: cityCarbonRows,
+  onProvinceClick: selectCarbonProvince,
+});
+
+const provinceCarbonRows = computed(() => getCarbonRowsFromApi());
+const provinceGdpRows = computed(() =>
+  realProvinceData.value.map((row) => ({
+    province: row.province,
+    value: Number(row.gdp ?? 0),
+  })),
+);
+const provinceMetricRows = computed(() =>
+  currentMetric.value === 'gdp'
+    ? provinceGdpRows.value
+    : provinceCarbonRows.value.map((row) => ({ province: row.province, value: row.carbonEmission })),
+);
+const sortedProvinceMetricRows = computed(() =>
+  [...provinceMetricRows.value].sort((a, b) => Number(b.value || 0) - Number(a.value || 0)),
+);
+const sortedCityMetricRows = computed(() =>
+  [...cityCarbonRows.value].sort((a, b) =>
+    currentMetric.value === 'gdp'
+      ? Number(b.gdp || 0) - Number(a.gdp || 0)
+      : Number(b.carbonEmissionWanTon || 0) - Number(a.carbonEmissionWanTon || 0),
+  ),
+);
+const totalMetric = computed(() =>
+  sortedProvinceMetricRows.value.reduce((sum, row) => sum + Number(row.value || 0), 0),
+);
+const avgMetric = computed(() =>
+  sortedProvinceMetricRows.value.length ? Math.round(totalMetric.value / sortedProvinceMetricRows.value.length) : 0,
+);
+const topProvince = computed(() => {
+  const top = sortedProvinceMetricRows.value[0];
+  return top ? shortRegionName(top.province) : '—';
+});
+const selectedProvinceShortName = computed(() => shortRegionName(selectedCarbonProvince.value));
+const selectedProvinceMetricFromProvince = computed(
+  () => provinceMetricRows.value.find((row) => row.province === selectedCarbonProvince.value)?.value || 0,
+);
+const cityGdpTotal = computed(() =>
+  cityCarbonRows.value.reduce((sum, row) => sum + Number(row.gdp || 0), 0),
+);
+const selectedProvinceMetricValue = computed(() => {
+  if (currentMetric.value === 'gdp') {
+    return cityGdpTotal.value || selectedProvinceMetricFromProvince.value;
+  }
+  return cityCarbonTotalWanTon.value || selectedProvinceMetricFromProvince.value;
+});
+const topCityMetric = computed(() => sortedCityMetricRows.value[0] || null);
+const currentMetricLabel = computed(() => (currentMetric.value === 'gdp' ? 'GDP' : '碳排放'));
+const currentMetricUnit = computed(() => (currentMetric.value === 'gdp' ? '亿元' : '万吨'));
+const primaryToggleLabel = computed(() =>
+  currentMapView.value === 'map-carbon' ? '切换 GDP 数据' : '返回碳排放数据',
+);
+const macroToggleLabel = computed(() =>
+  activeCarbonView.value === 'macro' ? '返回地图视图' : 'GDP和碳排放组合图',
+);
+const rankingTitle = computed(() => {
+  if (selectedCarbonProvince.value) return `${selectedProvinceShortName.value} 市级${currentMetricLabel.value}`;
+  return `全国省级${currentMetricLabel.value}`;
+});
+const legendTitle = computed(() =>
+  currentMetric.value === 'gdp' ? 'GDP 总量（亿元）' : '碳排放总量（万吨）',
+);
+const carbonLevelLabel = computed(() => {
+  if (activeCarbonView.value === 'macro') return 'GDP和碳排放组合图';
+  if (selectedCarbonProvince.value) return `市级${currentMetricLabel.value}视角`;
+  return `全国省级${currentMetricLabel.value}视角`;
+});
+const carbonSidebarRows = computed<CarbonSidebarRow[]>(() => {
+  if (selectedCarbonProvince.value) {
+    return sortedCityMetricRows.value.map((row) => ({
+      key: `${row.province}-${row.city}`,
+      name: row.city,
+      subLabel: row.province,
+      value: currentMetric.value === 'gdp'
+        ? Number((row.gdp || 0).toFixed(2))
+        : Number((row.carbonEmissionWanTon || 0).toFixed(2)),
+      clickable: false,
+      action: null,
+      targetName: '',
+    }));
+  }
+
+  return sortedProvinceMetricRows.value.map((row) => ({
+    key: row.province,
+    name: shortRegionName(row.province),
+    subLabel: row.province,
+    value: Number((row.value || 0).toFixed(2)),
+    clickable: true,
+    action: 'province',
+    targetName: row.province,
+  }));
+});
+const metricTop10Rows = computed(() => {
+  const rows = carbonSidebarRows.value.slice(0, 10);
+  return rows.map((row) => ({
+    name: row.name,
+    value: row.value,
+    metric: currentMetric.value,
+  }));
+});
+const sidebarLoading = computed(() => selectedCarbonProvince.value ? cityCarbonLoading.value : false);
+const sidebarError = computed(() => selectedCarbonProvince.value ? cityCarbonError.value : '');
+const sidebarEmptyText = computed(() => {
+  if (selectedCarbonProvince.value) {
+    return `暂无该省份市级${currentMetricLabel.value}数据`;
+  }
+  return `暂无全国省级${currentMetricLabel.value}数据`;
+});
+
+function handleSidebarRowClick(row: CarbonSidebarRow) {
+  if (!row.clickable) return;
+  if (row.action === 'province') {
+    selectCarbonProvince(row.targetName);
+  }
+}
+
+const yearMarks = {
+  2000: '2000',
+  2005: '2005',
+  2010: '2010',
+  2015: '2015',
+  2020: '2020',
+  2024: '2024',
+};
+
+function emitResizeSoon() {
+  nextTick(() => {
+    window.dispatchEvent(new Event('resize'));
+  });
+}
+
+function setMapView(view: 'map-carbon' | 'map-gdp') {
+  lastMapView.value = view;
+  activeCarbonView.value = view;
+  emitResizeSoon();
+}
+
+function toggleMapMetricView() {
+  setMapView(currentMapView.value === 'map-carbon' ? 'map-gdp' : 'map-carbon');
+}
+
+function toggleMacroView() {
+  if (activeCarbonView.value === 'macro') {
+    activeCarbonView.value = lastMapView.value;
+  } else {
+    lastMapView.value = currentMapView.value;
+    activeCarbonView.value = 'macro';
+  }
+  emitResizeSoon();
 }
 
 async function loadCityCarbonData() {
@@ -177,134 +270,85 @@ async function loadCityCarbonData() {
   }
 }
 
-async function loadCountyCarbonData() {
-  const province = selectedCarbonProvince.value;
-  const city = selectedCarbonCity.value;
-  const seq = ++countyCarbonFetchSeq;
-  countyCarbonError.value = '';
-
-  if (!province || !city) {
-    resetCountyCarbon();
-    return;
-  }
-
-  countyCarbonLoading.value = true;
-  countyCarbonRows.value = [];
-  countyCarbonTotalWanTon.value = 0;
-  try {
-    const res = await getCountyCarbonDataApi(province, city, selectedYear.value);
-    if (seq !== countyCarbonFetchSeq) return;
-    const payload: CountyCarbonPayload | null = res?.data ?? null;
-    countyCarbonRows.value = payload?.rows ?? [];
-    countyCarbonTotalWanTon.value = Number(payload?.carbonEmissionWanTon || 0);
-  } catch (error) {
-    if (seq !== countyCarbonFetchSeq) return;
-    countyCarbonRows.value = [];
-    countyCarbonTotalWanTon.value = 0;
-    countyCarbonError.value = error instanceof Error ? error.message : '县级碳排放数据加载失败';
-  } finally {
-    if (seq === countyCarbonFetchSeq) {
-      countyCarbonLoading.value = false;
-    }
-  }
-}
-
 function commitTimelineYear() {
-  const y = timelineYear.value;
-  if (y === selectedYear.value) return;
-  selectedYear.value = y;
-  fetchProvinceData(y);
-  if (selectedProvince.value) {
-    fetchCityData(selectedProvince.value, y);
+  const year = timelineYear.value;
+  if (year === selectedYear.value) return;
+  selectedYear.value = year;
+  fetchProvinceData(year);
+  if (gfSelectedProvince.value) {
+    fetchCityData(gfSelectedProvince.value, year);
   }
 }
 
 watch(
   selectedYear,
-  (y) => {
-    timelineYear.value = y;
+  (year) => {
+    timelineYear.value = year;
   },
   { immediate: true },
 );
 
-<<<<<<< HEAD
-const carbonTop10Rows = computed(() =>
-  [...carbonRows.value]
-    .sort((a, b) => b.carbonEmission - a.carbonEmission)
-    .slice(0, 10)
-    .map((row) => ({
-      name: row.province,
-      carbonEmission: Number(row.carbonEmission.toFixed(2)),
-    })),
-);
+watch([selectedCarbonProvince, selectedYear], loadCityCarbonData, { immediate: true });
 
 const unregisterAiContext = registerPageContext('carbon', () => ({
   year: selectedYear.value,
-  selectedProvince: selectedProvince.value || undefined,
+  selectedProvince: selectedCarbonProvince.value || undefined,
   snapshot: {
-    totalCarbon: Number(totalCarbon.value.toFixed(2)),
-    avgCarbon: avgCarbon.value,
+    viewMode: activeCarbonView.value,
+    mapMetric: currentMetric.value,
+    level: carbonLevelLabel.value,
+    totalValue: Number(totalMetric.value.toFixed(2)),
+    unit: currentMetricUnit.value,
+    avgValue: avgMetric.value,
     topProvince: topProvince.value,
-    top10: carbonTop10Rows.value,
+    top10: metricTop10Rows.value,
   },
 }));
 
 onUnmounted(() => {
   unregisterAiContext();
 });
-=======
-watch([selectedCarbonProvince, selectedYear], loadCityCarbonData, { immediate: true });
-watch([selectedCarbonProvince, selectedCarbonCity, selectedYear], loadCountyCarbonData, { immediate: true });
->>>>>>> origin/main
 </script>
+
 <template>
   <div class="carbon-page">
-    <button
-      type="button"
-      class="carbon-view-toggle"
-      :class="{ 'is-gdp': activeCarbonView === 'gdp' }"
-      @click="toggleCarbonView"
-    >
-      {{ carbonViewToggleLabel }}
-    </button>
-    <div v-show="activeCarbonView === 'carbon'" class="biz-wrap">
+    <div class="carbon-view-actions">
+      <button
+        type="button"
+        class="carbon-view-toggle"
+        :class="{ 'is-gdp': currentMapView === 'map-gdp' }"
+        @click="toggleMapMetricView"
+      >
+        {{ primaryToggleLabel }}
+      </button>
+      <button
+        type="button"
+        class="carbon-view-toggle carbon-view-toggle--secondary"
+        :class="{ 'is-active': activeCarbonView === 'macro' }"
+        @click="toggleMacroView"
+      >
+        {{ macroToggleLabel }}
+      </button>
+    </div>
+
+    <div v-show="activeCarbonView !== 'macro'" class="biz-wrap">
       <div class="biz-wrap-sidebar">
         <div class="sidebar-section">
           <div v-if="selectedCarbonProvince" class="selected-province-bar">
             <div>
-              <div class="selected-label">{{ selectedCarbonCity ? '当前城市' : '当前省份' }}</div>
-              <div class="selected-name">
-                {{ selectedCarbonCity ? selectedCityShortName : selectedProvinceShortName }}
-              </div>
+              <div class="selected-label">当前省份</div>
+              <div class="selected-name">{{ selectedProvinceShortName }}</div>
             </div>
             <div class="selected-actions">
-              <button v-if="selectedCarbonCity" type="button" class="reset-province" @click="backToCityCarbon">
-                返回市级
-              </button>
               <button type="button" class="reset-province" @click="clearCarbonProvince">全国</button>
             </div>
           </div>
-          <template v-if="selectedCarbonProvince && selectedCarbonCity">
+
+          <template v-if="selectedCarbonProvince">
             <div class="info-card">
-              <div class="info-label">{{ selectedYear }}年市级碳排放</div>
+              <div class="info-label">{{ selectedYear }} 年省级{{ currentMetricLabel }}</div>
               <div class="info-value">
-                {{ formatWanTon(selectedCityCarbonWanTon) }} <span class="info-unit">万吨</span>
-              </div>
-            </div>
-            <div class="info-card">
-              <div class="info-label">县级记录数量</div>
-              <div class="info-value">{{ countyCarbonRows.length }} <span class="info-unit">个</span></div>
-            </div>
-            <div class="info-card">
-              <div class="info-label">排放最高县域</div>
-              <div class="info-value highlight">{{ topCountyCarbon?.county || '—' }}</div>
-            </div>
-          </template>
-          <template v-else-if="selectedCarbonProvince">
-            <div class="info-card">
-              <div class="info-label">{{ selectedYear }}年省级碳排放</div>
-              <div class="info-value">
-                {{ formatWanTon(selectedProvinceCarbonWanTon) }} <span class="info-unit">万吨</span>
+                {{ formatWanTon(selectedProvinceMetricValue) }} <span class="info-unit">{{ currentMetricUnit }}</span>
               </div>
             </div>
             <div class="info-card">
@@ -312,84 +356,61 @@ watch([selectedCarbonProvince, selectedCarbonCity, selectedYear], loadCountyCarb
               <div class="info-value">{{ cityCarbonRows.length }} <span class="info-unit">个</span></div>
             </div>
             <div class="info-card">
-              <div class="info-label">排放最高地市</div>
-              <div class="info-value highlight">{{ topCityCarbon?.city || '—' }}</div>
+              <div class="info-label">{{ currentMetricLabel }}最高地市</div>
+              <div class="info-value highlight">{{ topCityMetric?.city || '—' }}</div>
             </div>
           </template>
+
           <template v-else>
             <div class="info-card">
-              <div class="info-label">全国碳排放总量</div>
-              <div class="info-value">{{ totalCarbon.toLocaleString() }} <span class="info-unit">万吨</span></div>
+              <div class="info-label">全国{{ currentMetricLabel }}总量</div>
+              <div class="info-value">{{ formatWanTon(totalMetric) }} <span class="info-unit">{{ currentMetricUnit }}</span></div>
             </div>
             <div class="info-card">
-              <div class="info-label">省均碳排放</div>
-              <div class="info-value">{{ avgCarbon.toLocaleString() }} <span class="info-unit">万吨</span></div>
+              <div class="info-label">省均{{ currentMetricLabel }}</div>
+              <div class="info-value">{{ formatWanTon(avgMetric) }} <span class="info-unit">{{ currentMetricUnit }}</span></div>
             </div>
             <div class="info-card">
-              <div class="info-label">排放最高省份</div>
+              <div class="info-label">{{ currentMetricLabel }}最高省份</div>
               <div class="info-value highlight">{{ topProvince }}</div>
             </div>
           </template>
         </div>
+
         <div class="sidebar-section chart-section">
-          <div class="chart-title">
-            {{
-              selectedCarbonCity
-                ? `${selectedCityShortName} 县级碳排放`
-                : selectedCarbonProvince
-                ? `${selectedProvinceShortName} 市级碳排放`
-                : '碳排放 TOP 10 省份'
-            }}
-          </div>
-          <div v-show="!selectedCarbonProvince" id="carbon-bar" class="chart-box" />
-          <div v-show="selectedCarbonProvince" class="county-carbon-list">
-            <template v-if="selectedCarbonCity">
-              <div v-if="countyCarbonLoading" class="county-state">县级数据加载中...</div>
-              <div v-else-if="countyCarbonError" class="county-state error">{{ countyCarbonError }}</div>
-              <div v-else-if="!countyCarbonRows.length" class="county-state">暂无该城市县级碳排放数据</div>
-              <div v-else class="county-list-inner">
-                <div
-                  v-for="(row, idx) in countyCarbonRows"
-                  :key="`${row.city}-${row.county}-${idx}`"
-                  class="county-row"
-                >
-                  <div class="county-rank">{{ idx + 1 }}</div>
-                  <div class="county-main">
-                    <div class="county-name">{{ row.county }}</div>
-                    <div class="county-city">{{ row.city }}</div>
-                  </div>
-                  <div class="county-value">{{ formatWanTon(row.carbonEmissionWanTon) }} 万吨</div>
+          <div class="chart-title">{{ rankingTitle }}</div>
+          <div class="county-carbon-list">
+            <div v-if="sidebarLoading" class="county-state">
+              {{ selectedCarbonProvince ? '市级数据加载中...' : '省级数据加载中...' }}
+            </div>
+            <div v-else-if="sidebarError" class="county-state error">{{ sidebarError }}</div>
+            <div v-else-if="!carbonSidebarRows.length" class="county-state">{{ sidebarEmptyText }}</div>
+            <div v-else class="county-list-inner">
+              <div
+                v-for="(row, idx) in carbonSidebarRows"
+                :key="row.key"
+                class="county-row"
+                :class="{ clickable: row.clickable }"
+                @click="handleSidebarRowClick(row)"
+              >
+                <div class="county-rank">{{ idx + 1 }}</div>
+                <div class="county-main">
+                  <div class="county-name">{{ row.name }}</div>
+                  <div class="county-city">{{ row.subLabel }}</div>
                 </div>
+                <div class="county-value">{{ formatWanTon(row.value) }} {{ currentMetricUnit }}</div>
               </div>
-            </template>
-            <template v-else>
-              <div v-if="cityCarbonLoading" class="county-state">市级数据加载中...</div>
-              <div v-else-if="cityCarbonError" class="county-state error">{{ cityCarbonError }}</div>
-              <div v-else-if="!cityCarbonRows.length" class="county-state">暂无该省份市级碳排放数据</div>
-              <div v-else class="county-list-inner">
-                <div
-                  v-for="(row, idx) in cityCarbonRows"
-                  :key="`${row.city}-${idx}`"
-                  class="county-row clickable"
-                  @click="selectCarbonCity(row.city)"
-                >
-                  <div class="county-rank">{{ idx + 1 }}</div>
-                  <div class="county-main">
-                    <div class="county-name">{{ row.city }}</div>
-                    <div class="county-city">{{ row.province }}</div>
-                  </div>
-                  <div class="county-value">{{ formatWanTon(row.carbonEmissionWanTon) }} 万吨</div>
-                </div>
-              </div>
-            </template>
+            </div>
           </div>
         </div>
       </div>
+
       <div class="biz-wrap-map">
         <button v-if="selectedCarbonProvince" type="button" class="carbon-back-map" @click="clearCarbonProvince">
           返回全国视角
         </button>
         <div id="carbon-map" />
+
         <div class="map-timeline">
           <span class="map-timeline__label">数据年份</span>
           <el-slider
@@ -398,14 +419,15 @@ watch([selectedCarbonProvince, selectedCarbonCity, selectedYear], loadCountyCarb
             :max="2024"
             :step="1"
             :marks="yearMarks"
-            :format-tooltip="(v: number) => `${v}年`"
+            :format-tooltip="(value: number) => `${value}年`"
             class="map-timeline__slider"
             @change="commitTimelineYear"
           />
           <div class="map-timeline__badge">{{ timelineYear }}年</div>
         </div>
+
         <div class="map-legend">
-          <div class="legend-title">碳排放总量（万吨）</div>
+          <div class="legend-title">{{ legendTitle }}</div>
           <div class="legend-bar" />
           <div class="legend-labels">
             <span>低</span>
@@ -416,11 +438,13 @@ watch([selectedCarbonProvince, selectedCarbonCity, selectedYear], loadCountyCarb
             <span>灰色：无面板数据区域（{{ noPanelRegionsLegend }}），不参与填色</span>
           </div>
         </div>
+
         <div class="map-approve">本底图基于国家地理信息公共服务平台标准地图制作，审图号：GS(2025)5996号</div>
       </div>
     </div>
+
     <BizMacro
-      v-if="activeCarbonView === 'gdp'"
+      v-if="activeCarbonView === 'macro'"
       class="carbon-macro-view"
       :initial-province="selectedCarbonProvince"
       chart-id="carbon-macro-chart"
@@ -429,20 +453,26 @@ watch([selectedCarbonProvince, selectedCarbonCity, selectedYear], loadCountyCarb
     />
   </div>
 </template>
-<script lang="ts">
-export default { name: 'BizCarbon' };
-</script>
+
 <style lang="scss" scoped>
 .carbon-page {
   position: relative;
   height: 100%;
   min-height: 0;
 }
-.carbon-view-toggle {
+
+.carbon-view-actions {
   position: absolute;
   top: 10px;
   right: 10px;
   z-index: 1300;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.carbon-view-toggle {
   min-width: 176px;
   padding: 11px 18px;
   color: $tech-cyan;
@@ -456,26 +486,43 @@ export default { name: 'BizCarbon' };
   letter-spacing: 0.12em;
   transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
+
 .carbon-view-toggle:hover {
   transform: translateY(-1px);
   border-color: rgba($tech-cyan, 0.85);
   box-shadow: $glow-shadow, inset 0 0 24px rgba($tech-cyan, 0.12);
 }
+
 .carbon-view-toggle.is-gdp {
   color: $tech-orange;
   border-color: rgba($tech-orange, 0.62);
   background: linear-gradient(135deg, rgba($tech-orange, 0.17), rgba($tech-cyan, 0.08)), rgba(8, 14, 32, 0.94);
 }
+
+.carbon-view-toggle--secondary {
+  color: rgba(214, 228, 255, 0.9);
+  border-color: rgba(214, 228, 255, 0.28);
+  background: rgba(8, 14, 32, 0.94);
+}
+
+.carbon-view-toggle--secondary.is-active {
+  color: $tech-green;
+  border-color: rgba($tech-green, 0.62);
+  box-shadow: $glow-shadow, inset 0 0 24px rgba($tech-green, 0.12);
+}
+
 .carbon-macro-view {
   width: 100%;
   height: 100%;
   min-height: 0;
 }
+
 .biz-wrap {
   display: flex;
   height: 100%;
   gap: 12px;
   padding: 0;
+
   &-sidebar {
     flex: 0 0 25%;
     max-width: 25%;
@@ -486,24 +533,29 @@ export default { name: 'BizCarbon' };
     gap: 6px;
     overflow-y: auto;
     overflow-x: hidden;
+
     &::-webkit-scrollbar {
       width: 3px;
     }
+
     &::-webkit-scrollbar-thumb {
       background: rgba($tech-cyan, 0.2);
       border-radius: 2px;
     }
   }
+
   &-map {
     flex: 1;
     position: relative;
+
     #carbon-map {
       width: 100%;
       height: 100%;
     }
+
     .carbon-back-map {
       position: absolute;
-      top: 88px;
+      top: 132px;
       right: 10px;
       z-index: 1000;
       padding: 10px 18px;
@@ -517,11 +569,13 @@ export default { name: 'BizCarbon' };
       box-shadow: $box-shadow-panel;
       transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s;
     }
+
     .carbon-back-map:hover {
       transform: translateY(-1px);
       border-color: rgba($tech-cyan, 0.8);
       box-shadow: $glow-shadow, inset 0 0 24px rgba($tech-cyan, 0.1);
     }
+
     .map-legend {
       position: absolute;
       top: 10px;
@@ -535,6 +589,7 @@ export default { name: 'BizCarbon' };
       box-shadow: $box-shadow-panel;
       width: min(268px, 42vw);
     }
+
     .map-timeline {
       position: absolute;
       top: 10px;
@@ -552,20 +607,25 @@ export default { name: 'BizCarbon' };
       backdrop-filter: blur(10px);
       box-shadow: $box-shadow-panel;
     }
+
     .map-timeline__label {
       color: rgba($tech-cyan, 0.84);
       font-size: 16px;
       letter-spacing: 0.14em;
       white-space: nowrap;
     }
+
     .map-timeline__slider {
       flex: 1;
+
       :deep(.el-slider__runway) {
         background: rgba($tech-cyan, 0.12);
       }
+
       :deep(.el-slider__bar) {
         background: linear-gradient(90deg, $theme-color, $tech-cyan, $tech-green, $tech-orange);
       }
+
       :deep(.el-slider__button) {
         width: 18px;
         height: 18px;
@@ -573,11 +633,13 @@ export default { name: 'BizCarbon' };
         background: $bg-dark;
         box-shadow: 0 0 0 4px rgba($tech-cyan, 0.08), 0 0 14px rgba($tech-cyan, 0.4);
       }
+
       :deep(.el-slider__marks-text) {
         color: rgba(255, 255, 255, 0.45);
         font-size: 14px;
       }
     }
+
     .map-timeline__badge {
       flex-shrink: 0;
       background: rgba($tech-cyan, 0.12);
@@ -590,18 +652,21 @@ export default { name: 'BizCarbon' };
       box-shadow: inset 0 0 14px rgba($tech-cyan, 0.08);
       white-space: nowrap;
     }
+
     .legend-title {
       color: rgba($tech-cyan, 0.82);
       font-size: 15px;
       letter-spacing: 0.14em;
       margin-bottom: 6px;
     }
+
     .legend-bar {
       height: 8px;
       border-radius: 4px;
       background: linear-gradient(90deg, #0c8c61, $tech-green, #ffb74d, $tech-orange, #bf6700);
       box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.12);
     }
+
     .legend-labels {
       display: flex;
       justify-content: space-between;
@@ -609,6 +674,7 @@ export default { name: 'BizCarbon' };
       font-size: 14px;
       margin-top: 2px;
     }
+
     .legend-note {
       display: flex;
       align-items: flex-start;
@@ -620,6 +686,7 @@ export default { name: 'BizCarbon' };
       font-size: 14px;
       line-height: 1.35;
     }
+
     .swatch {
       flex-shrink: 0;
       width: 14px;
@@ -628,9 +695,11 @@ export default { name: 'BizCarbon' };
       margin-top: 2px;
       border: 1px solid rgba(255, 255, 255, 0.15);
     }
+
     .swatch--muted {
       background: #5c6470;
     }
+
     .map-approve {
       position: absolute;
       bottom: 10px;
@@ -641,6 +710,7 @@ export default { name: 'BizCarbon' };
     }
   }
 }
+
 .sidebar-section {
   display: flex;
   flex-direction: column;
@@ -648,10 +718,12 @@ export default { name: 'BizCarbon' };
   min-width: 0;
   overflow: hidden;
 }
+
 .chart-section {
   flex: 1;
   min-height: 0;
 }
+
 .selected-province-bar {
   display: flex;
   align-items: center;
@@ -663,11 +735,13 @@ export default { name: 'BizCarbon' };
   border-radius: 8px;
   box-shadow: $box-shadow-panel;
 }
+
 .selected-label {
   color: rgba(200, 220, 255, 0.48);
   font-size: 13px;
   letter-spacing: 0.12em;
 }
+
 .selected-name {
   color: $tech-cyan;
   font-family: $font-title;
@@ -675,11 +749,13 @@ export default { name: 'BizCarbon' };
   font-weight: 800;
   text-shadow: 0 0 12px rgba($tech-cyan, 0.24);
 }
+
 .selected-actions {
   display: flex;
   flex-shrink: 0;
   gap: 8px;
 }
+
 .reset-province {
   flex-shrink: 0;
   padding: 6px 12px;
@@ -690,6 +766,7 @@ export default { name: 'BizCarbon' };
   border-radius: 8px;
   font-size: 14px;
 }
+
 .chart-box {
   flex: 1;
   min-height: 320px;
@@ -697,6 +774,7 @@ export default { name: 'BizCarbon' };
   width: 100%;
   overflow: hidden;
 }
+
 .county-carbon-list {
   flex: 1;
   min-height: 0;
@@ -705,18 +783,22 @@ export default { name: 'BizCarbon' };
   border: 1px solid rgba($tech-cyan, 0.12);
   border-radius: 8px;
 }
+
 .county-list-inner {
   height: 100%;
   overflow-y: auto;
   padding: 6px;
+
   &::-webkit-scrollbar {
     width: 4px;
   }
+
   &::-webkit-scrollbar-thumb {
     background: rgba($tech-cyan, 0.24);
     border-radius: 2px;
   }
 }
+
 .county-row {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) minmax(88px, auto);
@@ -726,23 +808,28 @@ export default { name: 'BizCarbon' };
   padding: 6px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   transition: background 0.2s, border-color 0.2s;
+
   &.clickable {
     cursor: pointer;
   }
+
   &.clickable:hover {
     background: rgba($tech-cyan, 0.08);
     border-color: rgba($tech-cyan, 0.18);
   }
 }
+
 .county-rank {
   color: $tech-orange;
   font-family: $font-title;
   font-size: 17px;
   text-align: center;
 }
+
 .county-main {
   min-width: 0;
 }
+
 .county-name {
   color: rgba(255, 255, 255, 0.92);
   font-size: 15px;
@@ -751,6 +838,7 @@ export default { name: 'BizCarbon' };
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .county-city {
   color: rgba(200, 220, 255, 0.44);
   font-size: 12px;
@@ -759,6 +847,7 @@ export default { name: 'BizCarbon' };
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .county-value {
   color: $tech-green;
   font-family: $font-title;
@@ -766,6 +855,7 @@ export default { name: 'BizCarbon' };
   text-align: right;
   white-space: nowrap;
 }
+
 .county-state {
   height: 100%;
   min-height: 220px;
@@ -775,10 +865,12 @@ export default { name: 'BizCarbon' };
   padding: 20px;
   color: rgba(200, 220, 255, 0.7);
   text-align: center;
+
   &.error {
     color: $tech-orange;
   }
 }
+
 .chart-title {
   text-align: center;
   color: rgba($tech-cyan, 0.86);
@@ -789,6 +881,7 @@ export default { name: 'BizCarbon' };
   flex-shrink: 0;
   text-shadow: 0 0 10px rgba($tech-cyan, 0.16);
 }
+
 .info-card {
   background: $panel-bg;
   border: 1px solid rgba($tech-cyan, 0.16);
@@ -796,23 +889,27 @@ export default { name: 'BizCarbon' };
   padding: 10px 14px;
   box-shadow: $box-shadow-panel;
 }
+
 .info-label {
   color: rgba(200, 220, 255, 0.45);
   font-size: 14px;
   letter-spacing: 0.12em;
   margin-bottom: 2px;
 }
+
 .info-value {
   color: #fff;
   font-size: 23px;
   font-weight: bold;
   font-family: $font-title;
   text-shadow: 0 0 10px rgba($tech-cyan, 0.14);
+
   .info-unit {
     font-size: 15px;
     color: rgba(255, 255, 255, 0.4);
     font-weight: normal;
   }
+
   &.highlight {
     color: $tech-orange;
     text-shadow: 0 0 12px rgba($tech-orange, 0.24);

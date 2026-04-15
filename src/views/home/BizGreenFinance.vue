@@ -1,4 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
+defineOptions({ name: 'BizGreenFinance' });
+
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { useGreenFinanceRadar, useGreenFinanceTop10Bar } from './hooks/useChart';
 import { useAiAssistant } from './hooks/aiAssistant';
 import {
@@ -9,9 +12,7 @@ import {
 import {
   realProvinceData,
   realCityData,
-  realCountyData,
   gfDrillProvince,
-  gfDrillCity,
   gfRadarCityHoverGeoName,
   fetchCityData,
   fetchProvinceData,
@@ -23,40 +24,43 @@ import {
 } from './hooks/provinceData';
 
 const noDataRegionLabel = NO_PANEL_DATA_REGIONS_LEGEND;
-
 const selectedProv = ref('北京市');
-
 const mapAreaRef = ref<HTMLElement | null>(null);
 const gfMapTooltip = ref<GfMapTooltipState>(createHiddenGfTooltip());
 const { registerPageContext } = useAiAssistant();
 
+function shortRegionName(name: string) {
+  return String(name || '').replace(/(特别行政区|维吾尔自治区|壮族自治区|回族自治区|自治区|省|市)$/g, '');
+}
+
 const gfTooltipStyle = computed(() => {
-  const t = gfMapTooltip.value;
+  const tooltip = gfMapTooltip.value;
   const area = mapAreaRef.value;
-  if (!t.visible || !area) return { display: 'none' as const };
-  const pad = 10;
-  const estW = 292;
-  const estH = 400;
-  const aw = area.clientWidth;
-  const ah = area.clientHeight;
-  let left = t.left;
-  let top = t.top;
-  if (left + estW > aw - pad) left = Math.max(pad, aw - estW - pad);
-  if (top + estH > ah - pad) top = Math.max(pad, ah - estH - pad);
-  left = Math.max(pad, left);
-  top = Math.max(pad, top);
+  if (!tooltip.visible || !area) return { display: 'none' as const };
+
+  const padding = 10;
+  const estimatedWidth = 292;
+  const estimatedHeight = 400;
+  const areaWidth = area.clientWidth;
+  const areaHeight = area.clientHeight;
+
+  let left = tooltip.left;
+  let top = tooltip.top;
+
+  if (left + estimatedWidth > areaWidth - padding) {
+    left = Math.max(padding, areaWidth - estimatedWidth - padding);
+  }
+  if (top + estimatedHeight > areaHeight - padding) {
+    top = Math.max(padding, areaHeight - estimatedHeight - padding);
+  }
+
   return {
-    left: `${left}px`,
-    top: `${top}px`,
+    left: `${Math.max(padding, left)}px`,
+    top: `${Math.max(padding, top)}px`,
   };
 });
 
 function clearGfDrill() {
-  if (gfDrillCity.value) {
-    gfDrillCity.value = '';
-    gfRadarCityHoverGeoName.value = '';
-    return;
-  }
   gfDrillProvince.value = '';
   gfRadarCityHoverGeoName.value = '';
 }
@@ -71,13 +75,13 @@ const yearMarks = {
 };
 
 function commitTimelineYear() {
-  const y = timelineYear.value;
-  if (y === selectedYear.value) return;
-  selectedYear.value = y;
-  fetchProvinceData(y);
+  const year = timelineYear.value;
+  if (year === selectedYear.value) return;
+  selectedYear.value = year;
+  fetchProvinceData(year);
 }
 
-const backButtonText = computed(() => (gfDrillCity.value ? '返回市级视角' : '返回全国视角'));
+const backButtonText = computed(() => '返回全国视角');
 
 watch([gfDrillProvince, selectedYear], () => {
   if (gfDrillProvince.value) {
@@ -87,29 +91,28 @@ watch([gfDrillProvince, selectedYear], () => {
 
 watch(
   selectedYear,
-  (y) => {
-    timelineYear.value = y;
+  (year) => {
+    timelineYear.value = year;
   },
   { immediate: true },
 );
 
-watch(selectedProv, (v) => {
-  if (gfDrillProvince.value && v !== gfDrillProvince.value) {
+watch(selectedProv, (province) => {
+  if (gfDrillProvince.value && province !== gfDrillProvince.value) {
     gfDrillProvince.value = '';
   }
 });
+
 useGreenFinanceRadar(selectedProv);
 useGreenFinanceTop10Bar();
 useGreenFinanceMap(selectedProv, gfMapTooltip);
 
 const provList = computed(() => {
   const rows = realProvinceData.value;
-  if (rows.length > 0) {
-    return excludeProvincesWithoutPanelData([...rows].map((r) => r.province)).sort((a, b) =>
-      a.localeCompare(b, 'zh-CN'),
-    );
-  }
-  return [];
+  if (!rows.length) return [];
+  return excludeProvincesWithoutPanelData([...rows].map((row) => row.province)).sort((a, b) =>
+    a.localeCompare(b, 'zh-CN'),
+  );
 });
 
 watch(
@@ -122,7 +125,6 @@ watch(
   { immediate: true },
 );
 
-/** 与省级接口联调：有数据时用 Σ(gdp×score)、Σ(碳/1e4) 等 */
 const boardStats = computed(() => {
   const rows = realProvinceData.value;
   if (!rows.length) {
@@ -133,9 +135,13 @@ const boardStats = computed(() => {
       coveredProvinces: 0,
     };
   }
-  const totalGreenFinance = Math.round(rows.reduce((s, r) => s + (r.gdp || 0) * (r.score || 0), 0));
-  const totalCarbon = Math.round(rows.reduce((s, r) => s + (r.carbonEmission || 0) / 10000, 0));
-  const avgScore = +((rows.reduce((s, r) => s + r.score, 0) / rows.length) * 100).toFixed(2);
+
+  const totalGreenFinance = Math.round(rows.reduce((sum, row) => sum + (row.gdp || 0) * (row.score || 0), 0));
+  const totalCarbon = Math.round(rows.reduce((sum, row) => sum + (row.carbonEmission || 0) / 10000, 0));
+  const avgScore = Number(
+    ((rows.reduce((sum, row) => sum + Number(row.score || 0), 0) / rows.length) * 100).toFixed(2),
+  );
+
   return {
     totalGreenFinance,
     totalCarbon,
@@ -144,19 +150,15 @@ const boardStats = computed(() => {
   };
 });
 
-const displayProv = computed(() => selectedProv.value.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, ''));
-
+const displayProv = computed(() => shortRegionName(selectedProv.value));
 const top10Title = computed(() => {
   if (gfDrillProvince.value) {
     return `${displayProv.value} · 地级市 Top10`;
   }
   return '绿色金融综合指数 · Top10';
 });
-const gfViewMode = computed(() => {
-  if (gfDrillCity.value) return 'county';
-  if (gfDrillProvince.value) return 'city';
-  return 'province';
-});
+const radarTitle = computed(() => `${displayProv.value} · 七维雷达图`);
+const gfViewMode = computed(() => (gfDrillProvince.value ? 'city' : 'province'));
 
 const gfTop10RowsForAi = computed(() => {
   const rows = gfDrillProvince.value ? realCityData.value : realProvinceData.value;
@@ -197,29 +199,15 @@ const gfRadarFocusForAi = computed(() => {
   };
 });
 
-const gfCountyRowsForAi = computed(() =>
-  gfDrillCity.value
-    ? [...realCountyData.value]
-      .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0))
-      .slice(0, 15)
-      .map((row) => ({
-        name: row.province,
-        score: Number(((row.score ?? 0) * 100).toFixed(2)),
-      }))
-    : [],
-);
-
 const unregisterAiContext = registerPageContext('greenFinance', () => ({
   year: selectedYear.value,
   selectedProvince: selectedProv.value,
   drillProvince: gfDrillProvince.value || undefined,
-  drillCity: gfDrillCity.value || undefined,
   snapshot: {
     viewMode: gfViewMode.value,
     boardStats: boardStats.value,
     top10: gfTop10RowsForAi.value,
     radarFocus: gfRadarFocusForAi.value,
-    countyRows: gfCountyRowsForAi.value,
   },
 }));
 
@@ -227,6 +215,7 @@ onUnmounted(() => {
   unregisterAiContext();
 });
 </script>
+
 <template>
   <div class="biz-wrap">
     <div class="biz-wrap-sidebar">
@@ -236,7 +225,7 @@ onUnmounted(() => {
           <el-option
             v-for="item in provList"
             :key="item"
-            :label="item.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, '')"
+            :label="shortRegionName(item)"
             :value="item"
           />
         </el-select>
@@ -247,7 +236,7 @@ onUnmounted(() => {
           <div id="gf-gf-top10-bar" class="chart-box chart-box--top10" />
         </div>
         <div class="sidebar-section sidebar-section--bottom">
-          <div class="chart-title">{{ displayProv }} · 七维雷达图</div>
+          <div class="chart-title">{{ radarTitle }}</div>
           <div id="gf-radar" class="chart-box chart-box--radar" />
         </div>
       </div>
@@ -266,7 +255,7 @@ onUnmounted(() => {
           <div class="board-label">全国碳排放合计</div>
           <div class="board-value green">
             <span class="board-num">{{ boardStats.totalCarbon.toLocaleString() }}</span>
-            <span class="board-unit">万吨CO₂</span>
+            <span class="board-unit">万吨 CO₂</span>
           </div>
         </div>
         <div class="board-divider" />
@@ -344,17 +333,14 @@ onUnmounted(() => {
           </div>
           <div class="legend-note">
             <span class="swatch swatch--muted" />
-            <span>灰色：无面板数据区域（{{ noDataRegionLabel }}），不可选</span>
+            <span>灰色：无面板数据区域（{{ noDataRegionLabel }}），不可选择</span>
           </div>
         </div>
-        <div class="map-approve">本底图基于国家地理信息公共服务平台标准地图制作，审图号：GS(2025)5996号</div>
+        <div class="map-approve">底图基于国家地理信息公共服务平台标准地图制作，审图号：GS(2025)5996号</div>
       </div>
     </div>
   </div>
 </template>
-<script lang="ts">
-export default { name: 'BizGreenFinance' };
-</script>
 <style lang="scss" scoped>
 .biz-wrap {
   display: flex;
@@ -835,3 +821,4 @@ export default { name: 'BizGreenFinance' };
   }
 }
 </style>
+

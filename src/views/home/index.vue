@@ -120,7 +120,6 @@ const tabLabelMap: Record<HomeTabKey, string> = {
   greenFinance: '绿色金融综合指数',
   carbon: '碳排放底色',
   energy: '碳排放强度预测',
-  macro: '宏观经济',
 };
 
 const activeTab = ref<HomeTabKey>('greenFinance');

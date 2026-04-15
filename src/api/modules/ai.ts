@@ -1,7 +1,7 @@
 ﻿import http from '@/api/http';
 import type { ApiEnvelope } from '@/api/types';
 
-export type AiPageKey = 'greenFinance' | 'carbon' | 'energy' | 'macro';
+export type AiPageKey = 'greenFinance' | 'carbon' | 'energy';
 export type AiHistoryRole = 'user' | 'assistant';
 export type AiResultKind = 'chat' | 'summary';
 export type AiStreamEventType = 'start' | 'tool_start' | 'tool_result' | 'delta' | 'done' | 'error';

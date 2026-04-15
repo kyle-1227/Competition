@@ -93,6 +93,37 @@ def get_city_rows(province: str, year: int = 2024) -> list[dict[str, Any]] | Non
         conn.close()
 
 
+def get_city_carbon_rows(province: str, year: int = 2024) -> list[dict[str, Any]] | None:
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT city,
+                   province,
+                   year,
+                   city_code AS cityCode,
+                   co2_emission AS carbonEmission,
+                   ROUND(co2_emission / 10000, 2) AS carbonEmissionWanTon,
+                   ROUND(gdp / 10000, 2) AS gdp
+            FROM city_carbon_gdp
+            WHERE province = %s AND year = %s
+            ORDER BY co2_emission DESC, city ASC
+            """,
+            (province, year),
+        )
+        rows = cursor.fetchall()
+        for row in rows:
+            row["carbonEmission"] = safe_float(row.get("carbonEmission"))
+            row["carbonEmissionWanTon"] = round(safe_float(row.get("carbonEmissionWanTon")), 2)
+            row["gdp"] = round(safe_float(row.get("gdp")), 2)
+        return rows
+    finally:
+        conn.close()
+
+
 def get_macro_rows(province: Optional[str] = None) -> list[dict[str, Any]] | None:
     conn = get_db_connection()
     if not conn:

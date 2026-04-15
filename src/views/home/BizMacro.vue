@@ -1,25 +1,22 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 defineOptions({ name: 'BizMacro' });
 
 import { useMacroChart, macroSeriesState } from './hooks/useChart';
 import { useAiAssistant } from './hooks/aiAssistant';
 import { realProvinceData, excludeProvincesWithoutPanelData } from './hooks/provinceData';
 import { getMacroCityOptionsApi, type MacroCityOption } from '@/api/modules/dashboard-macro';
+import type { AiPageKey } from '@/api/modules/ai';
 
-<<<<<<< HEAD
-const selectedProvince = ref('全国');
-const { registerPageContext } = useAiAssistant();
-=======
 const props = withDefaults(
   defineProps<{
     chartId?: string;
-    tabKey?: string;
+    tabKey?: AiPageKey;
     embedded?: boolean;
     initialProvince?: string;
   }>(),
   {
     chartId: 'macro-chart',
-    tabKey: 'macro',
+    tabKey: 'carbon',
     embedded: false,
     initialProvince: '',
   },
@@ -30,55 +27,25 @@ const selectedCity = ref('');
 const cityOptions = ref<MacroCityOption[]>([]);
 const cityOptionsLoading = ref(false);
 let cityOptionsFetchSeq = 0;
->>>>>>> origin/main
+
+const { registerPageContext } = useAiAssistant();
 
 const provinceList = computed(() => {
-  const provinces = excludeProvincesWithoutPanelData(realProvinceData.value.map((p) => p.province));
+  const provinces = excludeProvincesWithoutPanelData(realProvinceData.value.map((item) => item.province));
   return ['全国', ...provinces.sort((a, b) => a.localeCompare(b, 'zh-CN'))];
 });
 
-<<<<<<< HEAD
-useMacroChart(selectedProvince);
-
-const macroSeriesForAi = computed(() => macroSeriesState.value[selectedProvince.value] || []);
-
-const macroLatestForAi = computed(() => {
-  const rows = macroSeriesForAi.value;
-  return rows.length ? rows[rows.length - 1] : null;
-});
-
-const unregisterAiContext = registerPageContext('macro', () => ({
-  selectedProvince: selectedProvince.value,
-  year: macroLatestForAi.value?.year ?? null,
-  snapshot: {
-    series: macroSeriesForAi.value.map((item) => ({
-      year: item.year,
-      gdp: item.gdp,
-      carbonEmission: item.carbonEmission,
-    })),
-    latest: macroLatestForAi.value
-      ? {
-        year: macroLatestForAi.value.year,
-        gdp: macroLatestForAi.value.gdp,
-        carbonEmission: macroLatestForAi.value.carbonEmission,
-      }
-      : null,
-    range: macroSeriesForAi.value.length
-      ? {
-        startYear: macroSeriesForAi.value[0]?.year ?? null,
-        endYear: macroSeriesForAi.value[macroSeriesForAi.value.length - 1]?.year ?? null,
-      }
-      : null,
-  },
-}));
-
-onUnmounted(() => {
-  unregisterAiContext();
-=======
 const currentRegionName = computed(() => selectedCity.value || selectedProvince.value);
 const chartLevelLabel = computed(() => {
   if (selectedCity.value) return '市级趋势';
   return selectedProvince.value === '全国' ? '全国趋势' : '省级趋势';
+});
+
+const macroSeriesKey = computed(() => (selectedCity.value ? `${selectedProvince.value}::${selectedCity.value}` : selectedProvince.value));
+const macroSeriesForAi = computed(() => macroSeriesState.value[macroSeriesKey.value] || []);
+const macroLatestForAi = computed(() => {
+  const rows = macroSeriesForAi.value;
+  return rows.length ? rows[rows.length - 1] : null;
 });
 
 async function loadCityOptions(province: string) {
@@ -96,7 +63,7 @@ async function loadCityOptions(province: string) {
   } catch (error) {
     if (seq !== cityOptionsFetchSeq) return;
     cityOptions.value = [];
-    console.error('城市GDP列表加载失败:', error);
+    console.error('城市 GDP 列表加载失败:', error);
   } finally {
     if (seq === cityOptionsFetchSeq) {
       cityOptionsLoading.value = false;
@@ -120,7 +87,36 @@ useMacroChart(selectedProvince, {
   chartId: props.chartId,
   tabKey: props.tabKey,
   selectedCity,
->>>>>>> origin/main
+});
+
+const unregisterAiContext = registerPageContext(props.tabKey, () => ({
+  selectedProvince: currentRegionName.value,
+  year: macroLatestForAi.value?.year ?? null,
+  snapshot: {
+    level: chartLevelLabel.value,
+    series: macroSeriesForAi.value.map((item) => ({
+      year: item.year,
+      gdp: item.gdp,
+      carbonEmission: item.carbonEmission,
+    })),
+    latest: macroLatestForAi.value
+      ? {
+        year: macroLatestForAi.value.year,
+        gdp: macroLatestForAi.value.gdp,
+        carbonEmission: macroLatestForAi.value.carbonEmission,
+      }
+      : null,
+    range: macroSeriesForAi.value.length
+      ? {
+        startYear: macroSeriesForAi.value[0]?.year ?? null,
+        endYear: macroSeriesForAi.value[macroSeriesForAi.value.length - 1]?.year ?? null,
+      }
+      : null,
+  },
+}));
+
+onUnmounted(() => {
+  unregisterAiContext();
 });
 </script>
 <template>
@@ -170,8 +166,8 @@ useMacroChart(selectedProvince, {
     </div>
     <div class="biz-wrap-content">
       <div class="chart-header">
-        <div class="chart-title">GDP 与碳排放趋势 · 2000—2024</div>
-        <div class="chart-desc">柱状图为 GDP（亿元），折线为碳排放（万吨） —— 双 Y 轴混合图</div>
+        <div class="chart-title">GDP 与碳排放趋势 · 2000-2024</div>
+        <div class="chart-desc">柱状图为 GDP（亿元），折线为碳排放（万吨） · 双 Y 轴混合图</div>
       </div>
       <div :id="props.chartId" class="chart-box" />
     </div>
