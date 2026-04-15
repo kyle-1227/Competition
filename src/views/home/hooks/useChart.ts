@@ -573,21 +573,28 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
 /* ========================================================================
  * 碳排放底色 - 横向柱状图 TOP 10
  * ======================================================================== */
-export function useCarbonBar() {
+export function useCarbonBar(onProvinceClick?: (provinceName: string) => void) {
   let chart: EChartsType | null = null;
   let hooksReady = false;
+  let currentSorted: { province: string; carbonEmission: number }[] = [];
   function render() {
     const source = getCarbonRowsFromApi();
     const sorted = [...source]
       .sort((a, b) => b.carbonEmission - a.carbonEmission)
       .slice(0, 10)
       .reverse();
+    currentSorted = sorted;
     const provinces = sorted.map((d) => d.province.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, ''));
     const values = sorted.map((d) => d.carbonEmission);
     if (!chart) {
       const el = document.getElementById('carbon-bar');
       if (!el || el.clientWidth === 0) return;
       chart = echarts.init(el, 'dark');
+      chart.on('click', (params: { componentType?: string; dataIndex?: number }) => {
+        if (params.componentType !== 'series' || typeof params.dataIndex !== 'number') return;
+        const row = currentSorted[params.dataIndex];
+        if (row) onProvinceClick?.(row.province);
+      });
       window.addEventListener('resize', () => chart?.resize());
     }
     chart.setOption(
@@ -614,6 +621,7 @@ export function useCarbonBar() {
         series: [
           {
             type: 'bar',
+            cursor: 'pointer',
             data: values.map((v, i) => {
               let endColor = '#ffcc80';
               if (i >= 7) endColor = '#ff4444';
@@ -656,6 +664,7 @@ export function useCarbonBar() {
 /* ========================================================================
  * 宏观经济动态 - 双 Y 轴混合图（GDP 柱 + 碳排放折线）
  * ======================================================================== */
+<<<<<<< HEAD
 export interface MacroSeriesPoint {
   year: number;
   gdp: number;
@@ -665,13 +674,55 @@ export interface MacroSeriesPoint {
 export const macroSeriesState = ref<Record<string, MacroSeriesPoint[]>>({});
 
 export function useMacroChart(selectedProv: Ref<string>) {
+=======
+export interface UseMacroChartOptions {
+  chartId?: string;
+  tabKey?: string;
+  selectedCity?: Ref<string>;
+}
+
+export function useMacroChart(selectedProv: Ref<string>, options: UseMacroChartOptions = {}) {
+>>>>>>> origin/main
   let chart: EChartsType | null = null;
   let hooksReady = false;
+  let resizeAttached = false;
+  const chartId = options.chartId ?? 'macro-chart';
+  const tabKey = options.tabKey ?? 'macro';
 
-  async function fetchMacroData(province: string) {
+  function onWindowResize() {
+    chart?.resize();
+  }
+
+  function ensureChart(): boolean {
+    if (chart) return true;
+    const el = document.getElementById(chartId);
+    if (!el || el.clientWidth === 0) return false;
+    chart = echarts.init(el, 'dark');
+    if (!resizeAttached) {
+      window.addEventListener('resize', onWindowResize);
+      resizeAttached = true;
+    }
+    return true;
+  }
+
+  function dispose() {
+    if (resizeAttached) {
+      window.removeEventListener('resize', onWindowResize);
+      resizeAttached = false;
+    }
+    if (chart) {
+      chart.dispose();
+      chart = null;
+    }
+  }
+
+  async function fetchMacroData(province: string, city: string) {
     try {
       const { getMacroDataApi } = await import('@/api/modules/dashboard-macro');
-      const res: unknown = await getMacroDataApi(province === '全国' ? undefined : province);
+      const res: unknown = await getMacroDataApi({
+        province: province === '全国' ? undefined : province,
+        city: city || undefined,
+      });
       const raw = extractList(res);
       const data = raw.map((r) => {
         const record = r as Record<string, unknown>;
@@ -698,18 +749,14 @@ export function useMacroChart(selectedProv: Ref<string>) {
 
   async function render() {
     const province = selectedProv.value;
+    const city = options.selectedCity?.value ?? '';
 
     // 尝试从API获取数据
-    const apiData = await fetchMacroData(province);
+    const apiData = await fetchMacroData(province, city);
     const data = apiData && apiData.length > 0 ? apiData : [];
 
     if (!data.length) {
-      if (!chart) {
-        const el = document.getElementById('macro-chart');
-        if (!el || el.clientWidth === 0) return;
-        chart = echarts.init(el, 'dark');
-        window.addEventListener('resize', () => chart?.resize());
-      }
+      if (!ensureChart()) return;
       chart?.setOption(
         {
           backgroundColor: 'transparent',
@@ -732,16 +779,13 @@ export function useMacroChart(selectedProv: Ref<string>) {
     const gdps = data.map((d) => d.gdp);
     const carbons = data.map((d) => d.carbonEmission);
 
-    if (!chart) {
-      const el = document.getElementById('macro-chart');
-      if (!el || el.clientWidth === 0) return;
-      chart = echarts.init(el, 'dark');
-      window.addEventListener('resize', () => chart?.resize());
-    }
+    if (!ensureChart()) return;
+    const macroChart = chart;
+    if (!macroChart) return;
 
-    const title = province === '全国' ? '全国' : province.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, '');
+    const title = city || (province === '全国' ? '全国' : province.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, ''));
 
-    chart.setOption(
+    macroChart.setOption(
       {
         backgroundColor: 'transparent',
         tooltip: {
@@ -823,11 +867,16 @@ export function useMacroChart(selectedProv: Ref<string>) {
     );
   }
 
-  useDeferredChart('macro', () => {
+  onUnmounted(dispose);
+
+  useDeferredChart(tabKey, () => {
     render();
     if (!hooksReady) {
       hooksReady = true;
       watch(selectedProv, render);
+      if (options.selectedCity) {
+        watch(options.selectedCity, render);
+      }
       watch(realProvinceData, render, { deep: true });
     }
   });

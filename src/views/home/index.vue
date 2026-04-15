@@ -68,20 +68,18 @@ import {
   fetchCityData,
 } from './hooks/provinceData';
 
-type HomeTabKey = 'greenFinance' | 'carbon' | 'energy' | 'macro';
+type HomeTabKey = 'greenFinance' | 'carbon' | 'energy';
 
 const tabComponents: Record<HomeTabKey, ReturnType<typeof defineAsyncComponent>> = {
   greenFinance: defineAsyncComponent(() => import('./BizGreenFinance.vue')),
   carbon: defineAsyncComponent(() => import('./BizCarbon.vue')),
   energy: defineAsyncComponent(() => import('./BizCarbonPrediction.vue')),
-  macro: defineAsyncComponent(() => import('./BizMacro.vue')),
 };
 
 const visitedTabs = reactive<Record<HomeTabKey, boolean>>({
   greenFinance: true,
   carbon: false,
   energy: false,
-  macro: false,
 });
 
 function commitTimelineYear() {
@@ -116,7 +114,6 @@ const tabs = [
   { key: 'greenFinance', label: '绿色金融综合指数' },
   { key: 'carbon', label: '碳排放底色' },
   { key: 'energy', label: '碳排放强度预测' },
-  { key: 'macro', label: '宏观经济' },
 ] as Array<{ key: HomeTabKey; label: string }>;
 
 const tabLabelMap: Record<HomeTabKey, string> = {

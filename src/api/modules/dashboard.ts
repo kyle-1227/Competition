@@ -17,10 +17,23 @@ export const getCityDataApi = (province: string, year = 2024, signal?: AbortSign
 };
 
 /** 宏观经济数据接口（支持全国和省级） */
-export const getMacroDataApi = (province?: string, signal?: AbortSignal) => {
+export interface MacroDataQuery {
+  province?: string;
+  city?: string;
+}
+
+function normalizeMacroQuery(query?: string | MacroDataQuery) {
+  if (!query) return {};
+  const raw = typeof query === 'string' ? { province: query } : query;
+  return Object.fromEntries(
+    Object.entries(raw).filter(([, value]) => value !== undefined && value !== ''),
+  );
+}
+
+export const getMacroDataApi = (query?: string | MacroDataQuery, signal?: AbortSignal) => {
   return http.get<unknown>(
     'api/macro/data',
-    province ? { province } : {},
+    normalizeMacroQuery(query),
     signal ? { signal } : undefined,
   );
 };
