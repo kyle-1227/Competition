@@ -199,6 +199,14 @@ const GF_TOP10_RAINBOW = [
 export function useGreenFinanceTop10Bar() {
   let chart: EChartsType | null = null;
   let hooksReady = false;
+  const onWindowResize = () => chart?.resize();
+
+  function dispose() {
+    window.removeEventListener('resize', onWindowResize);
+    chart?.dispose();
+    chart = null;
+  }
+
   function render() {
     const drill = gfDrillProvince.value;
     let rows: ProvinceGreenFinance[];
@@ -250,7 +258,7 @@ export function useGreenFinanceTop10Bar() {
       const el = document.getElementById('gf-gf-top10-bar');
       if (!el || el.clientWidth === 0) return;
       chart = echarts.init(el, 'dark');
-      window.addEventListener('resize', () => chart?.resize());
+      window.addEventListener('resize', onWindowResize);
     }
     chart.setOption(
       {
@@ -295,14 +303,6 @@ export function useGreenFinanceTop10Bar() {
                 <span style="color:#ffd54f">${totalScore.toFixed(2)} 分</span>
               </div>
             `;
-            const x = p as { seriesName?: string; name?: string; value?: number; marker?: string };
-            const v = Number(typeof x.value === 'number' && Number.isFinite(x.value) ? x.value : 0);
-            const points = v.toFixed(2);
-            const pct = points;
-            const region = x.name ?? '';
-            const dim = x.seriesName ?? '';
-            return `<div style="font-weight:600;color:#00e5ff;margin-bottom:6px">${region}</div>${x.marker ?? ''}<span style="color:#aaa">${dim}</span> <b style="color:#fff">${points}</b> <span style="color:rgba(255,255,255,0.45)">分</span>`;
-            return `<div style="font-weight:600;color:#00e5ff;margin-bottom:6px">${region}</div>${x.marker ?? ''}<span style="color:#aaa">${dim}</span> <b style="color:#fff">${pct}</b> <span style="color:rgba(255,255,255,0.45)">分</span>`;
           },
         },
         grid: { left: 6, right: 14, top: 8, bottom: 4, containLabel: true },
@@ -338,6 +338,7 @@ export function useGreenFinanceTop10Bar() {
       watch(selectedYear, render);
     }
   });
+  onUnmounted(dispose);
 }
 
 /** 通用：基于模板 ref 的 ECharts（懒初始化 + resize；可选 tabKey 与 activeTab 对齐后 resize） */
@@ -421,6 +422,14 @@ export function useChart(chartRef: Ref<HTMLElement | null>, options?: UseChartOp
 export function useGreenFinanceRadar(selectedProv: Ref<string>) {
   let chart: EChartsType | null = null;
   let hooksReady = false;
+  const onWindowResize = () => chart?.resize();
+
+  function dispose() {
+    window.removeEventListener('resize', onWindowResize);
+    chart?.dispose();
+    chart = null;
+  }
+
   function render() {
     const item = getGreenFinanceChartItem(selectedProv);
     if (!item) return;
@@ -428,13 +437,13 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
     const totalScore = Number(item.score ?? 0);
     // 动态计算每个维度的最大值，让数据更接近边缘
     const maxValue = Math.max(...values);
-    const dynamicMax = maxValue > 0 ? maxValue * 1.05 : 0.18; // 使用1.25倍最大值，让数据更接近边缘
+    const dynamicMax = maxValue > 0 ? maxValue * 1.05 : 0.18; // 使用 1.05 倍最大值，让数据更接近边缘
     const indicator = greenFinanceIndicators.map((ind) => ({ name: ind.label, max: dynamicMax }));
     if (!chart) {
       const el = document.getElementById('gf-radar');
       if (!el || el.clientWidth === 0) return;
       chart = echarts.init(el, 'dark');
-      window.addEventListener('resize', () => chart?.resize());
+      window.addEventListener('resize', onWindowResize);
     }
     chart.setOption(
       {
@@ -569,6 +578,7 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
       watch(gfRadarCityHoverGeoName, render);
     }
   });
+  onUnmounted(dispose);
 }
 /* ========================================================================
  * 宏观经济动态 - 双 Y 轴混合图（GDP 柱 + 碳排放折线）
@@ -787,4 +797,3 @@ export function useMacroChart(selectedProv: Ref<string>, options: UseMacroChartO
     }
   });
 }
-
