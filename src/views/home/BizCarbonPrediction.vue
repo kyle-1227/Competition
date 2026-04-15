@@ -104,6 +104,7 @@ import {
   computeSdmPredictedSeries,
   type SdmCoefficients,
 } from './hooks/useCarbonPredict';
+import { useAiAssistant } from './hooks/aiAssistant';
 
 echarts.use([
   GridComponent,
@@ -115,6 +116,7 @@ echarts.use([
 
 const chartRef = ref<HTMLElement | null>(null);
 const chartInstance = shallowRef<EChartsType | null>(null);
+const { registerPageContext } = useAiAssistant();
 
 /** 后端拉取：省份 -> 年序列（含面板自变量） */
 const historyPayload = ref<Record<string, CarbonHistoryPoint[]>>({});
@@ -186,6 +188,37 @@ const predictionChange = computed(() => {
   if (base === 0) return 0;
   return (finalPrediction.value - base) / base;
 });
+
+const unregisterAiContext = registerPageContext('energy', () => ({
+  year: allYears.value[allYears.value.length - 1] ?? null,
+  selectedProvince: selectedProvince.value,
+  snapshot: {
+    controls: Object.fromEntries(
+      Object.entries(controls.value).map(([key, value]) => [key, Number(value.value.toFixed(2))]),
+    ),
+    coefficients: coefficientsPayload.value
+      ? {
+        core: coefficientsPayload.value.core,
+        control: coefficientsPayload.value.control,
+        control_ln_pop: coefficientsPayload.value.control_ln_pop,
+        policy: coefficientsPayload.value.policy,
+        spatial: coefficientsPayload.value.spatial,
+        rho: coefficientsPayload.value.rho,
+        mediator: coefficientsPayload.value.mediator,
+      }
+      : null,
+    historySeries: seriesFor(selectedProvince.value).map((item) => ({
+      year: item.year,
+      value: item.value,
+    })),
+    predictedSeries: yearsFuture.map((year, index) => ({
+      year,
+      value: currentPrediction.value[index] ?? null,
+    })),
+    finalPrediction: Number(finalPrediction.value.toFixed(4)),
+    predictionChange: Number((predictionChange.value * 100).toFixed(2)),
+  },
+}));
 
 const resizeHandler = () => chartInstance.value?.resize();
 
@@ -342,6 +375,7 @@ onUnmounted(() => {
   resizeObserver?.disconnect();
   resizeObserver = null;
   chartInstance.value?.dispose();
+  unregisterAiContext();
 });
 </script>
 

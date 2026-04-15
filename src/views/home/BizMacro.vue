@@ -1,10 +1,12 @@
 <script setup lang="ts">
 defineOptions({ name: 'BizMacro' });
 
-import { useMacroChart } from './hooks/useChart';
+import { useMacroChart, macroSeriesState } from './hooks/useChart';
+import { useAiAssistant } from './hooks/aiAssistant';
 import { realProvinceData, excludeProvincesWithoutPanelData } from './hooks/provinceData';
 
 const selectedProvince = ref('全国');
+const { registerPageContext } = useAiAssistant();
 
 const provinceList = computed(() => {
   const provinces = excludeProvincesWithoutPanelData(realProvinceData.value.map((p) => p.province));
@@ -12,6 +14,42 @@ const provinceList = computed(() => {
 });
 
 useMacroChart(selectedProvince);
+
+const macroSeriesForAi = computed(() => macroSeriesState.value[selectedProvince.value] || []);
+
+const macroLatestForAi = computed(() => {
+  const rows = macroSeriesForAi.value;
+  return rows.length ? rows[rows.length - 1] : null;
+});
+
+const unregisterAiContext = registerPageContext('macro', () => ({
+  selectedProvince: selectedProvince.value,
+  year: macroLatestForAi.value?.year ?? null,
+  snapshot: {
+    series: macroSeriesForAi.value.map((item) => ({
+      year: item.year,
+      gdp: item.gdp,
+      carbonEmission: item.carbonEmission,
+    })),
+    latest: macroLatestForAi.value
+      ? {
+        year: macroLatestForAi.value.year,
+        gdp: macroLatestForAi.value.gdp,
+        carbonEmission: macroLatestForAi.value.carbonEmission,
+      }
+      : null,
+    range: macroSeriesForAi.value.length
+      ? {
+        startYear: macroSeriesForAi.value[0]?.year ?? null,
+        endYear: macroSeriesForAi.value[macroSeriesForAi.value.length - 1]?.year ?? null,
+      }
+      : null,
+  },
+}));
+
+onUnmounted(() => {
+  unregisterAiContext();
+});
 </script>
 <template>
   <div class="biz-wrap">

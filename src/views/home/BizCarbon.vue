@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useCarbonBar, getCarbonRowsFromApi } from './hooks/useChart';
+import { useAiAssistant } from './hooks/aiAssistant';
 import { useCarbonMap } from './hooks/useMap';
 import {
   NO_PANEL_DATA_REGIONS_LEGEND,
@@ -12,6 +13,7 @@ import {
 
 useCarbonBar();
 useCarbonMap();
+const { registerPageContext } = useAiAssistant();
 
 const noPanelRegionsLegend = NO_PANEL_DATA_REGIONS_LEGEND;
 
@@ -50,6 +52,31 @@ watch(
   },
   { immediate: true },
 );
+
+const carbonTop10Rows = computed(() =>
+  [...carbonRows.value]
+    .sort((a, b) => b.carbonEmission - a.carbonEmission)
+    .slice(0, 10)
+    .map((row) => ({
+      name: row.province,
+      carbonEmission: Number(row.carbonEmission.toFixed(2)),
+    })),
+);
+
+const unregisterAiContext = registerPageContext('carbon', () => ({
+  year: selectedYear.value,
+  selectedProvince: selectedProvince.value || undefined,
+  snapshot: {
+    totalCarbon: Number(totalCarbon.value.toFixed(2)),
+    avgCarbon: avgCarbon.value,
+    topProvince: topProvince.value,
+    top10: carbonTop10Rows.value,
+  },
+}));
+
+onUnmounted(() => {
+  unregisterAiContext();
+});
 </script>
 <template>
   <div class="biz-wrap">

@@ -1,4 +1,4 @@
-import { onMounted, onUnmounted, watch, inject, nextTick, type Ref } from 'vue';
+import { onMounted, onUnmounted, watch, inject, nextTick, ref, type Ref } from 'vue';
 import * as echarts from 'echarts/core';
 import type { EChartsCoreOption, EChartsType } from 'echarts/core';
 import { BarChart, LineChart, RadarChart } from 'echarts/charts';
@@ -656,6 +656,14 @@ export function useCarbonBar() {
 /* ========================================================================
  * 宏观经济动态 - 双 Y 轴混合图（GDP 柱 + 碳排放折线）
  * ======================================================================== */
+export interface MacroSeriesPoint {
+  year: number;
+  gdp: number;
+  carbonEmission: number;
+}
+
+export const macroSeriesState = ref<Record<string, MacroSeriesPoint[]>>({});
+
 export function useMacroChart(selectedProv: Ref<string>) {
   let chart: EChartsType | null = null;
   let hooksReady = false;
@@ -665,7 +673,7 @@ export function useMacroChart(selectedProv: Ref<string>) {
       const { getMacroDataApi } = await import('@/api/modules/dashboard-macro');
       const res: unknown = await getMacroDataApi(province === '全国' ? undefined : province);
       const raw = extractList(res);
-      return raw.map((r) => {
+      const data = raw.map((r) => {
         const record = r as Record<string, unknown>;
         return {
           year: Number(record.year || 0),
@@ -673,8 +681,17 @@ export function useMacroChart(selectedProv: Ref<string>) {
           carbonEmission: Number(record.carbonEmission || 0),
         };
       });
+      macroSeriesState.value = {
+        ...macroSeriesState.value,
+        [province]: data,
+      };
+      return data;
     } catch (error) {
       console.error('❌ 宏观经济数据拉取失败:', error);
+      macroSeriesState.value = {
+        ...macroSeriesState.value,
+        [province]: [],
+      };
       return null;
     }
   }

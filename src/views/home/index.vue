@@ -1,51 +1,56 @@
 ﻿<template>
   <ScreenAdapter>
-    <div class="title">绿色金融与区域碳减排空间协同智能测算平台</div>
-    <!-- 科技风 Tab 导航栏 -->
-    <div class="tab-nav">
-      <div
-        v-for="tab in tabs"
-        :key="tab.key"
-        class="tab-item"
-        :class="{ active: activeTab === tab.key }"
-        @click="setActiveTab(tab.key)"
-      >
-        <span class="tab-label">{{ tab.label }}</span>
-        <div class="tab-glow" />
-      </div>
-    </div>
+    <div class="home-page">
+      <div class="title">绿色金融与区域碳减排空间协同智能测算平台</div>
 
-    <!-- 页面内容区 -->
-    <div class="content-shell">
-      <div class="content-stage">
+      <div class="home-page__ai-anchor">
+        <AiAssistantPanel :active-tab="activeTab" :tab-labels="tabLabelMap" />
+      </div>
+
+      <div class="tab-nav">
         <div
           v-for="tab in tabs"
           :key="tab.key"
-          class="content-panel"
-          :class="{ 'is-active': activeTab === tab.key }"
+          class="tab-item"
+          :class="{ active: activeTab === tab.key }"
+          @click="setActiveTab(tab.key)"
         >
-          <component
-            v-if="visitedTabs[tab.key]"
-            :is="tabComponents[tab.key]"
-            class="content"
-          />
+          <span class="tab-label">{{ tab.label }}</span>
+          <div class="tab-glow" />
         </div>
       </div>
-    </div>
-    <!-- 底部年份时间轴：当前保留结构，但默认不展示 -->
-    <div v-if="false" v-show="activeTab === 'carbon'" class="timeline-bar">
-      <span class="timeline-label">数据年份</span>
-      <el-slider
-        v-model="timelineYear"
-        :min="2000"
-        :max="2024"
-        :step="1"
-        :marks="yearMarks"
-        :format-tooltip="(v: number) => `${v}年`"
-        class="timeline-slider"
-        @change="commitTimelineYear"
-      />
-      <div class="year-badge">{{ timelineYear }}年</div>
+
+      <div class="content-shell">
+        <div class="content-stage">
+          <div
+            v-for="tab in tabs"
+            :key="tab.key"
+            class="content-panel"
+            :class="{ 'is-active': activeTab === tab.key }"
+          >
+            <component
+              v-if="visitedTabs[tab.key]"
+              :is="tabComponents[tab.key]"
+              class="content"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div v-if="false" v-show="activeTab === 'carbon'" class="timeline-bar">
+        <span class="timeline-label">数据年份</span>
+        <el-slider
+          v-model="timelineYear"
+          :min="2000"
+          :max="2024"
+          :step="1"
+          :marks="yearMarks"
+          :format-tooltip="(v: number) => `${v}年`"
+          class="timeline-slider"
+          @change="commitTimelineYear"
+        />
+        <div class="year-badge">{{ timelineYear }}年</div>
+      </div>
     </div>
   </ScreenAdapter>
 </template>
@@ -54,6 +59,7 @@
 defineOptions({ name: 'HomePage' });
 
 import { defineAsyncComponent, onMounted, provide, reactive, ref, watch } from 'vue';
+import AiAssistantPanel from './components/AiAssistantPanel.vue';
 import {
   selectedYear,
   timelineYear,
@@ -79,12 +85,12 @@ const visitedTabs = reactive<Record<HomeTabKey, boolean>>({
 });
 
 function commitTimelineYear() {
-  const y = timelineYear.value;
-  if (y === selectedYear.value) return;
-  selectedYear.value = y;
-  fetchProvinceData(y);
+  const year = timelineYear.value;
+  if (year === selectedYear.value) return;
+  selectedYear.value = year;
+  fetchProvinceData(year);
   if (selectedProvince.value) {
-    fetchCityData(selectedProvince.value, y);
+    fetchCityData(selectedProvince.value, year);
   }
 }
 
@@ -96,13 +102,13 @@ onMounted(() => {
   }
 });
 
-watch(selectedYear, (y) => {
-  timelineYear.value = y;
+watch(selectedYear, (year) => {
+  timelineYear.value = year;
 });
 
-watch(selectedProvince, (name) => {
-  if (name) {
-    fetchCityData(name, selectedYear.value);
+watch(selectedProvince, (province) => {
+  if (province) {
+    fetchCityData(province, selectedYear.value);
   }
 });
 
@@ -112,6 +118,14 @@ const tabs = [
   { key: 'energy', label: '碳排放强度预测' },
   { key: 'macro', label: '宏观经济' },
 ] as Array<{ key: HomeTabKey; label: string }>;
+
+const tabLabelMap: Record<HomeTabKey, string> = {
+  greenFinance: '绿色金融综合指数',
+  carbon: '碳排放底色',
+  energy: '碳排放强度预测',
+  macro: '宏观经济',
+};
+
 const activeTab = ref<HomeTabKey>('greenFinance');
 
 function setActiveTab(tabKey: string) {
@@ -133,6 +147,15 @@ provide('activeTab', activeTab);
 </script>
 
 <style lang="scss" scoped>
+.home-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
 .title {
   flex: 0 0 72px;
   position: relative;
@@ -155,11 +178,21 @@ provide('activeTab', activeTab);
     box-shadow: $glow-shadow;
   }
 }
+
+.home-page__ai-anchor {
+  position: absolute;
+  top: 20px;
+  right: 30px;
+  z-index: 140;
+  pointer-events: none;
+}
+
 .content {
   width: 100%;
   height: 100%;
   min-height: 0;
 }
+
 .content-shell {
   flex: 1;
   min-height: 0;
@@ -173,11 +206,13 @@ provide('activeTab', activeTab);
   box-shadow: $box-shadow-panel;
   overflow: hidden;
 }
+
 .content-stage {
   position: relative;
   width: 100%;
   height: 100%;
 }
+
 .content-panel {
   position: absolute;
   inset: 0;
@@ -191,24 +226,26 @@ provide('activeTab', activeTab);
     visibility 0.24s ease;
   will-change: opacity, transform;
 }
+
 .content-panel.is-active {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
   transform: translateY(0) scale(1);
 }
-/* ===== 科技风 Tab 导航栏 ===== */
+
 .tab-nav {
   flex: 0 0 auto;
   display: flex;
   justify-content: center;
   gap: 14px;
-  padding: 4px 40px 14px;
+  padding: 4px 320px 14px 40px;
   flex-wrap: wrap;
   position: relative;
   z-index: 50;
   font-family: $font-title;
 }
+
 .tab-item {
   position: relative;
   display: flex;
@@ -226,11 +263,13 @@ provide('activeTab', activeTab);
   letter-spacing: 0.04em;
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+
   .tab-label {
     position: relative;
     z-index: 1;
     text-transform: uppercase;
   }
+
   .tab-glow {
     position: absolute;
     inset: 0;
@@ -240,25 +279,30 @@ provide('activeTab', activeTab);
       linear-gradient(90deg, transparent, rgba($tech-cyan, 0.08), transparent);
     transition: opacity 0.35s;
   }
+
   &:hover {
     transform: translateY(-2px);
     border-color: rgba($tech-cyan, 0.38);
     color: rgba(255, 255, 255, 0.88);
     background: linear-gradient(180deg, rgba($tech-cyan, 0.08), rgba(4, 10, 24, 0.84));
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35), inset 0 0 18px rgba($tech-cyan, 0.06);
+
     .tab-glow {
       opacity: 0.6;
     }
   }
+
   &.active {
     border-color: rgba($tech-cyan, 0.62);
     color: #fff;
     background: linear-gradient(180deg, rgba($tech-cyan, 0.14) 0%, rgba(4, 10, 24, 0.92) 100%);
     box-shadow: $glow-shadow, inset 0 1px 0 rgba($tech-cyan, 0.3);
     text-shadow: 0 0 8px rgba($tech-cyan, 0.5);
+
     .tab-glow {
       opacity: 1;
     }
+
     &::after {
       content: '';
       position: absolute;
@@ -272,7 +316,6 @@ provide('activeTab', activeTab);
   }
 }
 
-/* ===== 底部年份时间轴 ===== */
 .timeline-bar {
   position: absolute;
   bottom: 8px;
@@ -289,20 +332,25 @@ provide('activeTab', activeTab);
   backdrop-filter: blur(10px);
   box-shadow: $box-shadow-panel;
 }
+
 .timeline-label {
   color: rgba($tech-cyan, 0.84);
   font-size: 16px;
   letter-spacing: 0.16em;
   white-space: nowrap;
 }
+
 .timeline-slider {
   flex: 1;
+
   :deep(.el-slider__runway) {
     background: rgba($tech-cyan, 0.12);
   }
+
   :deep(.el-slider__bar) {
     background: linear-gradient(90deg, $tech-cyan, $tech-green, $theme-color);
   }
+
   :deep(.el-slider__button) {
     width: 18px;
     height: 18px;
@@ -310,11 +358,13 @@ provide('activeTab', activeTab);
     background: $bg-dark;
     box-shadow: 0 0 0 4px rgba($tech-cyan, 0.08), 0 0 14px rgba($tech-cyan, 0.4);
   }
+
   :deep(.el-slider__marks-text) {
     color: rgba(255, 255, 255, 0.45);
     font-size: 14px;
   }
 }
+
 .year-badge {
   background: rgba($tech-cyan, 0.12);
   border: 1px solid rgba($tech-cyan, 0.4);

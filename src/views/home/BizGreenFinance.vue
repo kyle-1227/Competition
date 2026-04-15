@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useGreenFinanceRadar, useGreenFinanceTop10Bar } from './hooks/useChart';
+import { useAiAssistant } from './hooks/aiAssistant';
 import {
   useGreenFinanceMap,
   createHiddenGfTooltip,
@@ -7,6 +8,8 @@ import {
 } from './hooks/useMap';
 import {
   realProvinceData,
+  realCityData,
+  realCountyData,
   gfDrillProvince,
   gfDrillCity,
   gfRadarCityHoverGeoName,
@@ -16,6 +19,7 @@ import {
   timelineYear,
   excludeProvincesWithoutPanelData,
   NO_PANEL_DATA_REGIONS_LEGEND,
+  findCityRowByGeoName,
 } from './hooks/provinceData';
 
 const noDataRegionLabel = NO_PANEL_DATA_REGIONS_LEGEND;
@@ -24,6 +28,7 @@ const selectedProv = ref('北京市');
 
 const mapAreaRef = ref<HTMLElement | null>(null);
 const gfMapTooltip = ref<GfMapTooltipState>(createHiddenGfTooltip());
+const { registerPageContext } = useAiAssistant();
 
 const gfTooltipStyle = computed(() => {
   const t = gfMapTooltip.value;
@@ -146,6 +151,80 @@ const top10Title = computed(() => {
     return `${displayProv.value} · 地级市 Top10`;
   }
   return '绿色金融综合指数 · Top10';
+});
+const gfViewMode = computed(() => {
+  if (gfDrillCity.value) return 'county';
+  if (gfDrillProvince.value) return 'city';
+  return 'province';
+});
+
+const gfTop10RowsForAi = computed(() => {
+  const rows = gfDrillProvince.value ? realCityData.value : realProvinceData.value;
+  return [...rows]
+    .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0))
+    .slice(0, 10)
+    .map((row) => ({
+      name: row.province,
+      score: Number(((row.score ?? 0) * 100).toFixed(2)),
+      carbonEmission: row.carbonEmission ?? 0,
+      gdp: row.gdp ?? 0,
+    }));
+});
+
+const gfRadarFocusForAi = computed(() => {
+  const hovered = gfRadarCityHoverGeoName.value
+    ? findCityRowByGeoName(gfRadarCityHoverGeoName.value)
+    : undefined;
+  const row = hovered
+    || (gfDrillProvince.value
+      ? [...realCityData.value].sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0))[0]
+      : realProvinceData.value.find((item) => item.province === selectedProv.value) || realProvinceData.value[0]);
+
+  if (!row) return null;
+
+  return {
+    name: row.province,
+    score: Number(((row.score ?? 0) * 100).toFixed(2)),
+    indicators: {
+      greenCredit: row.greenCredit,
+      greenInvest: row.greenInvest,
+      greenInsurance: row.greenInsurance,
+      greenBond: row.greenBond,
+      greenSupport: row.greenExpend,
+      greenFund: row.greenFund,
+      greenEquity: row.greenEquity,
+    },
+  };
+});
+
+const gfCountyRowsForAi = computed(() =>
+  gfDrillCity.value
+    ? [...realCountyData.value]
+      .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0))
+      .slice(0, 15)
+      .map((row) => ({
+        name: row.province,
+        score: Number(((row.score ?? 0) * 100).toFixed(2)),
+      }))
+    : [],
+);
+
+const unregisterAiContext = registerPageContext('greenFinance', () => ({
+  year: selectedYear.value,
+  selectedProvince: selectedProv.value,
+  drillProvince: gfDrillProvince.value || undefined,
+  drillCity: gfDrillCity.value || undefined,
+  snapshot: {
+    viewMode: gfViewMode.value,
+    boardStats: boardStats.value,
+    top10: gfTop10RowsForAi.value,
+    radarFocus: gfRadarFocusForAi.value,
+    countyRows: gfCountyRowsForAi.value,
+  },
+}));
+
+onUnmounted(() => {
+  unregisterAiContext();
 });
 </script>
 <template>
