@@ -209,6 +209,41 @@ const GF_CINEMATIC_RESET_CAMERA = {
   essential: true,
 };
 const GF_ACTIVE_COLOR = 'rgba(0,229,255,0.45)';
+const CARBON_PROVINCE_EXTRUDE_RANGE: [number, number] = [20000, 2000000];
+const CARBON_CITY_EXTRUDE_RANGE: [number, number] = [12000, 1800000];
+const CARBON_COUNTY_EXTRUDE_RANGE: [number, number] = [8000, 1000000];
+const CARBON_MUTED_SCORE = 0.001;
+const CARBON_DRILL_HIT_COLOR = 'rgba(40, 50, 70, 0.06)';
+const CARBON_COLOR_RAMP = [
+  '#1b5e20',
+  '#2e7d32',
+  '#388e3c',
+  '#43a047',
+  '#66bb6a',
+  '#a5d6a7',
+  '#ffcc80',
+  '#ffb74d',
+  '#ff9800',
+  '#f57c00',
+  '#e65100',
+  '#d84315',
+  '#b71c1c',
+];
+
+function regionNameMatches(geoName: string, selectedName: string): boolean {
+  const geo = String(geoName || '').trim();
+  const selected = String(selectedName || '').trim();
+  return !!geo && !!selected && (geo === selected || geo.startsWith(selected) || selected.startsWith(geo));
+}
+
+function carbonRampColor(value: number, maxValue: number): string {
+  const carbon = Number(value);
+  if (!Number.isFinite(carbon) || carbon <= 0) return CARBON_COLOR_RAMP[0];
+  const maxCarbon = Number.isFinite(maxValue) && maxValue > 0 ? maxValue : carbon;
+  const ratio = Math.max(0, Math.min(1, carbon / maxCarbon));
+  const idx = Math.min(CARBON_COLOR_RAMP.length - 1, Math.round(ratio * (CARBON_COLOR_RAMP.length - 1)));
+  return CARBON_COLOR_RAMP[idx];
+}
 
 function buildProvinceScoreMap(): Record<string, number> {
   const scoreMap: Record<string, number> = {};
@@ -441,6 +476,18 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
         const mainFeats = features.filter((f) => !isProvinceExcludedFromPanel(f.properties.name));
         const fullOutlineGeo = { type: 'FeatureCollection', features };
         const provinceBaseSnapshot = cloneFeatureCollection({ type: 'FeatureCollection', features: mainFeats });
+        let cityExtrudeLayer: PolygonLayer | null = null;
+        let countyExtrudeLayer: PolygonLayer | null = null;
+        let cityTopOutlineLayer: LineLayer | null = null;
+        let countyTopOutlineLayer: LineLayer | null = null;
+        let cityBaseSnapshot: { type: string; features: any[] } | null = null;
+        let cityFullSnapshot: { type: string; features: any[] } | null = null;
+        let countyBaseSnapshot: { type: string; features: any[] } | null = null;
+        let countyFullSnapshot: { type: string; features: any[] } | null = null;
+        let citySnapshotProvince = '';
+        let countySnapshotCity = '';
+        let drillGen = 0;
+        let countyDrillGen = 0;
 
         const noPanelFillGeo = { type: 'FeatureCollection', features: noPanelFeats };
         const noPanelFill = new PolygonLayer({ zIndex: 4 })
@@ -949,27 +996,111 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
   });
 }
 
-export function useCarbonMap() {
+export interface UseCarbonMapOptions {
+  selectedProvince: Ref<string>;
+  selectedCity: Ref<string>;
+  cityRows: Ref<Array<{ city: string; carbonEmissionWanTon?: number; carbonEmission?: number }>>;
+  countyRows: Ref<Array<{ county: string; carbonEmissionWanTon?: number; carbonEmission?: number }>>;
+  onProvinceClick?: (provinceName: string) => void;
+  onCityClick?: (cityName: string) => void;
+}
+
+function matchCarbonValue(
+  geoName: string,
+  rows: Array<Record<string, any>>,
+  nameKey: 'city' | 'county',
+): { value: number; hasData: boolean } {
+  const g = String(geoName || '').trim();
+  if (!g) return { value: 0, hasData: false };
+  const row = rows.find((item) => {
+    const name = String(item?.[nameKey] || '').trim();
+    return name && (name === g || g.startsWith(name) || name.startsWith(g));
+  });
+  if (!row) return { value: 0, hasData: false };
+  const value = Number(row.carbonEmissionWanTon ?? row.carbonEmission ?? 0);
+  return { value: Number.isFinite(value) ? value : 0, hasData: true };
+}
+
+export function useCarbonMap(options: UseCarbonMapOptions) {
   onMounted(() => {
     const scene = new Scene({
       id: 'carbon-map',
       map: new Map({
-        pitch: 20,
+        pitch: 45,
         style: 'dark',
         center: [104.195397, 35.86166],
-        zoom: 3.5,
+        zoom: 3.2,
       }),
     });
     scene.setBgColor('#131722');
     scene.on('loaded', () => {
       const mapEl = document.getElementById('carbon-map');
       if (mapEl) mapEl.style.background = '#131722';
+      const nativeMap = scene.getMapService?.()?.map || scene.map;
+
+      nativeMap?.doubleClickZoom?.disable?.();
+
+      let cityExtrudeLayer: PolygonLayer | null = null;
+      let countyExtrudeLayer: PolygonLayer | null = null;
+      let cityTopOutlineLayer: LineLayer | null = null;
+      let countyTopOutlineLayer: LineLayer | null = null;
+      let cityBaseSnapshot: { type: string; features: any[] } | null = null;
+      let cityFullSnapshot: { type: string; features: any[] } | null = null;
+      let countyBaseSnapshot: { type: string; features: any[] } | null = null;
+      let countyFullSnapshot: { type: string; features: any[] } | null = null;
+      let citySnapshotProvince = '';
+      let countySnapshotCity = '';
+      let selectedCountyName = '';
+      let drillGen = 0;
+      let countyDrillGen = 0;
+
+      const runNextFrame = (cb: () => void) => {
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(cb);
+          return;
+        }
+        setTimeout(cb, 16);
+      };
+
+      const runCinematicFit = (bounds: [[number, number], [number, number]] | null) => {
+        if (!bounds) return;
+        runNextFrame(() => {
+          nativeMap?.stop?.();
+          if (nativeMap?.fitBounds) {
+            nativeMap.fitBounds(bounds, {
+              padding: GF_CINEMATIC_PADDING,
+              ...GF_CINEMATIC_DRILL_CAMERA,
+            });
+            return;
+          }
+          scene.fitBounds(bounds, {
+            padding: 80,
+            duration: GF_CINEMATIC_DRILL_CAMERA.duration,
+          });
+          scene.setPitch(GF_CINEMATIC_DRILL_CAMERA.pitch);
+          scene.setRotation?.(GF_CINEMATIC_DRILL_CAMERA.bearing);
+        });
+      };
+
+      const runNationalResetFlight = () => {
+        runNextFrame(() => {
+          nativeMap?.stop?.();
+          if (nativeMap?.flyTo) {
+            nativeMap.flyTo({ ...GF_CINEMATIC_RESET_CAMERA });
+            return;
+          }
+          scene.setZoomAndCenter(GF_CINEMATIC_RESET_CAMERA.zoom, GF_CINEMATIC_RESET_CAMERA.center);
+          scene.setPitch(GF_CINEMATIC_RESET_CAMERA.pitch);
+          scene.setRotation?.(GF_CINEMATIC_RESET_CAMERA.bearing);
+        });
+      };
 
       fetchCountryGeoJson().then((geoData) => {
         const features = geoData.features.filter((f) => f.properties.name);
         const noPanelFeats = features.filter((f) => isProvinceExcludedFromPanel(f.properties.name));
         const mainFeats = features.filter((f) => !isProvinceExcludedFromPanel(f.properties.name));
         const fullOutlineGeo = { type: 'FeatureCollection', features };
+        const provinceBaseSnapshot = cloneFeatureCollection({ type: 'FeatureCollection', features: mainFeats });
 
         const noPanelFillGeo = { type: 'FeatureCollection', features: noPanelFeats };
         const noPanelFill = new PolygonLayer({ zIndex: 4 })
@@ -979,53 +1110,452 @@ export function useCarbonMap() {
           .style({ opacity: 0.95 });
         scene.addLayer(noPanelFill);
 
-        const applyCarbon = () => {
+        const applyCarbonToFc = (fc: { features: any[] }) => {
           const carbonMap = buildCarbonMapWanTon();
-          mainFeats.forEach((f) => {
-            f.properties._carbon = carbonMap[f.properties.name] || 0;
+          fc.features.forEach((f) => {
+            const carbon = carbonMap[f.properties?.name || ''] || 0;
+            f.properties._score = carbon;
+            f.properties._rawCarbon = carbon;
+            f.properties._color = '';
+            f.properties._isBackdrop = false;
           });
         };
-        applyCarbon();
-        const provinceGeo = { type: 'FeatureCollection', features: mainFeats };
 
-        const choropleth = new PolygonLayer({ zIndex: 5 })
+        const applyCityCarbonToFc = (fc: { features: any[] }) => {
+          const rows = options.cityRows.value as Array<Record<string, any>>;
+          fc.features.forEach((f) => {
+            const { value, hasData } = matchCarbonValue(f.properties?.name || '', rows, 'city');
+            f.properties._score = hasData ? value : 0.001;
+            f.properties._rawCarbon = value;
+            f.properties._hasData = hasData;
+            f.properties._color = hasData ? '' : COUNTY_NO_DATA_COLOR;
+            f.properties._isBackdrop = false;
+          });
+        };
+
+        const applyCountyCarbonToFc = (fc: { features: any[] }) => {
+          const rows = options.countyRows.value as Array<Record<string, any>>;
+          fc.features.forEach((f) => {
+            const { value, hasData } = matchCarbonValue(f.properties?.name || '', rows, 'county');
+            f.properties._score = hasData ? value : 0.001;
+            f.properties._rawCarbon = value;
+            f.properties._hasData = hasData;
+            f.properties._color = hasData ? '' : COUNTY_NO_DATA_COLOR;
+            f.properties._isBackdrop = false;
+          });
+        };
+
+        const applySelectedCarbonStyle = (
+          fc: { features: any[] },
+          selectedName = '',
+          mutedColor = GF_BACKDROP_COLOR,
+        ) => {
+          const maxCarbon = Math.max(
+            ...fc.features.map((f) => {
+              const hasData = f.properties?._hasData !== false;
+              const value = Number(f.properties?._rawCarbon || 0);
+              return hasData && Number.isFinite(value) ? value : 0;
+            }),
+            0,
+          );
+
+          fc.features.forEach((f) => {
+            const props = f.properties || {};
+            const hasData = props._hasData !== false;
+            const rawCarbon = Number(props._rawCarbon || 0);
+            const isSelected = !!selectedName && regionNameMatches(props.name || '', selectedName);
+            f.properties = {
+              ...props,
+              _score: isSelected && hasData ? Math.max(rawCarbon, CARBON_MUTED_SCORE) : CARBON_MUTED_SCORE,
+              _color: isSelected && hasData
+                ? carbonRampColor(rawCarbon, maxCarbon)
+                : selectedName && !hasData
+                  ? COUNTY_NO_DATA_COLOR
+                  : mutedColor,
+              _isBackdrop: !isSelected,
+              _isSelected: isSelected,
+            };
+          });
+        };
+
+        const buildCarbonProvinceGeo = () => {
+          const fc = cloneFeatureCollection(provinceBaseSnapshot);
+          applyCarbonToFc(fc);
+          return fc;
+        };
+
+        let provinceFullSnapshot = buildCarbonProvinceGeo();
+
+        const restoreProvinceForegroundGeo = () => {
+          const fc = buildCarbonProvinceGeo();
+          provinceFullSnapshot = cloneFeatureCollection(fc);
+          return fc;
+        };
+
+        const buildProvinceBackdropGeo = (selectedProvince: string) => {
+          const fc = buildCarbonProvinceGeo();
+          provinceFullSnapshot = cloneFeatureCollection(fc);
+          applySelectedCarbonStyle(fc, selectedProvince);
+          return fc;
+        };
+
+        const provinceGeo = restoreProvinceForegroundGeo();
+
+        const carbonExtrudeLayer = new PolygonLayer({ zIndex: 5 })
           .source(provinceGeo)
-          .shape('fill')
-          .color('_carbon', [
-            '#1b5e20',
-            '#2e7d32',
-            '#388e3c',
-            '#43a047',
-            '#66bb6a',
-            '#a5d6a7',
-            '#ffcc80',
-            '#ffb74d',
-            '#ff9800',
-            '#f57c00',
-            '#e65100',
-            '#d84315',
-            '#b71c1c',
-          ])
-          .style({ opacity: 0.8 })
-          .active({ color: 'rgba(255,255,255,0.25)' });
-        scene.addLayer(choropleth);
+          .shape('extrude')
+          .size('_score', CARBON_PROVINCE_EXTRUDE_RANGE)
+          .color('_rawCarbon', CARBON_COLOR_RAMP)
+          .style({ heightfixed: true, pickLight: true, opacity: 0.88 })
+          .active({ color: GF_ACTIVE_COLOR });
+        scene.addLayer(carbonExtrudeLayer);
+        carbonExtrudeLayer.on('click', (e) => {
+          if (options.selectedProvince.value) return;
+          const name = e.feature?.properties?.name;
+          if (name && !isProvinceExcludedFromPanel(name) && e.feature?.properties?._isBackdrop !== true) {
+            options.onProvinceClick?.(name);
+          }
+        });
+
+        const carbonTopOutlineLayer = new LineLayer({ zIndex: 15 })
+          .source(buildExtrudeTopOutlines(provinceGeo, CARBON_PROVINCE_EXTRUDE_RANGE))
+          .shape('line')
+          .color(GF_EXTRUDE_TOP_LINE_COLOR)
+          .size(GF_EXTRUDE_TOP_LINE_WIDTH)
+          .style({
+            opacity: 0.94,
+            heightfixed: true,
+            vertexHeightScale: 1,
+            depth: true,
+          });
+        scene.addLayer(carbonTopOutlineLayer);
 
         const border = new LineLayer({ zIndex: 10 })
           .source(fullOutlineGeo)
           .shape('line')
-          .color('rgba(255,255,255,0.25)')
-          .size(0.6)
-          .style({ opacity: 0.7 });
+          .color('rgba(0,229,255,0.38)')
+          .size(0.65)
+          .style({ opacity: 0.75 });
         scene.addLayer(border);
+
+        const setProvinceLayerData = (fc: { type: string; features: any[] }, backdrop = false) => {
+          const nextGeo = cloneFeatureCollection(fc);
+          carbonExtrudeLayer.setData(nextGeo);
+          if (backdrop) {
+            carbonExtrudeLayer.color('_color');
+            carbonExtrudeLayer.active(false);
+            carbonTopOutlineLayer.color(GF_BACKDROP_TOP_LINE_COLOR);
+            border.color('rgba(140,168,190,0.18)');
+            border.style({ opacity: 0.45 });
+            noPanelFill.color('rgba(92,100,112,0.72)');
+            noPanelFill.style({ opacity: 0.72 });
+          } else {
+            carbonExtrudeLayer.color('_rawCarbon', CARBON_COLOR_RAMP);
+            carbonExtrudeLayer.active({ color: GF_ACTIVE_COLOR });
+            carbonTopOutlineLayer.color(GF_EXTRUDE_TOP_LINE_COLOR);
+            border.color('rgba(0,229,255,0.38)');
+            border.style({ opacity: 0.75 });
+            noPanelFill.color('#5c6470');
+            noPanelFill.style({ opacity: 0.95 });
+          }
+          carbonTopOutlineLayer.setData(buildExtrudeTopOutlines(nextGeo, CARBON_PROVINCE_EXTRUDE_RANGE));
+          carbonExtrudeLayer.show();
+          carbonTopOutlineLayer.show();
+        };
+
+        const restoreCityForegroundGeo = () => {
+          if (!cityBaseSnapshot) return null;
+          const fc = cloneFeatureCollection(cityBaseSnapshot);
+          applyCityCarbonToFc(fc);
+          cityFullSnapshot = cloneFeatureCollection(fc);
+          return fc;
+        };
+
+        const buildCityBackdropGeo = (selectedCity: string) => {
+          if (!cityBaseSnapshot) return null;
+          const fc = cloneFeatureCollection(cityBaseSnapshot);
+          applyCityCarbonToFc(fc);
+          cityFullSnapshot = cloneFeatureCollection(fc);
+          applySelectedCarbonStyle(fc, selectedCity, selectedCity ? GF_BACKDROP_COLOR : CARBON_DRILL_HIT_COLOR);
+          return fc;
+        };
+
+        const restoreCountyForegroundGeo = () => {
+          if (!countyBaseSnapshot) return null;
+          const fc = cloneFeatureCollection(countyBaseSnapshot);
+          applyCountyCarbonToFc(fc);
+          countyFullSnapshot = cloneFeatureCollection(fc);
+          return fc;
+        };
+
+        const buildCountyBackdropGeo = (selectedCounty = '') => {
+          if (!countyBaseSnapshot) return null;
+          const fc = cloneFeatureCollection(countyBaseSnapshot);
+          applyCountyCarbonToFc(fc);
+          countyFullSnapshot = cloneFeatureCollection(fc);
+          applySelectedCarbonStyle(fc, selectedCounty, selectedCounty ? GF_BACKDROP_COLOR : CARBON_DRILL_HIT_COLOR);
+          return fc;
+        };
+
+        const ensureCityLayers = (fc: { type: string; features: any[] }) => {
+          if (!cityExtrudeLayer) {
+            cityExtrudeLayer = new PolygonLayer({ zIndex: 6 })
+              .source(fc)
+              .shape('extrude')
+              .size('_score', CARBON_CITY_EXTRUDE_RANGE)
+              .color('_rawCarbon', CARBON_COLOR_RAMP)
+              .style({ heightfixed: true, pickLight: true, opacity: 0.88 })
+              .active({ color: GF_ACTIVE_COLOR });
+            scene.addLayer(cityExtrudeLayer);
+            cityExtrudeLayer.on('click', (e) => {
+              if (!options.selectedProvince.value || options.selectedCity.value) return;
+              const name = e.feature?.properties?.name;
+              if (name && e.feature?.properties?._hasData !== false) {
+                options.onCityClick?.(name);
+              }
+            });
+          }
+          if (!cityTopOutlineLayer) {
+            cityTopOutlineLayer = new LineLayer({ zIndex: 16 })
+              .source(buildExtrudeTopOutlines(fc, CARBON_CITY_EXTRUDE_RANGE))
+              .shape('line')
+              .color(GF_EXTRUDE_TOP_LINE_COLOR)
+              .size(GF_EXTRUDE_TOP_LINE_WIDTH)
+              .style({
+                opacity: 0.94,
+                heightfixed: true,
+                vertexHeightScale: 1,
+                depth: true,
+              });
+            scene.addLayer(cityTopOutlineLayer);
+          }
+        };
+
+        const setCityLayerData = (fc: { type: string; features: any[] }, backdrop = false) => {
+          ensureCityLayers(fc);
+          const nextGeo = cloneFeatureCollection(fc);
+          cityExtrudeLayer?.setData(nextGeo);
+          if (backdrop) {
+            cityExtrudeLayer?.color('_color');
+            cityExtrudeLayer?.active(false);
+            cityTopOutlineLayer?.color(GF_BACKDROP_TOP_LINE_COLOR);
+          } else {
+            cityExtrudeLayer?.color('_rawCarbon', CARBON_COLOR_RAMP);
+            cityExtrudeLayer?.active({ color: GF_ACTIVE_COLOR });
+            cityTopOutlineLayer?.color(GF_EXTRUDE_TOP_LINE_COLOR);
+          }
+          cityTopOutlineLayer?.setData(buildExtrudeTopOutlines(nextGeo, CARBON_CITY_EXTRUDE_RANGE));
+          cityExtrudeLayer?.show();
+          cityTopOutlineLayer?.show();
+        };
+
+        const ensureCountyLayers = (fc: { type: string; features: any[] }) => {
+          if (!countyExtrudeLayer) {
+            countyExtrudeLayer = new PolygonLayer({ zIndex: 7 })
+              .source(fc)
+              .shape('extrude')
+              .size('_score', CARBON_COUNTY_EXTRUDE_RANGE)
+              .color('_rawCarbon', CARBON_COLOR_RAMP)
+              .style({ heightfixed: true, pickLight: true, opacity: 0.88 })
+              .active({ color: GF_ACTIVE_COLOR });
+            scene.addLayer(countyExtrudeLayer);
+            countyExtrudeLayer.on('click', (e) => {
+              if (!options.selectedProvince.value || !options.selectedCity.value) return;
+              const name = e.feature?.properties?.name;
+              if (!name || e.feature?.properties?._hasData === false) return;
+              selectedCountyName = name;
+              const countyGeo = buildCountyBackdropGeo(name);
+              if (!countyGeo) return;
+              setCountyLayerData(countyGeo, true);
+              scene.render();
+              const selectedFeature = countyGeo.features.filter((f) => regionNameMatches(f.properties?.name || '', name));
+              if (selectedFeature.length) {
+                runCinematicFit(boundsFromFeatures(selectedFeature));
+              }
+            });
+          }
+          if (!countyTopOutlineLayer) {
+            countyTopOutlineLayer = new LineLayer({ zIndex: 17 })
+              .source(buildExtrudeTopOutlines(fc, CARBON_COUNTY_EXTRUDE_RANGE))
+              .shape('line')
+              .color(GF_EXTRUDE_TOP_LINE_COLOR)
+              .size(GF_EXTRUDE_TOP_LINE_WIDTH)
+              .style({
+                opacity: 0.94,
+                heightfixed: true,
+                vertexHeightScale: 1,
+                depth: true,
+              });
+            scene.addLayer(countyTopOutlineLayer);
+          }
+        };
+
+        const setCountyLayerData = (fc: { type: string; features: any[] }, backdrop = false) => {
+          ensureCountyLayers(fc);
+          const nextGeo = cloneFeatureCollection(fc);
+          countyExtrudeLayer?.setData(nextGeo);
+          if (backdrop) {
+            countyExtrudeLayer?.color('_color');
+            countyExtrudeLayer?.active(false);
+            countyTopOutlineLayer?.color(GF_BACKDROP_TOP_LINE_COLOR);
+          } else {
+            countyExtrudeLayer?.color('_rawCarbon', CARBON_COLOR_RAMP);
+            countyExtrudeLayer?.active({ color: GF_ACTIVE_COLOR });
+            countyTopOutlineLayer?.color(GF_EXTRUDE_TOP_LINE_COLOR);
+          }
+          countyTopOutlineLayer?.setData(buildExtrudeTopOutlines(nextGeo, CARBON_COUNTY_EXTRUDE_RANGE));
+          countyExtrudeLayer?.show();
+          countyTopOutlineLayer?.show();
+        };
 
         watch(
           realProvinceData,
           () => {
-            applyCarbon();
-            choropleth.setData({ type: 'FeatureCollection', features: [...mainFeats] });
+            const nextGeo = options.selectedProvince.value
+              ? buildProvinceBackdropGeo(options.selectedProvince.value)
+              : restoreProvinceForegroundGeo();
+            setProvinceLayerData(nextGeo, !!options.selectedProvince.value);
             scene.render();
           },
           { deep: true, immediate: true },
+        );
+
+        watch(
+          options.cityRows,
+          () => {
+            if (!options.selectedProvince.value || !cityBaseSnapshot || citySnapshotProvince !== options.selectedProvince.value) return;
+            const nextGeo = buildCityBackdropGeo(options.selectedCity.value || '');
+            if (!nextGeo) return;
+            setCityLayerData(nextGeo, true);
+            scene.render();
+          },
+          { deep: true },
+        );
+
+        watch(
+          options.countyRows,
+          () => {
+            if (!options.selectedCity.value || !countyBaseSnapshot || countySnapshotCity !== options.selectedCity.value) return;
+            const countyGeo = buildCountyBackdropGeo(selectedCountyName);
+            if (!countyGeo) return;
+            setCountyLayerData(countyGeo, true);
+            scene.render();
+          },
+          { deep: true },
+        );
+
+        watch(options.selectedCity, async (city) => {
+          const gen = ++countyDrillGen;
+
+          if (!city) {
+            selectedCountyName = '';
+            countyExtrudeLayer?.hide();
+            countyTopOutlineLayer?.hide();
+            countyBaseSnapshot = null;
+            countyFullSnapshot = null;
+            countySnapshotCity = '';
+            if (!options.selectedProvince.value || !cityBaseSnapshot || citySnapshotProvince !== options.selectedProvince.value) {
+              scene.render();
+              return;
+            }
+            const cityGeo = buildCityBackdropGeo('');
+            if (!cityGeo) {
+              scene.render();
+              return;
+            }
+            setCityLayerData(cityGeo, true);
+            scene.render();
+            runCinematicFit(boundsFromFeatures(cityGeo.features));
+            return;
+          }
+
+          const prov = options.selectedProvince.value;
+          if (!prov || !cityBaseSnapshot || citySnapshotProvince !== prov) {
+            options.onCityClick?.('');
+            return;
+          }
+
+          const cityBackdropGeo = buildCityBackdropGeo(city);
+          if (!cityBackdropGeo) {
+            options.onCityClick?.('');
+            return;
+          }
+
+          setCityLayerData(cityBackdropGeo, true);
+          selectedCountyName = '';
+          countyExtrudeLayer?.hide();
+          countyTopOutlineLayer?.hide();
+          countyBaseSnapshot = null;
+          countyFullSnapshot = null;
+          countySnapshotCity = '';
+          scene.render();
+
+          try {
+            const geoRes = await fetchCountyGeoJson(city);
+            if (gen !== countyDrillGen) return;
+            countyBaseSnapshot = cloneFeatureCollection(geoRes);
+            countySnapshotCity = city;
+            const countyGeo = buildCountyBackdropGeo('');
+            if (!countyGeo) throw new Error('county geo snapshot missing');
+            setCountyLayerData(countyGeo, true);
+            scene.render();
+            runCinematicFit(boundsFromFeatures(countyGeo.features));
+          } catch (err) {
+            console.error('碳排放地图县级下钻失败:', err);
+            if (gen !== countyDrillGen) return;
+            options.onCityClick?.('');
+          }
+        });
+
+        watch(
+          options.selectedProvince,
+          async (prov) => {
+            const gen = ++drillGen;
+            countyDrillGen += 1;
+            selectedCountyName = '';
+            countyExtrudeLayer?.hide();
+            countyTopOutlineLayer?.hide();
+            countyBaseSnapshot = null;
+            countyFullSnapshot = null;
+            countySnapshotCity = '';
+
+            if (!prov) {
+              cityExtrudeLayer?.hide();
+              cityTopOutlineLayer?.hide();
+              cityBaseSnapshot = null;
+              cityFullSnapshot = null;
+              citySnapshotProvince = '';
+              selectedCountyName = '';
+              const provinceGeo = restoreProvinceForegroundGeo();
+              setProvinceLayerData(provinceGeo, false);
+              scene.render();
+              runNationalResetFlight();
+              return;
+            }
+
+            const provinceBackdropGeo = buildProvinceBackdropGeo(prov);
+            setProvinceLayerData(provinceBackdropGeo, true);
+            scene.render();
+
+            try {
+              const geoRes = await fetchGeoJson(prov);
+              if (gen !== drillGen) return;
+              cityBaseSnapshot = cloneFeatureCollection(geoRes);
+              citySnapshotProvince = prov;
+              cityBaseSnapshot.features.forEach((f: any) => {
+                rememberCityAdcode(f.properties?.name || '', f.properties?.adcode ?? '');
+              });
+              const cityGeo = buildCityBackdropGeo('');
+              if (!cityGeo) throw new Error('city geo snapshot missing');
+              setCityLayerData(cityGeo, true);
+              scene.render();
+              runCinematicFit(boundsFromFeatures(cityGeo.features));
+            } catch (err) {
+              console.error('碳排放地图市级下钻失败:', err);
+              options.onProvinceClick?.('');
+            }
+          },
+          { immediate: true },
         );
       }).catch((err) => {
         console.error('碳排地图省级 GeoJSON 加载失败:', err);

@@ -6,11 +6,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Any, Optional
+from functools import lru_cache
 
 from dotenv import load_dotenv
 from dbutils.pooled_db import PooledDB
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from openpyxl import load_workbook
 import pymysql
 
 ROOT = Path(__file__).resolve().parent
@@ -71,6 +73,180 @@ def _safe_float(x: Any) -> float:
         return 0.0
 
 
+def _county_carbon_xlsx_path() -> Path:
+    candidates: list[Path] = []
+    env_path = os.getenv("COUNTY_CARBON_XLSX")
+    if env_path:
+        candidates.append(Path(env_path))
+    candidates.extend(
+        [
+            ROOT / "data" / "2000-2024县级碳排放(1).xlsx",
+            Path("D:/CountyCarbonEmissions/2000-2024县级碳排放(1).xlsx"),
+        ]
+    )
+    for path in candidates:
+        if path.exists():
+            return path
+    return candidates[0]
+
+
+def _city_carbon_xlsx_path() -> Path:
+    candidates: list[Path] = []
+    env_path = os.getenv("CITY_CARBON_XLSX")
+    if env_path:
+        candidates.append(Path(env_path))
+    candidates.extend(
+        [
+            ROOT / "data" / "地级市绿色金融+碳排放+能源+DID数据（剔除西藏）(1).xlsx",
+            Path("D:/CountyCarbonEmissions/地级市绿色金融+碳排放+能源+DID数据（剔除西藏）(1).xlsx"),
+        ]
+    )
+    for path in candidates:
+        if path.exists():
+            return path
+    return candidates[0]
+
+
+@lru_cache(maxsize=1)
+def _load_county_carbon_index() -> dict[tuple[str, int], list[dict[str, Any]]]:
+    path = _county_carbon_xlsx_path()
+    if not path.exists():
+        raise FileNotFoundError(f"县级碳排放数据文件不存在: {path}")
+
+    workbook = load_workbook(path, read_only=True, data_only=True)
+    try:
+        sheet = workbook.active
+        header = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))
+        columns = {str(name).strip(): idx for idx, name in enumerate(header) if name is not None}
+        required = ["年份", "省份", "地级市", "县级", "CO2排放量_吨"]
+        missing = [name for name in required if name not in columns]
+        if missing:
+            raise ValueError(f"县级碳排放数据缺少字段: {', '.join(missing)}")
+
+        idx: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        for row in sheet.iter_rows(min_row=2, values_only=True):
+            year_raw = row[columns["年份"]]
+            province = str(row[columns["省份"]] or "").strip()
+            city = str(row[columns["地级市"]] or "").strip()
+            county = str(row[columns["县级"]] or "").strip()
+            carbon = _safe_float(row[columns["CO2排放量_吨"]])
+            if not province or not county or not year_raw:
+                continue
+            year = int(year_raw)
+            item = {
+                "year": year,
+                "province": province,
+                "city": city,
+                "county": county,
+                "carbonEmission": carbon,
+                "carbonEmissionWanTon": round(carbon / 10000, 2),
+            }
+            idx.setdefault((province, year), []).append(item)
+
+        for rows in idx.values():
+            rows.sort(key=lambda item: item["carbonEmission"], reverse=True)
+        return idx
+    finally:
+        workbook.close()
+
+
+@lru_cache(maxsize=1)
+def _load_city_carbon_index() -> dict[tuple[str, int], list[dict[str, Any]]]:
+    path = _city_carbon_xlsx_path()
+    if not path.exists():
+        raise FileNotFoundError(f"地级市碳排放数据文件不存在: {path}")
+
+    workbook = load_workbook(path, read_only=True, data_only=True)
+    try:
+        sheet = workbook.active
+        header = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))
+        columns: dict[str, int] = {}
+        for idx, name in enumerate(header):
+            if name is not None:
+                columns.setdefault(str(name).strip(), idx)
+        required = ["年份", "省份", "城市代码", "地级市", "CO2排放量"]
+        missing = [name for name in required if name not in columns]
+        if missing:
+            raise ValueError(f"地级市碳排放数据缺少字段: {', '.join(missing)}")
+
+        idx: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        for row in sheet.iter_rows(min_row=2, values_only=True):
+            year_raw = row[columns["年份"]]
+            province = str(row[columns["省份"]] or "").strip()
+            city = str(row[columns["地级市"]] or "").strip()
+            carbon = _safe_float(row[columns["CO2排放量"]])
+            if not province or not city or not year_raw:
+                continue
+            year = int(year_raw)
+            item = {
+                "year": year,
+                "province": province,
+                "city": city,
+                "cityCode": row[columns["城市代码"]],
+                "carbonEmission": carbon,
+                "carbonEmissionWanTon": round(carbon / 10000, 2),
+            }
+            idx.setdefault((province, year), []).append(item)
+
+        for rows in idx.values():
+            rows.sort(key=lambda item: item["carbonEmission"], reverse=True)
+        return idx
+    finally:
+        workbook.close()
+
+
+@app.get("/api/county-carbon/data")
+def get_county_carbon_data(province: str, year: int = 2024, city: Optional[str] = None):
+    try:
+        idx = _load_county_carbon_index()
+        rows = idx.get((province, year), [])
+        if city:
+            rows = [
+                row for row in rows
+                if row.get("city") == city
+                or str(row.get("city", "")).startswith(city)
+                or city.startswith(str(row.get("city", "")))
+            ]
+        total = sum(_safe_float(row.get("carbonEmission")) for row in rows)
+        return {
+            "code": 200,
+            "msg": "success",
+            "data": {
+                "province": province,
+                "city": city or "",
+                "year": year,
+                "countyCount": len(rows),
+                "carbonEmission": total,
+                "carbonEmissionWanTon": round(total / 10000, 2),
+                "rows": rows,
+            },
+        }
+    except Exception as e:
+        return {"code": 500, "msg": str(e), "data": None}
+
+
+@app.get("/api/city-carbon/data")
+def get_city_carbon_data(province: str, year: int = 2024):
+    try:
+        idx = _load_city_carbon_index()
+        rows = idx.get((province, year), [])
+        total = sum(_safe_float(row.get("carbonEmission")) for row in rows)
+        return {
+            "code": 200,
+            "msg": "success",
+            "data": {
+                "province": province,
+                "year": year,
+                "cityCount": len(rows),
+                "carbonEmission": total,
+                "carbonEmissionWanTon": round(total / 10000, 2),
+                "rows": rows,
+            },
+        }
+    except Exception as e:
+        return {"code": 500, "msg": str(e), "data": None}
+
+
 @app.get("/api/province/data")
 def get_province_data(year: int = 2024):
     conn = get_db_connection()
@@ -113,15 +289,70 @@ def get_city_data(province: str, year: int = 2024):
     return {"code": 200, "msg": "success", "data": data}
 
 
+@app.get("/api/macro/cities")
+def get_macro_cities(province: Optional[str] = None):
+    conn = get_db_connection()
+    if not conn:
+        return {"code": 500, "msg": "数据库连接失败", "data": []}
+
+    try:
+        cursor = conn.cursor()
+        if province and province != "全国":
+            cursor.execute(
+                """
+                SELECT DISTINCT province, city
+                FROM city_carbon_gdp
+                WHERE province=%s
+                ORDER BY city ASC
+                """,
+                (province,),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT DISTINCT province, city
+                FROM city_carbon_gdp
+                ORDER BY province ASC, city ASC
+                """
+            )
+        data = cursor.fetchall()
+    except Exception as e:
+        print(f"Macro City Error: {e}")
+        data = []
+    finally:
+        conn.close()
+
+    return {"code": 200, "msg": "success", "data": data}
+
+
 @app.get("/api/macro/data")
-def get_macro_data(province: Optional[str] = None):
+def get_macro_data(province: Optional[str] = None, city: Optional[str] = None):
     conn = get_db_connection()
     if not conn:
         return {"code": 500, "msg": "数据库连接失败", "data": []}
 
     cursor = conn.cursor()
 
-    if province and province != "全国":
+    carbon_needs_wanton = True
+    if city:
+        carbon_needs_wanton = False
+        if province and province != "全国":
+            sql = """
+            SELECT year, gdp / 10000 AS gdp, co2_emission / 10000 AS carbonEmission
+            FROM city_carbon_gdp
+            WHERE province=%s AND city=%s
+            ORDER BY year ASC
+            """
+            cursor.execute(sql, (province, city))
+        else:
+            sql = """
+            SELECT year, gdp / 10000 AS gdp, co2_emission / 10000 AS carbonEmission
+            FROM city_carbon_gdp
+            WHERE city=%s
+            ORDER BY year ASC
+            """
+            cursor.execute(sql, (city,))
+    elif province and province != "全国":
         sql = """
         SELECT year, gdp, carbonEmission
         FROM province_green_finance
@@ -142,8 +373,12 @@ def get_macro_data(province: Optional[str] = None):
     conn.close()
 
     for row in data:
-        if row.get("carbonEmission"):
+        if carbon_needs_wanton and row.get("carbonEmission"):
             row["carbonEmission"] = round(row["carbonEmission"] / 10000, 2)
+        elif row.get("carbonEmission") is not None:
+            row["carbonEmission"] = round(float(row["carbonEmission"]), 2)
+        if row.get("gdp") is not None:
+            row["gdp"] = round(float(row["gdp"]), 2)
 
     return {"code": 200, "msg": "success", "data": data}
 
