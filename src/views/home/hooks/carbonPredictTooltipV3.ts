@@ -9,8 +9,10 @@ export interface CarbonPredictTooltipCtx {
   sourceModeLabel: string;
   sourceNotice: string;
   boundaryNotice: string;
+  /** Main carbon-intensity series values are already display-normalized by BizCarbonPredictionV3. */
   historyByYear: Map<number, CarbonHistoryPoint>;
   compareByYear: Map<number, number>;
+  /** Raw model effects: negative values are meaningful and should not be display-flipped. */
   contributionBreakdown?: PredictContributionBreakdown | null;
 }
 

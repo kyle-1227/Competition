@@ -77,11 +77,11 @@
           <div class="stat-grid">
             <div class="stat">
               <span>2027 预测值</span>
-              <b>{{ formatNumber(finalPrediction) }}</b>
+              <b>{{ formatNumber(finalPredictionDisplay) }}</b>
             </div>
             <div class="stat">
               <span>较 2024 变化</span>
-              <b :class="changeClass">{{ formatPercent(changePct) }}</b>
+              <b :class="changeClass">{{ formatPercent(changePctDisplay) }}</b>
             </div>
             <div class="stat">
               <span>变化方向</span>
@@ -89,7 +89,7 @@
             </div>
             <div class="stat">
               <span>相对对比线</span>
-              <b>{{ formatGap(compareGap) }}</b>
+              <b>{{ formatGap(compareGapDisplay) }}</b>
             </div>
             <div class="stat stat--wide">
               <span>数据来源</span>
@@ -176,6 +176,7 @@ import {
   type CarbonPredictDataPayload,
   type CarbonPredictMetaPayload,
   type PredictLevel,
+  type PredictScenarioBandPoint,
   type PredictScenarioKey,
   type PredictSeriesPoint,
   type PredictViewMode,
@@ -212,6 +213,42 @@ const TEXT = {
   historySuffix: '\u00b7\u5386\u53f2',
   futureSuffix: '\u00b7\u63a8\u6f14',
 } as const;
+
+// Display layer only: carbon intensity is shown as a positive magnitude.
+// Raw API/model values stay unchanged because model coefficients and contributions
+// can legally be negative and must keep their original meaning.
+function toDisplayCarbonIntensity(value: number | null | undefined): number | null {
+  if (value == null) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.abs(parsed);
+}
+
+function toDisplayHistorySeries(points: CarbonHistoryPoint[]): CarbonHistoryPoint[] {
+  return points.map((item) => ({
+    ...item,
+    value: toDisplayCarbonIntensity(item.value) ?? item.value,
+  }));
+}
+
+function toDisplaySeries(points: PredictSeriesPoint[]): PredictSeriesPoint[] {
+  return points.map((item) => ({
+    ...item,
+    value: toDisplayCarbonIntensity(item.value),
+  }));
+}
+
+function toDisplayBandPoint(point: PredictScenarioBandPoint): PredictScenarioBandPoint {
+  const min = toDisplayCarbonIntensity(point.min);
+  const max = toDisplayCarbonIntensity(point.max);
+  if (min == null || max == null) return { ...point, min, max };
+  return { ...point, min: Math.min(min, max), max: Math.max(min, max) };
+}
+
+function toRoundedNumber(value: number | null | undefined, digits = 4): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return Number(value.toFixed(digits));
+}
 
 const chartRef = ref<HTMLElement | null>(null);
 const chart = shallowRef<EChartsType | null>(null);
@@ -255,6 +292,7 @@ const boundaryNotice = computed(() => currentData.value?.sampleMeta.boundaryNoti
 const sourceNotice = computed(() => currentData.value?.sourceNotice || TEXT.loadingSource);
 const historySeries = computed(() => currentData.value?.historySeries ?? []);
 const compareHistorySeries = computed(() => currentData.value?.compareSeries.historyPoints ?? []);
+const scenarioBand = computed(() => currentData.value?.scenarioBand ?? []);
 const allYears = computed(() => [...historySeries.value.map((item) => item.year), ...FUTURE_YEARS]);
 
 const modelCoefficients = computed<SdmCoefficients>(() => ({
@@ -314,13 +352,27 @@ const finalPrediction = computed(() => selectedFutureSeries.value.at(-1)?.value 
 const compareFinal = computed(() => compareFutureSeries.value.at(-1)?.value ?? compareHistorySeries.value.at(-1)?.value ?? 0);
 const compareGap = computed(() => finalPrediction.value - compareFinal.value);
 const changePct = computed(() => (latestObserved.value ? (finalPrediction.value - latestObserved.value) / Math.abs(latestObserved.value) : 0));
+const historySeriesDisplay = computed(() => toDisplayHistorySeries(historySeries.value));
+const compareHistorySeriesDisplay = computed(() => toDisplaySeries(compareHistorySeries.value));
+const selectedFutureSeriesDisplay = computed(() => toDisplaySeries(selectedFutureSeries.value));
+const compareFutureSeriesDisplay = computed(() => toDisplaySeries(compareFutureSeries.value));
+const scenarioBandDisplay = computed(() => scenarioBand.value.map(toDisplayBandPoint));
+const latestObservedDisplay = computed(() => toDisplayCarbonIntensity(latestObserved.value) ?? 0);
+const finalPredictionDisplay = computed(() => toDisplayCarbonIntensity(finalPrediction.value) ?? latestObservedDisplay.value);
+const compareFinalDisplay = computed(() => toDisplayCarbonIntensity(compareFinal.value) ?? 0);
+const compareGapDisplay = computed(() => finalPredictionDisplay.value - compareFinalDisplay.value);
+const changePctDisplay = computed(() => (
+  latestObservedDisplay.value
+    ? (finalPredictionDisplay.value - latestObservedDisplay.value) / Math.abs(latestObservedDisplay.value)
+    : 0
+));
 const directionLabel = computed(() => {
-  if (Math.abs(changePct.value) < 0.01) return '\u57fa\u672c\u6301\u5e73';
-  return changePct.value > 0 ? '\u4e0a\u5347' : '\u4e0b\u964d';
+  if (Math.abs(changePctDisplay.value) < 0.01) return '\u57fa\u672c\u6301\u5e73';
+  return changePctDisplay.value > 0 ? '\u4e0a\u5347' : '\u4e0b\u964d';
 });
 const changeClass = computed(() => ({
-  positive: changePct.value > 0.01,
-  negative: changePct.value < -0.01,
+  positive: changePctDisplay.value > 0.01,
+  negative: changePctDisplay.value < -0.01,
 }));
 const isCustomMode = computed(() => selectedMode.value === CUSTOM_MODE);
 const sampleRange = computed(() => `${currentData.value?.sampleMeta.historyStartYear ?? '—'} - ${currentData.value?.sampleMeta.historyEndYear ?? '—'}`);
@@ -339,16 +391,27 @@ const unregisterAiContext = registerPageContext('energy', () => ({
     availableScenarios: currentData.value?.availableScenarios ?? [],
     sourceMode: sourceModeLabel.value,
     sourceNotice: sourceNotice.value,
-    compareSummary: `${selectedModeLabel.value}\u4e0b\uff0c${entityLabel.value} \u76f8\u5bf9 ${compareName.value}${formatGap(compareGap.value)}\u3002`,
-    scenarioBand: currentData.value?.scenarioBand ?? [],
+    displayValueMode: 'absoluteCarbonIntensity',
+    displayValueNote: '页面展示的碳排放强度为显示层正向化后的绝对值，原始模型值保留在 raw* 字段。',
+    compareSummary: `${selectedModeLabel.value}\u4e0b\uff0c${entityLabel.value} \u76f8\u5bf9 ${compareName.value}${formatGap(compareGapDisplay.value)}\u3002`,
+    compareGap: toRoundedNumber(compareGapDisplay.value),
+    scenarioBand: scenarioBandDisplay.value.map((item) => ({ ...item })),
+    // Contributions are raw model effects: negative values are meaningful and must not be display-flipped.
     customContributionBreakdown: isCustomMode.value ? contributionBreakdown.value : null,
+    contributionValueMode: 'rawModelContribution',
     sampleMeta: currentData.value?.sampleMeta ?? null,
     boundaryNotice: boundaryNotice.value,
     entityLabel: entityLabel.value,
-    finalPrediction: Number(finalPrediction.value.toFixed(4)),
-    predictionChangePct: Number((changePct.value * 100).toFixed(2)),
-    historySeries: historySeries.value.map((item) => ({ year: item.year, value: item.value })),
-    currentFutureSeries: selectedFutureSeries.value,
+    finalPrediction: toRoundedNumber(finalPredictionDisplay.value),
+    predictionChangePct: toRoundedNumber(changePctDisplay.value * 100, 2),
+    historySeries: historySeriesDisplay.value.map((item) => ({ year: item.year, value: item.value })),
+    currentFutureSeries: selectedFutureSeriesDisplay.value.map((item) => ({ ...item })),
+    rawFinalPrediction: toRoundedNumber(finalPrediction.value),
+    rawPredictionChangePct: toRoundedNumber(changePct.value * 100, 2),
+    rawCompareGap: toRoundedNumber(compareGap.value),
+    rawHistorySeries: historySeries.value.map((item) => ({ year: item.year, value: item.value })),
+    rawCurrentFutureSeries: selectedFutureSeries.value.map((item) => ({ ...item })),
+    rawScenarioBand: scenarioBand.value.map((item) => ({ ...item })),
   },
 }));
 
@@ -404,10 +467,10 @@ function buildBandDelta(year: number, bandMap: Map<number, { min: number | null;
 
 function buildCompareMap() {
   const entries: Array<[number, number]> = [];
-  compareHistorySeries.value.forEach((item) => {
+  compareHistorySeriesDisplay.value.forEach((item) => {
     if (item.value != null) entries.push([item.year, item.value]);
   });
-  compareFutureSeries.value.forEach((item) => {
+  compareFutureSeriesDisplay.value.forEach((item) => {
     if (item.value != null) entries.push([item.year, item.value]);
   });
   return new Map<number, number>(entries);
@@ -430,9 +493,15 @@ function updateChart() {
     return;
   }
 
-  const bandMap = new Map((currentData.value?.scenarioBand ?? []).map((item) => [item.year, item]));
-  const entityAnchor = { year: historySeries.value.at(-1)?.year, value: historySeries.value.at(-1)?.value ?? null };
-  const compareAnchor = { year: compareHistorySeries.value.at(-1)?.year, value: compareHistorySeries.value.at(-1)?.value ?? null };
+  const bandMap = new Map(scenarioBandDisplay.value.map((item) => [item.year, item]));
+  const entityAnchor = {
+    year: historySeriesDisplay.value.at(-1)?.year,
+    value: historySeriesDisplay.value.at(-1)?.value ?? null,
+  };
+  const compareAnchor = {
+    year: compareHistorySeriesDisplay.value.at(-1)?.year,
+    value: compareHistorySeriesDisplay.value.at(-1)?.value ?? null,
+  };
   const hideCompare = selectedLevel.value === 'province' && selectedProvince.value === TEXT.nationwide;
 
   const option: EChartsCoreOption = {
@@ -452,7 +521,7 @@ function updateChart() {
         sourceModeLabel: sourceModeLabel.value,
         sourceNotice: sourceNotice.value,
         boundaryNotice: boundaryNotice.value,
-        historyByYear: new Map<number, CarbonHistoryPoint>(historySeries.value.map((item) => [item.year, item])),
+        historyByYear: new Map<number, CarbonHistoryPoint>(historySeriesDisplay.value.map((item) => [item.year, item])),
         compareByYear: buildCompareMap(),
         contributionBreakdown: isCustomMode.value ? contributionBreakdown.value : null,
       }),
@@ -499,7 +568,7 @@ function updateChart() {
         symbolSize: 6,
         lineStyle: { color: '#38bdf8', width: 3 },
         itemStyle: { color: '#38bdf8' },
-        data: buildLineData(historySeries.value),
+        data: buildLineData(historySeriesDisplay.value),
       },
       {
         name: `${entityLabel.value}${TEXT.futureSuffix}`,
@@ -508,21 +577,21 @@ function updateChart() {
         symbolSize: 7,
         lineStyle: { color: '#2dd4bf', width: 3, type: 'dashed' },
         itemStyle: { color: '#2dd4bf' },
-        data: buildLineData(selectedFutureSeries.value, entityAnchor),
+        data: buildLineData(selectedFutureSeriesDisplay.value, entityAnchor),
       },
       {
         name: `${compareName.value}${TEXT.historySuffix}`,
         type: 'line',
         symbol: 'none',
         lineStyle: { color: 'rgba(203,213,225,0.42)', width: 2 },
-        data: hideCompare ? [] : buildLineData(compareHistorySeries.value),
+        data: hideCompare ? [] : buildLineData(compareHistorySeriesDisplay.value),
       },
       {
         name: `${compareName.value}${TEXT.futureSuffix}`,
         type: 'line',
         symbol: 'none',
         lineStyle: { color: 'rgba(203,213,225,0.42)', width: 2, type: 'dashed' },
-        data: hideCompare ? [] : buildLineData(compareFutureSeries.value, compareAnchor),
+        data: hideCompare ? [] : buildLineData(compareFutureSeriesDisplay.value, compareAnchor),
       },
     ],
   };
