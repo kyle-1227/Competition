@@ -250,6 +250,49 @@ function toRoundedNumber(value: number | null | undefined, digits = 4): number |
   return Number(value.toFixed(digits));
 }
 
+function valueForYear(points: PredictSeriesPoint[], year: number): number | null {
+  const pointMap = new Map<number, number | null>(points.map((item) => [item.year, item.value]));
+  return pointMap.get(year) ?? null;
+}
+
+function recentTrendRatio(points: Array<{ value: number | null }>) {
+  const valid = points.map((item) => item.value).filter((value): value is number => value != null && Number.isFinite(value));
+  const latest = valid.at(-1);
+  const previous = valid.at(-2);
+  if (latest == null || previous == null || previous === 0) return 0;
+  return Math.max(-0.08, Math.min(0.08, (latest - previous) / Math.abs(previous)));
+}
+
+function buildAdaptiveForecastScale(
+  historyDisplay: CarbonHistoryPoint[] | PredictSeriesPoint[],
+  futureMagnitude: PredictSeriesPoint[],
+) {
+  const latest = historyDisplay.at(-1)?.value;
+  const firstForecast = valueForYear(futureMagnitude, FUTURE_YEARS[0])
+    ?? futureMagnitude.find((item) => item.value != null)?.value
+    ?? null;
+  if (latest == null || firstForecast == null || latest <= 0 || firstForecast <= 0) return 1;
+
+  const targetFirstForecast = latest * (1 + recentTrendRatio(historyDisplay));
+  if (firstForecast <= targetFirstForecast) return 1;
+  return targetFirstForecast / firstForecast;
+}
+
+function scaleDisplaySeries(points: PredictSeriesPoint[], scale: number): PredictSeriesPoint[] {
+  return points.map((item) => ({
+    ...item,
+    value: item.value == null ? null : toRoundedNumber(item.value * scale),
+  }));
+}
+
+function scaleDisplayBandPoint(point: PredictScenarioBandPoint, scale: number): PredictScenarioBandPoint {
+  return {
+    ...point,
+    min: point.min == null ? null : toRoundedNumber(point.min * scale),
+    max: point.max == null ? null : toRoundedNumber(point.max * scale),
+  };
+}
+
 const chartRef = ref<HTMLElement | null>(null);
 const chart = shallowRef<EChartsType | null>(null);
 const metaPayload = ref<CarbonPredictMetaPayload | null>(null);
@@ -354,12 +397,34 @@ const compareGap = computed(() => finalPrediction.value - compareFinal.value);
 const changePct = computed(() => (latestObserved.value ? (finalPrediction.value - latestObserved.value) / Math.abs(latestObserved.value) : 0));
 const historySeriesDisplay = computed(() => toDisplayHistorySeries(historySeries.value));
 const compareHistorySeriesDisplay = computed(() => toDisplaySeries(compareHistorySeries.value));
-const selectedFutureSeriesDisplay = computed(() => toDisplaySeries(selectedFutureSeries.value));
-const compareFutureSeriesDisplay = computed(() => toDisplaySeries(compareFutureSeries.value));
-const scenarioBandDisplay = computed(() => scenarioBand.value.map(toDisplayBandPoint));
+const selectedFutureSeriesMagnitude = computed(() => toDisplaySeries(selectedFutureSeries.value));
+const compareFutureSeriesMagnitude = computed(() => toDisplaySeries(compareFutureSeries.value));
+const forecastDisplayScale = computed(() => buildAdaptiveForecastScale(
+  historySeriesDisplay.value,
+  selectedFutureSeriesMagnitude.value,
+));
+const compareForecastDisplayScale = computed(() => buildAdaptiveForecastScale(
+  compareHistorySeriesDisplay.value,
+  compareFutureSeriesMagnitude.value,
+));
+const selectedFutureSeriesDisplay = computed(() => scaleDisplaySeries(
+  selectedFutureSeriesMagnitude.value,
+  forecastDisplayScale.value,
+));
+const compareFutureSeriesDisplay = computed(() => scaleDisplaySeries(
+  compareFutureSeriesMagnitude.value,
+  compareForecastDisplayScale.value,
+));
+const scenarioBandDisplay = computed(() => scenarioBand.value
+  .map(toDisplayBandPoint)
+  .map((item) => scaleDisplayBandPoint(item, forecastDisplayScale.value)));
 const latestObservedDisplay = computed(() => toDisplayCarbonIntensity(latestObserved.value) ?? 0);
-const finalPredictionDisplay = computed(() => toDisplayCarbonIntensity(finalPrediction.value) ?? latestObservedDisplay.value);
-const compareFinalDisplay = computed(() => toDisplayCarbonIntensity(compareFinal.value) ?? 0);
+const finalPredictionDisplay = computed(() => selectedFutureSeriesDisplay.value.at(-1)?.value ?? latestObservedDisplay.value);
+const compareFinalDisplay = computed(() =>
+  compareFutureSeriesDisplay.value.at(-1)?.value
+  ?? compareHistorySeriesDisplay.value.at(-1)?.value
+  ?? 0,
+);
 const compareGapDisplay = computed(() => finalPredictionDisplay.value - compareFinalDisplay.value);
 const changePctDisplay = computed(() => (
   latestObservedDisplay.value
@@ -391,8 +456,10 @@ const unregisterAiContext = registerPageContext('energy', () => ({
     availableScenarios: currentData.value?.availableScenarios ?? [],
     sourceMode: sourceModeLabel.value,
     sourceNotice: sourceNotice.value,
-    displayValueMode: 'absoluteCarbonIntensity',
-    displayValueNote: '页面展示的碳排放强度为显示层正向化后的绝对值，原始模型值保留在 raw* 字段。',
+    displayValueMode: 'absoluteCarbonIntensityAdaptiveForecast',
+    displayValueNote: '页面展示的碳排放强度为显示层正向化后的绝对值；预测段另做前端自适应缩放以衔接历史折线，原始模型值保留在 raw* 字段。',
+    forecastDisplayScale: toRoundedNumber(forecastDisplayScale.value, 6),
+    compareForecastDisplayScale: toRoundedNumber(compareForecastDisplayScale.value, 6),
     compareSummary: `${selectedModeLabel.value}\u4e0b\uff0c${entityLabel.value} \u76f8\u5bf9 ${compareName.value}${formatGap(compareGapDisplay.value)}\u3002`,
     compareGap: toRoundedNumber(compareGapDisplay.value),
     scenarioBand: scenarioBandDisplay.value.map((item) => ({ ...item })),
