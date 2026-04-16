@@ -1200,8 +1200,9 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
 
       nativeMap?.doubleClickZoom?.disable?.();
 
-      let cityFillLayer: PolygonLayer | null = null;
-      let cityBoundaryLayer: LineLayer | null = null;
+      let cityExtrudeLayer: PolygonLayer | null = null;
+      let provinceTopOutlineLayer: LineLayer | null = null;
+      let cityTopOutlineLayer: LineLayer | null = null;
       let cityBaseSnapshot: { type: string; features: any[] } | null = null;
       let cityFullSnapshot: { type: string; features: any[] } | null = null;
       let citySnapshotProvince = '';
@@ -1246,6 +1247,13 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
           scene.setPitch(GF_CINEMATIC_RESET_CAMERA.pitch);
           scene.setRotation?.(GF_CINEMATIC_RESET_CAMERA.bearing);
         });
+      };
+
+      const stepOutOneLevel = () => {
+        options.tooltipRef.value = createHiddenCarbonTooltip();
+        if (options.selectedProvince.value) {
+          options.onProvinceClick?.('');
+        }
       };
 
       fetchCountryGeoJson().then((geoData) => {
@@ -1295,39 +1303,6 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
           });
         };
 
-        const applySelectedMetricStyle = (
-          fc: { features: any[] },
-          selectedName = '',
-          mutedColor = GF_BACKDROP_COLOR,
-        ) => {
-          const maxValue = Math.max(
-            ...fc.features.map((f) => {
-              const hasData = f.properties?._hasData !== false;
-              const value = Number(f.properties?._rawValue || 0);
-              return hasData && Number.isFinite(value) ? value : 0;
-            }),
-            0,
-          );
-
-          fc.features.forEach((f) => {
-            const props = f.properties || {};
-            const hasData = props._hasData !== false;
-            const rawValue = Number(props._rawValue || 0);
-            const isSelected = !!selectedName && regionNameMatches(props.name || '', selectedName);
-            f.properties = {
-              ...props,
-              _score: isSelected && hasData ? Math.max(rawValue, CARBON_MUTED_SCORE) : CARBON_MUTED_SCORE,
-              _color: isSelected && hasData
-                ? carbonRampColor(rawValue, maxValue)
-                : selectedName && !hasData
-                  ? COUNTY_NO_DATA_COLOR
-                  : mutedColor,
-              _isBackdrop: !isSelected,
-              _isSelected: isSelected,
-            };
-          });
-        };
-
         const buildMetricProvinceGeo = () => {
           const fc = cloneFeatureCollection(provinceBaseSnapshot);
           applyMetricToProvinceFc(fc);
@@ -1345,7 +1320,18 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
         const buildProvinceBackdropGeo = (selectedProvince: string) => {
           const fc = buildMetricProvinceGeo();
           provinceFullSnapshot = cloneFeatureCollection(fc);
-          applySelectedMetricStyle(fc, selectedProvince);
+          fc.features = fc.features
+            .filter((f) => f.properties?.name !== selectedProvince)
+            .map((f) => ({
+              ...f,
+              properties: {
+                ...(f.properties || {}),
+                _score: GF_BACKDROP_SCORE,
+                _rawValue: 0,
+                _color: GF_BACKDROP_COLOR,
+                _isBackdrop: true,
+              },
+            }));
           return fc;
         };
 
@@ -1353,11 +1339,25 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
 
         const provinceFillLayer = new PolygonLayer({ zIndex: 5 })
           .source(provinceGeo)
-          .shape('fill')
+          .shape('extrude')
+          .size('_score', GF_PROVINCE_EXTRUDE_RANGE)
           .color('_color')
-          .style({ pickLight: true, opacity: CARBON_FILL_OPACITY })
+          .style({ heightfixed: true, pickLight: true, opacity: CARBON_FILL_OPACITY })
           .active({ color: GF_ACTIVE_COLOR });
         scene.addLayer(provinceFillLayer);
+        provinceTopOutlineLayer = new LineLayer({ zIndex: 15 })
+          .source(buildExtrudeTopOutlines(provinceGeo, GF_PROVINCE_EXTRUDE_RANGE))
+          .shape('line')
+          .color(GF_EXTRUDE_TOP_LINE_COLOR)
+          .size(GF_EXTRUDE_TOP_LINE_WIDTH)
+          .style({
+            opacity: 0.94,
+            heightfixed: true,
+            vertexHeightScale: 1,
+            depth: true,
+          });
+        scene.addLayer(provinceTopOutlineLayer);
+
         provinceFillLayer.on('click', (e) => {
           if (options.selectedProvince.value) return;
           const name = e.feature?.properties?.name;
@@ -1375,6 +1375,9 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
             (name) => buildCarbonMapTooltipContent(name, 'province', options.metric.value, options.cityRows.value),
             () => !options.selectedProvince.value,
           );
+          mapEl.addEventListener('mouseleave', () => {
+            options.tooltipRef.value = createHiddenCarbonTooltip();
+          });
         }
 
         const provinceBoundaryLayer = new LineLayer({ zIndex: 10 })
@@ -1389,19 +1392,25 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
           const nextGeo = cloneFeatureCollection(fc);
           provinceFillLayer.setData(nextGeo);
           if (backdrop) {
+            provinceFillLayer.color('_color');
             provinceFillLayer.active(false);
+            provinceTopOutlineLayer?.color(GF_BACKDROP_TOP_LINE_COLOR);
             provinceBoundaryLayer.color(CARBON_PROVINCE_BOUNDARY_BACKDROP_COLOR);
             provinceBoundaryLayer.style({ opacity: 0.45 });
             noPanelFill.color('rgba(92,100,112,0.72)');
             noPanelFill.style({ opacity: 0.72 });
           } else {
+            provinceFillLayer.color('_color');
             provinceFillLayer.active({ color: GF_ACTIVE_COLOR });
+            provinceTopOutlineLayer?.color(GF_EXTRUDE_TOP_LINE_COLOR);
             provinceBoundaryLayer.color(CARBON_PROVINCE_BOUNDARY_COLOR);
             provinceBoundaryLayer.style({ opacity: 0.75 });
             noPanelFill.color('#5c6470');
             noPanelFill.style({ opacity: 0.95 });
           }
+          provinceTopOutlineLayer?.setData(buildExtrudeTopOutlines(nextGeo, GF_PROVINCE_EXTRUDE_RANGE));
           provinceFillLayer.show();
+          provinceTopOutlineLayer?.show();
           provinceBoundaryLayer.show();
         };
 
@@ -1414,17 +1423,18 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
         };
 
         const ensureCityLayers = (fc: { type: string; features: any[] }) => {
-          if (!cityFillLayer) {
-            cityFillLayer = new PolygonLayer({ zIndex: 6 })
+          if (!cityExtrudeLayer) {
+            cityExtrudeLayer = new PolygonLayer({ zIndex: 6 })
               .source(fc)
-              .shape('fill')
+              .shape('extrude')
+              .size('_score', GF_CITY_EXTRUDE_RANGE)
               .color('_color')
-              .style({ pickLight: true, opacity: CARBON_FILL_OPACITY })
+              .style({ heightfixed: true, pickLight: true, opacity: CARBON_FILL_OPACITY })
               .active({ color: GF_ACTIVE_COLOR });
-            scene.addLayer(cityFillLayer);
+            scene.addLayer(cityExtrudeLayer);
             if (mapAreaEl && mapEl) {
               attachCarbonMapTooltip(
-                cityFillLayer,
+                cityExtrudeLayer,
                 scene,
                 mapAreaEl,
                 mapEl,
@@ -1434,33 +1444,36 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
               );
             }
           }
-          if (!cityBoundaryLayer) {
-            cityBoundaryLayer = new LineLayer({ zIndex: 16 })
-              .source(fc)
+          if (!cityTopOutlineLayer) {
+            cityTopOutlineLayer = new LineLayer({ zIndex: 16 })
+              .source(buildExtrudeTopOutlines(fc, GF_CITY_EXTRUDE_RANGE))
               .shape('line')
-              .color(CARBON_BOUNDARY_COLOR)
-              .size(CARBON_BOUNDARY_WIDTH)
-              .style({ opacity: 0.9 });
-            scene.addLayer(cityBoundaryLayer);
+              .color(GF_EXTRUDE_TOP_LINE_COLOR)
+              .size(GF_EXTRUDE_TOP_LINE_WIDTH)
+              .style({
+                opacity: 0.94,
+                heightfixed: true,
+                vertexHeightScale: 1,
+                depth: true,
+              });
+            scene.addLayer(cityTopOutlineLayer);
           }
         };
 
         const setCityLayerData = (fc: { type: string; features: any[] }, backdrop = false) => {
           ensureCityLayers(fc);
           const nextGeo = cloneFeatureCollection(fc);
-          cityFillLayer?.setData(nextGeo);
-          cityBoundaryLayer?.setData(nextGeo);
+          cityExtrudeLayer?.setData(nextGeo);
           if (backdrop) {
-            cityFillLayer?.active(false);
-            cityBoundaryLayer?.color(CARBON_BOUNDARY_BACKDROP_COLOR);
-            cityBoundaryLayer?.style({ opacity: 0.62 });
+            cityExtrudeLayer?.active(false);
+            cityTopOutlineLayer?.color(GF_BACKDROP_TOP_LINE_COLOR);
           } else {
-            cityFillLayer?.active({ color: GF_ACTIVE_COLOR });
-            cityBoundaryLayer?.color(CARBON_BOUNDARY_COLOR);
-            cityBoundaryLayer?.style({ opacity: 0.9 });
+            cityExtrudeLayer?.active({ color: GF_ACTIVE_COLOR });
+            cityTopOutlineLayer?.color(GF_EXTRUDE_TOP_LINE_COLOR);
           }
-          cityFillLayer?.show();
-          cityBoundaryLayer?.show();
+          cityTopOutlineLayer?.setData(buildExtrudeTopOutlines(nextGeo, GF_CITY_EXTRUDE_RANGE));
+          cityExtrudeLayer?.show();
+          cityTopOutlineLayer?.show();
         };
 
         watch(
@@ -1497,6 +1510,18 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
           { immediate: true },
         );
 
+        scene.on('contextmenu', (e: any) => {
+          e?.preventDefault?.();
+          e?.originalEvent?.preventDefault?.();
+          stepOutOneLevel();
+        });
+
+        scene.on('dblclick', (e: any) => {
+          e?.preventDefault?.();
+          e?.originalEvent?.preventDefault?.();
+          if (e?.feature) return;
+          stepOutOneLevel();
+        });
 
         watch(
           options.selectedProvince,
@@ -1505,8 +1530,8 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
             options.tooltipRef.value = createHiddenCarbonTooltip();
 
             if (!prov) {
-              cityFillLayer?.hide();
-              cityBoundaryLayer?.hide();
+              cityExtrudeLayer?.hide();
+              cityTopOutlineLayer?.hide();
               cityBaseSnapshot = null;
               cityFullSnapshot = null;
               citySnapshotProvince = '';
@@ -1549,4 +1574,3 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
 }
 
 export default {};
-
