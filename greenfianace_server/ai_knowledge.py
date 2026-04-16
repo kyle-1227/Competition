@@ -10,6 +10,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent
 KNOWLEDGE_ROOT = ROOT / "knowledge"
 INDICATOR_DIR = KNOWLEDGE_ROOT / "01_indicator_dictionary"
+PAGE_GUIDANCE_DIR = KNOWLEDGE_ROOT / "02_page_guidance"
 RESULT_DIR = KNOWLEDGE_ROOT / "04_result_cards"
 PROMPT_DIR = KNOWLEDGE_ROOT / "05_prompt_templates"
 
@@ -79,6 +80,14 @@ def _read_prompt_template(file_name: str, fallback: str) -> str:
 def load_indicator_dictionary() -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for path in sorted(INDICATOR_DIR.glob("*.json")):
+        entries.extend(_safe_load_json_list(path))
+    return _dedupe_by_id(entries)
+
+
+@lru_cache(maxsize=1)
+def load_page_guidance() -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for path in sorted(PAGE_GUIDANCE_DIR.glob("*.json")):
         entries.extend(_safe_load_json_list(path))
     return _dedupe_by_id(entries)
 
@@ -183,6 +192,31 @@ def _result_match_score(entry: dict[str, Any], tokens: set[str]) -> int:
     return score
 
 
+def _entry_list(entry: dict[str, Any], plural_key: str, singular_key: str) -> list[str]:
+    raw = entry.get(plural_key)
+    if raw is None:
+        raw = entry.get(singular_key)
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(item) for item in raw if str(item).strip()]
+    return [str(raw)] if str(raw).strip() else []
+
+
+def _page_guidance_match_score(entry: dict[str, Any], tokens: set[str]) -> int:
+    score = 0
+    for raw in (entry.get("kind"), entry.get("title"), entry.get("category")):
+        if _normalize_token(raw) in tokens:
+            score += 3
+    for tag in entry.get("tags", []):
+        if _normalize_token(tag) in tokens:
+            score += 2
+    for trigger in entry.get("trigger_tokens", []):
+        if _normalize_token(trigger) in tokens:
+            score += 4
+    return score
+
+
 def _select_indicator_entries(
     modules: list[str],
     levels: list[str],
@@ -240,6 +274,45 @@ def _select_result_entries(
     return (matched + fallback)[:limit]
 
 
+def _select_page_guidance_entries(
+    page: str,
+    modules: list[str],
+    levels: list[str],
+    tokens: set[str],
+    limit: int,
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for entry in load_page_guidance():
+        entry_pages = _entry_list(entry, "pages", "page")
+        entry_modules = _entry_list(entry, "modules", "module")
+        entry_levels = _entry_list(entry, "levels", "level")
+        if entry_pages and page not in entry_pages:
+            continue
+        if entry_modules and not any(module in modules for module in entry_modules):
+            continue
+        if entry_levels and "all" not in entry_levels and not any(level in levels for level in entry_levels):
+            continue
+        candidates.append(entry)
+
+    ranked = sorted(
+        [
+            (
+                entry,
+                _page_guidance_match_score(entry, tokens),
+                int(entry.get("sort_order") or 999),
+                index,
+            )
+            for index, entry in enumerate(candidates)
+        ],
+        key=lambda item: (-item[1], item[2], item[3]),
+    )
+    matched = [entry for entry, score, _, _ in ranked if score > 0]
+    if len(matched) >= limit:
+        return matched[:limit]
+    fallback = [entry for entry, _, _, _ in ranked if entry not in matched]
+    return (matched + fallback)[:limit]
+
+
 def _format_indicator_entries(entries: list[dict[str, Any]]) -> str:
     if not entries:
         return ""
@@ -270,6 +343,19 @@ def _format_result_entries(entries: list[dict[str, Any]]) -> str:
             continue
         prefix = f"- [{kind}] " if kind else "- "
         lines.append(f"{prefix}{content}")
+    return "\n".join(lines)
+
+
+def _format_page_guidance_entries(entries: list[dict[str, Any]]) -> str:
+    if not entries:
+        return ""
+    lines = ["页面规则:"]
+    for entry in entries:
+        title = str(entry.get("title") or entry.get("kind") or "规则").strip()
+        content = str(entry.get("content") or "").strip()
+        if not content:
+            continue
+        lines.append(f"- {title}: {content}")
     return "\n".join(lines)
 
 
@@ -310,9 +396,11 @@ def get_page_knowledge_context(page_context: Any, *, include_results: bool, indi
     modules = _modules_for_page(page_context.page, snapshot)
     levels = _levels_for_page_context(page_context)
     tokens = _collect_page_tokens(page_context)
+    page_guidance_entries = _select_page_guidance_entries(page_context.page, modules, levels, tokens, limit=4)
     indicator_entries = _select_indicator_entries(modules, levels, tokens, limit=indicator_limit)
     result_entries = _select_result_entries(modules, levels, tokens, limit=3 if include_results else 0)
     return _join_sections([
+        _format_page_guidance_entries(page_guidance_entries),
         _format_indicator_entries(indicator_entries),
         _format_result_entries(result_entries),
     ])
