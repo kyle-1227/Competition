@@ -12,8 +12,13 @@ AgentKind = Literal["chat", "summary"]
 
 TOOL_STATUS_LABELS: dict[str, str] = {
     "get_green_finance_province_data": "正在查询全国绿色金融省级数据…",
-    "get_green_finance_city_data": "正在查询当前省份的城市层级数据…",
+    "get_green_finance_city_data": "正在查询当前省份的城市绿色金融、GDP 与碳排放关联数据…",
+    "get_green_finance_province_history": "正在查询当前省份的绿色金融历史趋势…",
+    "get_green_finance_city_history": "正在查询当前城市的绿色金融历史趋势…",
     "get_carbon_province_data": "正在查询全国碳排放省级数据…",
+    "get_carbon_city_data": "正在查询当前省份的城市碳排放与 GDP 对比数据…",
+    "get_carbon_province_history": "正在查询当前省份的碳排放历史趋势…",
+    "get_carbon_city_history": "正在查询当前城市的碳排放历史趋势…",
     "get_energy_prediction_data": "正在查询预测历史序列与模型系数…",
     "get_macro_series_data": "正在查询宏观时间序列…",
     "get_macro_stats_data": "正在查询宏观描述性统计…",

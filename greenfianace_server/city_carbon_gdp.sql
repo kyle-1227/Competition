@@ -13,6 +13,7 @@
 
  Date: 2026/04/15 11:39:39
 */
+use green_finance;
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 

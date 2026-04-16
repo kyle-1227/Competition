@@ -35,3 +35,11 @@ class AiChatRequest(BaseModel):
 class AiSummaryRequest(BaseModel):
     pageContext: AiPageContext
     history: list[AiHistoryMessage] = Field(default_factory=list)
+
+
+class AiTooltipRequest(BaseModel):
+    regionName: str = Field(min_length=1, max_length=100)
+    year: int | None = None
+    moduleName: str = Field(min_length=1, max_length=50)
+    tooltipScope: str = Field(min_length=1, max_length=100)
+    dataPayload: dict[str, Any] = Field(default_factory=dict)

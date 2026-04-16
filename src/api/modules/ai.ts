@@ -5,6 +5,7 @@ export type AiPageKey = 'greenFinance' | 'carbon' | 'energy';
 export type AiHistoryRole = 'user' | 'assistant';
 export type AiResultKind = 'chat' | 'summary';
 export type AiStreamEventType = 'start' | 'tool_start' | 'tool_result' | 'delta' | 'done' | 'error';
+export type AiTooltipResultKind = 'tooltip';
 
 export interface AiHistoryMessage {
   role: AiHistoryRole;
@@ -32,10 +33,24 @@ export interface AiSummaryRequest {
   history: AiHistoryMessage[];
 }
 
+export interface AiTooltipRequest {
+  regionName: string;
+  year?: number | null;
+  moduleName: string;
+  tooltipScope: string;
+  dataPayload: Record<string, unknown>;
+}
+
 export interface AiResultData {
   content: string;
   model: string;
   kind: AiResultKind;
+}
+
+export interface AiTooltipResultData {
+  content: string;
+  model: string;
+  kind: AiTooltipResultKind;
 }
 
 export interface AiStreamStartPayload {
@@ -84,6 +99,9 @@ export const postAiChat = (payload: AiChatRequest) =>
 
 export const postAiSummary = (payload: AiSummaryRequest) =>
   http.post<ApiEnvelope<AiResultData | null>>('api/ai/summary', payload);
+
+export const postAiTooltip = (payload: AiTooltipRequest) =>
+  http.post<ApiEnvelope<AiTooltipResultData | null>>('api/ai/tooltip', payload);
 
 function resolveApiUrl(path: string) {
   return new URL(path, `${window.location.origin}${import.meta.env.BASE_URL}`).toString();

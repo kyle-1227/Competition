@@ -5,10 +5,14 @@ from typing import Any
 
 from ai_types import AiPageContext
 from data_service import (
+    get_city_carbon_history_rows,
+    get_city_carbon_rows,
+    get_city_history_rows,
     get_city_rows,
     get_macro_rows,
     get_macro_stats_records,
     get_predict_payload,
+    get_province_history_rows,
     get_province_rows,
 )
 
@@ -33,6 +37,13 @@ def _coerce_province(value: Any, fallback: str | None) -> str:
     if not province:
         raise AiToolError("缺少省份参数")
     return province
+
+
+def _coerce_city(value: Any, fallback: str | None = None) -> str:
+    city = str(value or fallback or "").strip()
+    if not city:
+        raise AiToolError("缺少城市参数")
+    return city
 
 
 def _json_loads(arguments: str) -> dict[str, Any]:
@@ -64,6 +75,11 @@ def _green_finance_province_result(year: int) -> dict[str, Any]:
             "greenFund": row["greenFund"],
             "greenEquity": row["greenEquity"],
             "carbonEmission": row["carbonEmission"],
+            "carbonEmissionWanTon": (
+                round(float(row["carbonEmission"]) / 10000, 2)
+                if row.get("carbonEmission") is not None
+                else None
+            ),
             "gdp": row["gdp"],
             "did": row["did"],
         }
@@ -71,6 +87,54 @@ def _green_finance_province_result(year: int) -> dict[str, Any]:
     ]
     top10 = sorted(normalized, key=lambda item: float(item.get("score") or 0), reverse=True)[:10]
     return {"year": year, "count": len(normalized), "top10": top10, "rows": normalized}
+
+
+def _history_payload(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    if not rows:
+        return {
+            "count": 0,
+            "startYear": None,
+            "endYear": None,
+            "latest": None,
+            "rows": [],
+        }
+    return {
+        "count": len(rows),
+        "startYear": rows[0].get("year"),
+        "endYear": rows[-1].get("year"),
+        "latest": rows[-1],
+        "rows": rows,
+    }
+
+
+def _green_finance_province_history_result(province: str) -> dict[str, Any]:
+    rows = get_province_history_rows(province)
+    if rows is None:
+        raise AiToolError("数据库连接失败")
+    normalized = [
+        {
+            "province": row["province"],
+            "year": row["year"],
+            "score": row["score"],
+            "greenCredit": row["greenCredit"],
+            "greenInvest": row["greenInvest"],
+            "greenInsurance": row["greenInsurance"],
+            "greenBond": row["greenBond"],
+            "greenSupport": row["greenSupport"],
+            "greenFund": row["greenFund"],
+            "greenEquity": row["greenEquity"],
+            "carbonEmission": row["carbonEmission"],
+            "carbonEmissionWanTon": (
+                round(float(row["carbonEmission"]) / 10000, 2)
+                if row.get("carbonEmission") is not None
+                else None
+            ),
+            "gdp": row["gdp"],
+            "did": row["did"],
+        }
+        for row in rows
+    ]
+    return {"province": province, **_history_payload(normalized)}
 
 
 def _green_finance_city_result(province: str, year: int) -> dict[str, Any]:
@@ -90,11 +154,40 @@ def _green_finance_city_result(province: str, year: int) -> dict[str, Any]:
             "greenSupport": row["greenSupport"],
             "greenFund": row["greenFund"],
             "greenEquity": row["greenEquity"],
+            "gdp": row.get("gdp"),
+            "carbonEmission": row.get("carbonEmission"),
+            "carbonEmissionWanTon": row.get("carbonEmissionWanTon"),
         }
         for row in rows
     ]
     top = sorted(normalized, key=lambda item: float(item.get("score") or 0), reverse=True)[:12]
     return {"province": province, "year": year, "count": len(normalized), "top": top, "rows": normalized}
+
+
+def _green_finance_city_history_result(province: str, city: str) -> dict[str, Any]:
+    rows = get_city_history_rows(province, city)
+    if rows is None:
+        raise AiToolError("数据库连接失败")
+    normalized = [
+        {
+            "city": row["city"],
+            "province": row["province"],
+            "year": row["year"],
+            "score": row["score"],
+            "greenCredit": row["greenCredit"],
+            "greenInvest": row["greenInvest"],
+            "greenInsurance": row["greenInsurance"],
+            "greenBond": row["greenBond"],
+            "greenSupport": row["greenSupport"],
+            "greenFund": row["greenFund"],
+            "greenEquity": row["greenEquity"],
+            "gdp": row.get("gdp"),
+            "carbonEmission": row.get("carbonEmission"),
+            "carbonEmissionWanTon": row.get("carbonEmissionWanTon"),
+        }
+        for row in rows
+    ]
+    return {"province": province, "city": city, **_history_payload(normalized)}
 
 
 def _carbon_result(year: int) -> dict[str, Any]:
@@ -112,7 +205,93 @@ def _carbon_result(year: int) -> dict[str, Any]:
         for row in rows
     ]
     top10 = sorted(normalized, key=lambda item: float(item.get("carbonEmission") or 0), reverse=True)[:10]
-    return {"year": year, "count": len(normalized), "top10": top10, "rows": normalized}
+    top10_gdp = sorted(normalized, key=lambda item: float(item.get("gdp") or 0), reverse=True)[:10]
+    return {"year": year, "count": len(normalized), "top10": top10, "top10Gdp": top10_gdp, "rows": normalized}
+
+
+def _carbon_city_result(province: str, year: int) -> dict[str, Any]:
+    rows = get_city_carbon_rows(province, year)
+    if rows is None:
+        raise AiToolError("数据库连接失败")
+    normalized = [
+        {
+            "city": row["city"],
+            "province": row["province"],
+            "year": row["year"],
+            "gdp": row.get("gdp"),
+            "carbonEmission": row.get("carbonEmission"),
+            "carbonEmissionWanTon": row.get("carbonEmissionWanTon"),
+            "primaryIndustry": row.get("primaryIndustry"),
+            "secondaryIndustry": row.get("secondaryIndustry"),
+            "tertiaryIndustry": row.get("tertiaryIndustry"),
+            "primaryIndustryRatio": row.get("primaryIndustryRatio"),
+            "secondaryIndustryRatio": row.get("secondaryIndustryRatio"),
+            "tertiaryIndustryRatio": row.get("tertiaryIndustryRatio"),
+        }
+        for row in rows
+    ]
+    top10_carbon = sorted(normalized, key=lambda item: float(item.get("carbonEmissionWanTon") or 0), reverse=True)[:10]
+    top10_gdp = sorted(normalized, key=lambda item: float(item.get("gdp") or 0), reverse=True)[:10]
+    return {
+        "province": province,
+        "year": year,
+        "count": len(normalized),
+        "top10Carbon": top10_carbon,
+        "top10Gdp": top10_gdp,
+        "rows": normalized,
+    }
+
+
+def _carbon_province_history_result(province: str) -> dict[str, Any]:
+    rows = get_province_history_rows(province)
+    if rows is None:
+        raise AiToolError("数据库连接失败")
+    normalized = [
+        {
+            "province": row["province"],
+            "year": row["year"],
+            "score": row["score"],
+            "gdp": row["gdp"],
+            "carbonEmission": row["carbonEmission"],
+            "carbonEmissionWanTon": (
+                round(float(row["carbonEmission"]) / 10000, 2)
+                if row.get("carbonEmission") is not None
+                else None
+            ),
+            "primaryIndustry": row.get("primaryIndustry"),
+            "secondaryIndustry": row.get("secondaryIndustry"),
+            "tertiaryIndustry": row.get("tertiaryIndustry"),
+            "primaryIndustryRatio": row.get("primaryIndustryRatio"),
+            "secondaryIndustryRatio": row.get("secondaryIndustryRatio"),
+            "tertiaryIndustryRatio": row.get("tertiaryIndustryRatio"),
+        }
+        for row in rows
+    ]
+    return {"province": province, **_history_payload(normalized)}
+
+
+def _carbon_city_history_result(province: str, city: str) -> dict[str, Any]:
+    rows = get_city_carbon_history_rows(province, city)
+    if rows is None:
+        raise AiToolError("数据库连接失败")
+    normalized = [
+        {
+            "city": row["city"],
+            "province": row["province"],
+            "year": row["year"],
+            "gdp": row.get("gdp"),
+            "carbonEmission": row.get("carbonEmission"),
+            "carbonEmissionWanTon": row.get("carbonEmissionWanTon"),
+            "primaryIndustry": row.get("primaryIndustry"),
+            "secondaryIndustry": row.get("secondaryIndustry"),
+            "tertiaryIndustry": row.get("tertiaryIndustry"),
+            "primaryIndustryRatio": row.get("primaryIndustryRatio"),
+            "secondaryIndustryRatio": row.get("secondaryIndustryRatio"),
+            "tertiaryIndustryRatio": row.get("tertiaryIndustryRatio"),
+        }
+        for row in rows
+    ]
+    return {"province": province, "city": city, **_history_payload(normalized)}
 
 
 def _energy_result(province: str) -> dict[str, Any]:
@@ -155,7 +334,7 @@ def build_page_tools(page_context: AiPageContext) -> list[dict[str, Any]]:
                 "type": "function",
                 "function": {
                     "name": "get_green_finance_province_data",
-                    "description": "查询指定年份的全国省级绿色金融与碳排放数据。",
+                    "description": "查询指定年份的全国省级绿色金融、GDP 与碳排放数据，可用于绿色金融与经济发展、减排表现的关联分析。",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -170,7 +349,7 @@ def build_page_tools(page_context: AiPageContext) -> list[dict[str, Any]]:
                 "type": "function",
                 "function": {
                     "name": "get_green_finance_city_data",
-                    "description": "查询指定省份、指定年份的地级市绿色金融数据。",
+                    "description": "查询指定省份、指定年份的地级市绿色金融、GDP 与碳排放关联数据，可用于分析省内城市绿色金融与经济发展、碳排放的协同关系。",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -178,6 +357,37 @@ def build_page_tools(page_context: AiPageContext) -> list[dict[str, Any]]:
                             "year": {"type": "integer", "description": "要查询的年份，例如 2024"},
                         },
                         "required": ["province", "year"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_green_finance_province_history",
+                    "description": "查询指定省份 2000-2024 年绿色金融、GDP 与碳排放历史序列，可用于趋势分析和跨年比较。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "province": {"type": "string", "description": "省份全称，例如 北京市；不传时默认使用当前选中省份"},
+                        },
+                        "required": [],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_green_finance_city_history",
+                    "description": "查询指定省份下某个地级市的绿色金融、GDP 与碳排放历史序列，可用于城市趋势分析和城市间历史比较。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "province": {"type": "string", "description": "省份全称，例如 广东省；不传时默认使用当前下钻省份或当前选中省份"},
+                            "city": {"type": "string", "description": "地级市名称，例如 广州市"},
+                        },
+                        "required": ["city"],
                         "additionalProperties": False,
                     },
                 },
@@ -200,7 +410,54 @@ def build_page_tools(page_context: AiPageContext) -> list[dict[str, Any]]:
                         "additionalProperties": False,
                     },
                 },
-            }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_carbon_city_data",
+                    "description": "查询指定省份、指定年份的地级市碳排放与 GDP 数据，可用于省内城市对比分析。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "province": {"type": "string", "description": "省份全称，例如 广东省；不传时默认使用当前下钻省份"},
+                            "year": {"type": "integer", "description": "要查询的年份，例如 2024"},
+                        },
+                        "required": ["year"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_carbon_province_history",
+                    "description": "查询指定省份 2000-2024 年碳排放与 GDP 历史序列，可用于长期趋势分析。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "province": {"type": "string", "description": "省份全称，例如 北京市；不传时默认使用当前下钻省份"},
+                        },
+                        "required": [],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_carbon_city_history",
+                    "description": "查询指定省份下某个地级市的碳排放与 GDP 历史序列，可用于城市趋势与城市间历史比较。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "province": {"type": "string", "description": "省份全称，例如 广东省；不传时默认使用当前下钻省份"},
+                            "city": {"type": "string", "description": "地级市名称，例如 深圳市"},
+                        },
+                        "required": ["city"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
         ]
 
     if page_context.page == "energy":
@@ -264,9 +521,32 @@ def execute_page_tool(page_context: AiPageContext, tool_name: str, arguments_jso
         year = _coerce_year(args.get("year"), page_context.year)
         return _green_finance_city_result(province, year)
 
+    if tool_name == "get_green_finance_province_history" and page_context.page == "greenFinance":
+        province = _coerce_province(args.get("province"), page_context.selectedProvince)
+        return _green_finance_province_history_result(province)
+
+    if tool_name == "get_green_finance_city_history" and page_context.page == "greenFinance":
+        province = _coerce_province(args.get("province"), page_context.drillProvince or page_context.selectedProvince)
+        city = _coerce_city(args.get("city"), page_context.drillCity)
+        return _green_finance_city_history_result(province, city)
+
     if tool_name == "get_carbon_province_data" and page_context.page == "carbon":
         year = _coerce_year(args.get("year"), page_context.year)
         return _carbon_result(year)
+
+    if tool_name == "get_carbon_city_data" and page_context.page == "carbon":
+        province = _coerce_province(args.get("province"), page_context.drillProvince or page_context.selectedProvince)
+        year = _coerce_year(args.get("year"), page_context.year)
+        return _carbon_city_result(province, year)
+
+    if tool_name == "get_carbon_province_history" and page_context.page == "carbon":
+        province = _coerce_province(args.get("province"), page_context.drillProvince or page_context.selectedProvince)
+        return _carbon_province_history_result(province)
+
+    if tool_name == "get_carbon_city_history" and page_context.page == "carbon":
+        province = _coerce_province(args.get("province"), page_context.drillProvince or page_context.selectedProvince)
+        city = _coerce_city(args.get("city"), page_context.drillCity)
+        return _carbon_city_history_result(province, city)
 
     if tool_name == "get_energy_prediction_data" and page_context.page == "energy":
         province = _coerce_province(args.get("province"), page_context.selectedProvince or "全国")
@@ -284,11 +564,21 @@ def execute_page_tool(page_context: AiPageContext, tool_name: str, arguments_jso
 
 def summarize_tool_result(tool_name: str, result: dict[str, Any]) -> str:
     if tool_name == "get_green_finance_province_data":
-        return f"已获取 {result.get('year')} 年全国 {result.get('count', 0)} 个省级绿色金融样本。"
+        return f"已获取 {result.get('year')} 年全国 {result.get('count', 0)} 个省级绿色金融样本，包含 GDP 与碳排放字段。"
     if tool_name == "get_green_finance_city_data":
-        return f"已获取 {result.get('province')} {result.get('year')} 年 {result.get('count', 0)} 个地级市样本。"
+        return f"已获取 {result.get('province')} {result.get('year')} 年 {result.get('count', 0)} 个地级市样本，包含绿色金融、GDP 与碳排放关联字段。"
+    if tool_name == "get_green_finance_province_history":
+        return f"已获取 {result.get('province')} {result.get('startYear')} 至 {result.get('endYear')} 年的省级历史序列。"
+    if tool_name == "get_green_finance_city_history":
+        return f"已获取 {result.get('province')}{result.get('city')} {result.get('startYear')} 至 {result.get('endYear')} 年的城市历史序列。"
     if tool_name == "get_carbon_province_data":
-        return f"已获取 {result.get('year')} 年全国 {result.get('count', 0)} 个省级碳排放样本。"
+        return f"已获取 {result.get('year')} 年全国 {result.get('count', 0)} 个省级碳排放样本，包含 GDP 字段。"
+    if tool_name == "get_carbon_city_data":
+        return f"已获取 {result.get('province')} {result.get('year')} 年 {result.get('count', 0)} 个地级市碳排放/GDP 样本。"
+    if tool_name == "get_carbon_province_history":
+        return f"已获取 {result.get('province')} {result.get('startYear')} 至 {result.get('endYear')} 年的省级碳排放历史序列。"
+    if tool_name == "get_carbon_city_history":
+        return f"已获取 {result.get('province')}{result.get('city')} {result.get('startYear')} 至 {result.get('endYear')} 年的城市碳排放历史序列。"
     if tool_name == "get_energy_prediction_data":
         return f"已获取 {result.get('province')} 的预测历史序列和模型系数。"
     if tool_name == "get_macro_series_data":

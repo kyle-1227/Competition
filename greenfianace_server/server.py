@@ -7,9 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from ai_agent import stream_chat_agent_events, stream_summary_agent_events
-from ai_context import build_chat_messages, build_summary_messages
+from ai_context import build_chat_messages, build_summary_messages, build_tooltip_messages
 from ai_service import AiServiceError, request_deepseek_completion
-from ai_types import AiChatRequest, AiSummaryRequest
+from ai_types import AiChatRequest, AiSummaryRequest, AiTooltipRequest
 from data_service import (
     get_city_carbon_rows,
     get_city_rows,
@@ -231,6 +231,28 @@ def ai_summary(payload: AiSummaryRequest):
         return {"code": 500, "msg": str(exc), "data": None}
     except Exception as exc:  # pragma: no cover
         return {"code": 500, "msg": f"AI 鎬荤粨璋冪敤澶辫触: {exc}", "data": None}
+
+
+@app.post("/api/ai/tooltip")
+def ai_tooltip(payload: AiTooltipRequest):
+    try:
+        result = request_deepseek_completion(
+            build_tooltip_messages(payload),
+            temperature=0.2,
+        )
+        return {
+            "code": 200,
+            "msg": "success",
+            "data": {
+                "content": result["content"],
+                "model": result["model"],
+                "kind": "tooltip",
+            },
+        }
+    except AiServiceError as exc:
+        return {"code": 500, "msg": str(exc), "data": None}
+    except Exception as exc:  # pragma: no cover
+        return {"code": 500, "msg": f"AI Tooltip 调用失败: {exc}", "data": None}
 
 
 @app.post("/api/ai/chat/stream")

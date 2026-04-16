@@ -1,0 +1,62 @@
+[
+  {
+    "id": "county_carbon_emission",
+    "level": "county",
+    "module": "carbon",
+    "category": "碳排放指标",
+    "name": "碳排放量",
+    "alias": ["carbonEmission", "carbonEmissionWanTon", "碳排放", "碳排放总量"],
+    "field_keys": ["carbonEmission", "carbonEmissionWanTon"],
+    "unit": "万吨 CO₂",
+    "type": "indicator",
+    "definition": "表示县级地区在统计期内的二氧化碳排放总量。",
+    "policy_context": "2018年环保税法传导后，省级试点下县级碳排放核查频率提高。",
+    "source": "数据单位.docx",
+    "stability": "high"
+  },
+  {
+    "id": "county_carbon_intensity",
+    "level": "county",
+    "module": "carbon",
+    "category": "碳排放指标",
+    "name": "碳排放强度",
+    "alias": ["carbon_intensity", "碳排放强度"],
+    "field_keys": ["carbonIntensity"],
+    "unit": "吨 CO₂ / 万元 GDP",
+    "type": "indicator",
+    "definition": "表示单位 GDP 对应的碳排放水平。",
+    "policy_context": "2022年能源双控下，高耗能产业集中的县级地区强度降幅超过5%。",
+    "source": "数据单位.docx",
+    "stability": "high"
+  },
+  {
+    "id": "county_province_pilot_flag",
+    "level": "county",
+    "module": "policy",
+    "category": "政策关联",
+    "name": "所属省级试点标识",
+    "alias": ["province_pilot_flag", "所属省级试点标识"],
+    "field_keys": ["provincePilotFlag"],
+    "unit": "虚拟变量（0=非试点省，1=试点省）",
+    "type": "policy",
+    "definition": "表示县级地区所属省份是否为试点省。",
+    "policy_context": "2017年绿色金融试点后，试点省下的县级碳排放强度管控更严格。",
+    "source": "数据单位.docx",
+    "stability": "high"
+  },
+  {
+    "id": "county_city_pilot_flag",
+    "level": "county",
+    "module": "policy",
+    "category": "政策关联",
+    "name": "所属地级市试点标识",
+    "alias": ["city_pilot_flag", "所属地级市试点标识"],
+    "field_keys": ["cityPilotFlag"],
+    "unit": "虚拟变量（0=非试点市，1=试点市）",
+    "type": "policy",
+    "definition": "表示县级地区所属地级市是否为试点市。",
+    "policy_context": "试点市下辖县级获得更多绿色金融支持项目，如光伏、风电。",
+    "source": "数据单位.docx",
+    "stability": "high"
+  }
+]

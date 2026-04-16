@@ -14,8 +14,14 @@ export interface ProvinceGreenFinance {
   greenExpend: number;
   greenFund: number;
   greenEquity: number;
-  carbonEmission?: number;
-  gdp?: number;
+  carbonEmission?: number | null;
+  gdp?: number | null;
+  primaryIndustry?: number | null;
+  secondaryIndustry?: number | null;
+  tertiaryIndustry?: number | null;
+  primaryIndustryRatio?: number | null;
+  secondaryIndustryRatio?: number | null;
+  tertiaryIndustryRatio?: number | null;
 }
 
 export const indicatorLabels = {
@@ -255,6 +261,12 @@ function toNum(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function toNullableNum(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = typeof value === 'number' ? value : parseFloat(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function normalizeProvinceRecord(row: Record<string, unknown>): ProvinceGreenFinance {
   const cityRaw = row.city;
   const hasCity = cityRaw !== undefined && cityRaw !== null && String(cityRaw).trim() !== '';
@@ -272,8 +284,14 @@ export function normalizeProvinceRecord(row: Record<string, unknown>): ProvinceG
     greenExpend: toNum(row.greenExpend ?? row.green_expend ?? row.greenSupport ?? row.green_support),
     greenFund: toNum(row.greenFund ?? row.green_fund),
     greenEquity: toNum(row.greenEquity ?? row.green_equity),
-    carbonEmission: toNum(row.carbonEmission ?? row.carbon_emission),
-    gdp: toNum(row.gdp ?? row.GDP),
+    carbonEmission: toNullableNum(row.carbonEmission ?? row.carbon_emission),
+    gdp: toNullableNum(row.gdp ?? row.GDP),
+    primaryIndustry: toNullableNum(row.primaryIndustry ?? row.primary_industry),
+    secondaryIndustry: toNullableNum(row.secondaryIndustry ?? row.secondary_industry),
+    tertiaryIndustry: toNullableNum(row.tertiaryIndustry ?? row.tertiary_industry),
+    primaryIndustryRatio: toNullableNum(row.primaryIndustryRatio ?? row.primary_industry_ratio),
+    secondaryIndustryRatio: toNullableNum(row.secondaryIndustryRatio ?? row.secondary_industry_ratio),
+    tertiaryIndustryRatio: toNullableNum(row.tertiaryIndustryRatio ?? row.tertiary_industry_ratio),
   };
 }
 

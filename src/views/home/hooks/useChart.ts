@@ -1,6 +1,7 @@
 ﻿import { onMounted, onUnmounted, watch, inject, nextTick, ref, type Ref } from 'vue';
 import * as echarts from 'echarts/core';
 import type { EChartsCoreOption, EChartsType } from 'echarts/core';
+import type { AiTooltipRequest } from '@/api/modules/ai';
 import { BarChart, LineChart, RadarChart } from 'echarts/charts';
 import {
   TitleComponent,
@@ -25,6 +26,7 @@ import {
   greenFinanceIndicators,
   type GreenFinanceMonitorRow,
 } from './greenFinanceMeta';
+import { getTooltipAiSnapshot, requestTooltipAi, renderTooltipAiHtml } from './useTooltipAi';
 
 echarts.use([
   TitleComponent,
@@ -185,6 +187,12 @@ function shortRegionLabel(name: string): string {
   return name.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, '');
 }
 
+function appendTooltipAi(baseHtml: string, payload: AiTooltipRequest, title = 'AI 分析'): string {
+  const snapshot = getTooltipAiSnapshot(payload);
+  void requestTooltipAi(payload, snapshot.domId);
+  return `${baseHtml}${renderTooltipAiHtml(getTooltipAiSnapshot(payload), title)}`;
+}
+
 /** 七维堆叠横向柱：彩虹色（与 Top10 图例顺序一致） */
 const GF_TOP10_RAINBOW = [
   '#ff5252',
@@ -247,11 +255,12 @@ export function useGreenFinanceTop10Bar() {
         shadowColor: GF_TOP10_RAINBOW[si % GF_TOP10_RAINBOW.length],
         borderRadius: [2, 2, 2, 2],
       },
-      data: rankedRows.map(({ breakdown }) => ({
+      data: rankedRows.map(({ row, breakdown }) => ({
         value: toScorePoints(breakdown.segmentScoreByKey[config.monitorKey]),
         rawValue: breakdown.rawValueByKey[config.monitorKey],
         weightedScore: toScorePoints(breakdown.segmentScoreByKey[config.monitorKey]),
         totalScore: toScorePoints(breakdown.totalScore),
+        fullRegionName: row.province,
       })),
     }));
     if (!chart) {
@@ -265,8 +274,11 @@ export function useGreenFinanceTop10Bar() {
         backgroundColor: 'transparent',
         tooltip: {
           trigger: 'item',
+          renderMode: 'html',
+          appendToBody: true,
           backgroundColor: 'rgba(10,15,30,0.92)',
           borderColor: 'rgba(0,229,255,0.35)',
+          extraCssText: 'z-index: 5000;',
           textStyle: { color: '#fff', fontSize: 12 },
           formatter: (p: unknown) => {
             const payload = p as {
@@ -277,14 +289,16 @@ export function useGreenFinanceTop10Bar() {
                 rawValue?: number;
                 weightedScore?: number;
                 totalScore?: number;
+                fullRegionName?: string;
               };
             };
             const payloadRegion = payload.name ?? '';
+            const fullRegionName = payload.data?.fullRegionName || payloadRegion;
             const payloadDim = payload.seriesName ?? '';
             const rawValue = Number(payload.data?.rawValue ?? 0);
             const weightedScore = Number(payload.data?.weightedScore ?? 0);
             const totalScore = Number(payload.data?.totalScore ?? 0);
-            return `
+            const baseHtml = `
               <div style="font-weight:600;color:#00e5ff;margin-bottom:8px">${payloadRegion}</div>
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
                 ${payload.marker ?? ''}
@@ -303,6 +317,20 @@ export function useGreenFinanceTop10Bar() {
                 <span style="color:#ffd54f">${totalScore.toFixed(2)} 分</span>
               </div>
             `;
+            return appendTooltipAi(baseHtml, {
+              regionName: fullRegionName,
+              year: selectedYear.value,
+              moduleName: 'greenFinance',
+              tooltipScope: 'greenFinanceTop10',
+              dataPayload: {
+                regionName: fullRegionName,
+                dimension: payloadDim,
+                rawValue: Number(rawValue.toFixed(4)),
+                weightedScore: Number(weightedScore.toFixed(2)),
+                totalScore: Number(totalScore.toFixed(2)),
+                drillProvince: gfDrillProvince.value || null,
+              },
+            });
           },
         },
         grid: { left: 6, right: 14, top: 8, bottom: 4, containLabel: true },
@@ -450,8 +478,11 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
         backgroundColor: 'transparent',
         tooltip: {
           trigger: 'item',
+          renderMode: 'html',
+          appendToBody: true,
           backgroundColor: 'rgba(10,15,30,0.9)',
           borderColor: 'rgba(0,229,255,0.3)',
+          extraCssText: 'z-index: 5000;',
           textStyle: { color: '#fff', fontSize: 12 },
           position(point: number[], _params: unknown, dom: HTMLElement, _rect: unknown, size: { viewSize: number[] }) {
             const gap = 18;
@@ -484,7 +515,22 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
             s += `<div style="margin-top:4px;border-top:1px solid rgba(0,229,255,0.2);padding-top:4px;text-align:center;color:#FFD54F;font-weight:bold">综合得分: ${(
               totalScore * 100
             ).toFixed(2)}</div>`;
-            return s;
+            const indicatorPayload = greenFinanceIndicators.reduce<Record<string, number>>((acc, ind, index) => {
+              acc[ind.key] = Number((values[index] * 100).toFixed(2));
+              return acc;
+            }, {});
+            return appendTooltipAi(s, {
+              regionName: item.province,
+              year: selectedYear.value,
+              moduleName: 'greenFinance',
+              tooltipScope: 'greenFinanceRadar',
+              dataPayload: {
+                regionName: item.province,
+                score: Number((totalScore * 100).toFixed(2)),
+                indicators: indicatorPayload,
+                drillProvince: gfDrillProvince.value || null,
+              },
+            });
           },
         },
         radar: {
@@ -699,6 +745,7 @@ export function useMacroChart(selectedProv: Ref<string>, options: UseMacroChartO
     const macroChart = chart;
     if (!macroChart) return;
 
+    const regionName = city || province;
     const title = city || (province === '全国' ? '全国' : province.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, ''));
 
     macroChart.setOption(
@@ -707,12 +754,32 @@ export function useMacroChart(selectedProv: Ref<string>, options: UseMacroChartO
         tooltip: {
           trigger: 'axis',
           axisPointer: { type: 'cross' },
+          renderMode: 'html',
+          appendToBody: true,
+          extraCssText: 'z-index: 5000;',
           formatter: (params: { axisValue: string; marker: string; seriesName: string; value: number }[]) => {
+            if (!params.length) return '';
             let s = `<b>${params[0].axisValue}年 · ${title}</b><br/>`;
             params.forEach((row) => {
               s += `${row.marker} ${row.seriesName}: ${row.value.toLocaleString()}<br/>`;
             });
-            return s;
+            const year = Number(params[0].axisValue);
+            const gdpRow = params.find((row) => row.seriesName === 'GDP（亿元）');
+            const carbonRow = params.find((row) => row.seriesName === '碳排放（万吨）');
+            return appendTooltipAi(s, {
+              regionName,
+              year: Number.isFinite(year) ? year : null,
+              moduleName: 'macro',
+              tooltipScope: 'macroTrend',
+              dataPayload: {
+                regionName,
+                year: Number.isFinite(year) ? year : null,
+                gdp: Number(gdpRow?.value ?? 0),
+                carbonEmission: Number(carbonRow?.value ?? 0),
+                city: city || null,
+                province,
+              },
+            });
           },
         },
         legend: {

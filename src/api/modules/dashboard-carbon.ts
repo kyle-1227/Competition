@@ -8,6 +8,12 @@ export interface CityCarbonRow {
   carbonEmission: number;
   carbonEmissionWanTon: number;
   gdp: number;
+  primaryIndustry?: number | null;
+  secondaryIndustry?: number | null;
+  tertiaryIndustry?: number | null;
+  primaryIndustryRatio?: number | null;
+  secondaryIndustryRatio?: number | null;
+  tertiaryIndustryRatio?: number | null;
 }
 
 export interface CityCarbonPayload {

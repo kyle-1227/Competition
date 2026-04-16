@@ -52,6 +52,12 @@ def safe_float(value: Any) -> float:
         return 0.0
 
 
+def optional_rounded(value: Any, digits: int = 2) -> float | None:
+    if value is None:
+        return None
+    return round(safe_float(value), digits)
+
+
 def get_province_rows(year: int = 2024) -> list[dict[str, Any]] | None:
     conn = get_db_connection()
     if not conn:
@@ -60,15 +66,133 @@ def get_province_rows(year: int = 2024) -> list[dict[str, Any]] | None:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT province, year, score, greenCredit, greenInvest, greenInsurance,
-                   greenBond, greenSupport, greenFund, greenEquity, carbonEmission,
-                   energyConsume, gdp, did
-            FROM province_green_finance
-            WHERE year = %s AND province != '西藏自治区'
+            SELECT p.province,
+                   p.year,
+                   p.score,
+                   p.greenCredit,
+                   p.greenInvest,
+                   p.greenInsurance,
+                   p.greenBond,
+                   p.greenSupport,
+                   p.greenFund,
+                   p.greenEquity,
+                   p.carbonEmission,
+                   p.energyConsume,
+                   p.gdp,
+                   p.did,
+                   agg.primaryIndustry,
+                   agg.secondaryIndustry,
+                   agg.tertiaryIndustry,
+                   agg.primaryIndustryRatio,
+                   agg.secondaryIndustryRatio,
+                   agg.tertiaryIndustryRatio
+            FROM province_green_finance AS p
+            LEFT JOIN (
+                SELECT province,
+                       year,
+                       ROUND(SUM(primary_industry) / 10000, 2) AS primaryIndustry,
+                       ROUND(SUM(secondary_industry) / 10000, 2) AS secondaryIndustry,
+                       ROUND(SUM(tertiary_industry) / 10000, 2) AS tertiaryIndustry,
+                       CASE
+                           WHEN SUM(gdp) IS NULL OR SUM(gdp) = 0 THEN NULL
+                           ELSE ROUND(SUM(primary_industry) / SUM(gdp) * 100, 2)
+                       END AS primaryIndustryRatio,
+                       CASE
+                           WHEN SUM(gdp) IS NULL OR SUM(gdp) = 0 THEN NULL
+                           ELSE ROUND(SUM(secondary_industry) / SUM(gdp) * 100, 2)
+                       END AS secondaryIndustryRatio,
+                       CASE
+                           WHEN SUM(gdp) IS NULL OR SUM(gdp) = 0 THEN NULL
+                           ELSE ROUND(SUM(tertiary_industry) / SUM(gdp) * 100, 2)
+                       END AS tertiaryIndustryRatio
+                FROM city_carbon_gdp
+                GROUP BY province, year
+            ) AS agg
+              ON agg.province = p.province
+             AND agg.year = p.year
+            WHERE p.year = %s AND p.province != '西藏自治区'
             """,
             (year,),
         )
-        return cursor.fetchall()
+        rows = cursor.fetchall()
+        for row in rows:
+            row["primaryIndustry"] = optional_rounded(row.get("primaryIndustry"))
+            row["secondaryIndustry"] = optional_rounded(row.get("secondaryIndustry"))
+            row["tertiaryIndustry"] = optional_rounded(row.get("tertiaryIndustry"))
+            row["primaryIndustryRatio"] = optional_rounded(row.get("primaryIndustryRatio"))
+            row["secondaryIndustryRatio"] = optional_rounded(row.get("secondaryIndustryRatio"))
+            row["tertiaryIndustryRatio"] = optional_rounded(row.get("tertiaryIndustryRatio"))
+        return rows
+    finally:
+        conn.close()
+
+
+def get_province_history_rows(province: str) -> list[dict[str, Any]] | None:
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT p.province,
+                   p.year,
+                   p.score,
+                   p.greenCredit,
+                   p.greenInvest,
+                   p.greenInsurance,
+                   p.greenBond,
+                   p.greenSupport,
+                   p.greenFund,
+                   p.greenEquity,
+                   p.carbonEmission,
+                   p.energyConsume,
+                   p.gdp,
+                   p.did,
+                   agg.primaryIndustry,
+                   agg.secondaryIndustry,
+                   agg.tertiaryIndustry,
+                   agg.primaryIndustryRatio,
+                   agg.secondaryIndustryRatio,
+                   agg.tertiaryIndustryRatio
+            FROM province_green_finance AS p
+            LEFT JOIN (
+                SELECT province,
+                       year,
+                       ROUND(SUM(primary_industry) / 10000, 2) AS primaryIndustry,
+                       ROUND(SUM(secondary_industry) / 10000, 2) AS secondaryIndustry,
+                       ROUND(SUM(tertiary_industry) / 10000, 2) AS tertiaryIndustry,
+                       CASE
+                           WHEN SUM(gdp) IS NULL OR SUM(gdp) = 0 THEN NULL
+                           ELSE ROUND(SUM(primary_industry) / SUM(gdp) * 100, 2)
+                       END AS primaryIndustryRatio,
+                       CASE
+                           WHEN SUM(gdp) IS NULL OR SUM(gdp) = 0 THEN NULL
+                           ELSE ROUND(SUM(secondary_industry) / SUM(gdp) * 100, 2)
+                       END AS secondaryIndustryRatio,
+                       CASE
+                           WHEN SUM(gdp) IS NULL OR SUM(gdp) = 0 THEN NULL
+                           ELSE ROUND(SUM(tertiary_industry) / SUM(gdp) * 100, 2)
+                       END AS tertiaryIndustryRatio
+                FROM city_carbon_gdp
+                GROUP BY province, year
+            ) AS agg
+              ON agg.province = p.province
+             AND agg.year = p.year
+            WHERE p.province = %s
+            ORDER BY p.year ASC
+            """,
+            (province,),
+        )
+        rows = cursor.fetchall()
+        for row in rows:
+            row["primaryIndustry"] = optional_rounded(row.get("primaryIndustry"))
+            row["secondaryIndustry"] = optional_rounded(row.get("secondaryIndustry"))
+            row["tertiaryIndustry"] = optional_rounded(row.get("tertiaryIndustry"))
+            row["primaryIndustryRatio"] = optional_rounded(row.get("primaryIndustryRatio"))
+            row["secondaryIndustryRatio"] = optional_rounded(row.get("secondaryIndustryRatio"))
+            row["tertiaryIndustryRatio"] = optional_rounded(row.get("tertiaryIndustryRatio"))
+        return rows
     finally:
         conn.close()
 
@@ -81,14 +205,80 @@ def get_city_rows(province: str, year: int = 2024) -> list[dict[str, Any]] | Non
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT city, province, year, score, greenCredit, greenInvest, greenInsurance,
-                   greenBond, greenSupport, greenFund, greenEquity
-            FROM city_green_finance
-            WHERE province = %s AND year = %s
+            SELECT gf.city,
+                   gf.province,
+                   gf.year,
+                   gf.score,
+                   gf.greenCredit,
+                   gf.greenInvest,
+                   gf.greenInsurance,
+                   gf.greenBond,
+                   gf.greenSupport,
+                   gf.greenFund,
+                   gf.greenEquity,
+                   cg.city_code AS cityCode,
+                   ROUND(cg.gdp / 10000, 2) AS gdp,
+                   cg.co2_emission AS carbonEmission,
+                   ROUND(cg.co2_emission / 10000, 2) AS carbonEmissionWanTon
+            FROM city_green_finance AS gf
+            LEFT JOIN city_carbon_gdp AS cg
+              ON cg.province = gf.province
+             AND cg.city = gf.city
+             AND cg.year = gf.year
+            WHERE gf.province = %s AND gf.year = %s
+            ORDER BY gf.score DESC, gf.city ASC
             """,
             (province, year),
         )
-        return cursor.fetchall()
+        rows = cursor.fetchall()
+        for row in rows:
+            row["gdp"] = optional_rounded(row.get("gdp"))
+            row["carbonEmission"] = optional_rounded(row.get("carbonEmission"))
+            row["carbonEmissionWanTon"] = optional_rounded(row.get("carbonEmissionWanTon"))
+        return rows
+    finally:
+        conn.close()
+
+
+def get_city_history_rows(province: str, city: str) -> list[dict[str, Any]] | None:
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT gf.city,
+                   gf.province,
+                   gf.year,
+                   gf.score,
+                   gf.greenCredit,
+                   gf.greenInvest,
+                   gf.greenInsurance,
+                   gf.greenBond,
+                   gf.greenSupport,
+                   gf.greenFund,
+                   gf.greenEquity,
+                   cg.city_code AS cityCode,
+                   ROUND(cg.gdp / 10000, 2) AS gdp,
+                   cg.co2_emission AS carbonEmission,
+                   ROUND(cg.co2_emission / 10000, 2) AS carbonEmissionWanTon
+            FROM city_green_finance AS gf
+            LEFT JOIN city_carbon_gdp AS cg
+              ON cg.province = gf.province
+             AND cg.city = gf.city
+             AND cg.year = gf.year
+            WHERE gf.province = %s AND gf.city = %s
+            ORDER BY gf.year ASC
+            """,
+            (province, city),
+        )
+        rows = cursor.fetchall()
+        for row in rows:
+            row["gdp"] = optional_rounded(row.get("gdp"))
+            row["carbonEmission"] = optional_rounded(row.get("carbonEmission"))
+            row["carbonEmissionWanTon"] = optional_rounded(row.get("carbonEmissionWanTon"))
+        return rows
     finally:
         conn.close()
 
@@ -107,7 +297,13 @@ def get_city_carbon_rows(province: str, year: int = 2024) -> list[dict[str, Any]
                    city_code AS cityCode,
                    co2_emission AS carbonEmission,
                    ROUND(co2_emission / 10000, 2) AS carbonEmissionWanTon,
-                   ROUND(gdp / 10000, 2) AS gdp
+                   ROUND(gdp / 10000, 2) AS gdp,
+                   ROUND(primary_industry / 10000, 2) AS primaryIndustry,
+                   ROUND(secondary_industry / 10000, 2) AS secondaryIndustry,
+                   ROUND(tertiary_industry / 10000, 2) AS tertiaryIndustry,
+                   ROUND(primary_industry_ratio, 2) AS primaryIndustryRatio,
+                   ROUND(secondary_industry_ratio, 2) AS secondaryIndustryRatio,
+                   ROUND(tertiary_industry_ratio, 2) AS tertiaryIndustryRatio
             FROM city_carbon_gdp
             WHERE province = %s AND year = %s
             ORDER BY co2_emission DESC, city ASC
@@ -116,9 +312,58 @@ def get_city_carbon_rows(province: str, year: int = 2024) -> list[dict[str, Any]
         )
         rows = cursor.fetchall()
         for row in rows:
-            row["carbonEmission"] = safe_float(row.get("carbonEmission"))
-            row["carbonEmissionWanTon"] = round(safe_float(row.get("carbonEmissionWanTon")), 2)
-            row["gdp"] = round(safe_float(row.get("gdp")), 2)
+            row["carbonEmission"] = optional_rounded(row.get("carbonEmission"))
+            row["carbonEmissionWanTon"] = optional_rounded(row.get("carbonEmissionWanTon"))
+            row["gdp"] = optional_rounded(row.get("gdp"))
+            row["primaryIndustry"] = optional_rounded(row.get("primaryIndustry"))
+            row["secondaryIndustry"] = optional_rounded(row.get("secondaryIndustry"))
+            row["tertiaryIndustry"] = optional_rounded(row.get("tertiaryIndustry"))
+            row["primaryIndustryRatio"] = optional_rounded(row.get("primaryIndustryRatio"))
+            row["secondaryIndustryRatio"] = optional_rounded(row.get("secondaryIndustryRatio"))
+            row["tertiaryIndustryRatio"] = optional_rounded(row.get("tertiaryIndustryRatio"))
+        return rows
+    finally:
+        conn.close()
+
+
+def get_city_carbon_history_rows(province: str, city: str) -> list[dict[str, Any]] | None:
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT city,
+                   province,
+                   year,
+                   city_code AS cityCode,
+                   co2_emission AS carbonEmission,
+                   ROUND(co2_emission / 10000, 2) AS carbonEmissionWanTon,
+                   ROUND(gdp / 10000, 2) AS gdp,
+                   ROUND(primary_industry / 10000, 2) AS primaryIndustry,
+                   ROUND(secondary_industry / 10000, 2) AS secondaryIndustry,
+                   ROUND(tertiary_industry / 10000, 2) AS tertiaryIndustry,
+                   ROUND(primary_industry_ratio, 2) AS primaryIndustryRatio,
+                   ROUND(secondary_industry_ratio, 2) AS secondaryIndustryRatio,
+                   ROUND(tertiary_industry_ratio, 2) AS tertiaryIndustryRatio
+            FROM city_carbon_gdp
+            WHERE province = %s AND city = %s
+            ORDER BY year ASC
+            """,
+            (province, city),
+        )
+        rows = cursor.fetchall()
+        for row in rows:
+            row["carbonEmission"] = optional_rounded(row.get("carbonEmission"))
+            row["carbonEmissionWanTon"] = optional_rounded(row.get("carbonEmissionWanTon"))
+            row["gdp"] = optional_rounded(row.get("gdp"))
+            row["primaryIndustry"] = optional_rounded(row.get("primaryIndustry"))
+            row["secondaryIndustry"] = optional_rounded(row.get("secondaryIndustry"))
+            row["tertiaryIndustry"] = optional_rounded(row.get("tertiaryIndustry"))
+            row["primaryIndustryRatio"] = optional_rounded(row.get("primaryIndustryRatio"))
+            row["secondaryIndustryRatio"] = optional_rounded(row.get("secondaryIndustryRatio"))
+            row["tertiaryIndustryRatio"] = optional_rounded(row.get("tertiaryIndustryRatio"))
         return rows
     finally:
         conn.close()

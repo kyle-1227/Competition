@@ -130,8 +130,13 @@ const markdown = new MarkdownIt({
 
 const toolNameMap: Record<string, string> = {
   get_green_finance_province_data: '省级绿色金融数据',
-  get_green_finance_city_data: '城市绿色金融数据',
+  get_green_finance_city_data: '城市绿色金融关联数据',
+  get_green_finance_province_history: '省级绿色金融历史',
+  get_green_finance_city_history: '城市绿色金融历史',
   get_carbon_province_data: '省级碳排放数据',
+  get_carbon_city_data: '城市碳排放对比数据',
+  get_carbon_province_history: '省级碳排放历史',
+  get_carbon_city_history: '城市碳排放历史',
   get_energy_prediction_data: '预测历史与模型系数',
   get_macro_series_data: '宏观时间序列',
   get_macro_stats_data: '宏观描述性统计',
@@ -326,6 +331,27 @@ watch(
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0 18px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba($tech-cyan, 0.62) rgba(255, 255, 255, 0.06);
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba($tech-cyan, 0.76), rgba($tech-green, 0.48));
+    border-radius: 999px;
+    box-shadow: inset 0 0 8px rgba($tech-cyan, 0.18);
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba($tech-cyan, 0.92), rgba($tech-green, 0.68));
+  }
 }
 
 .ai-assistant__empty {
@@ -514,6 +540,26 @@ watch(
     border-radius: 12px;
     background: rgba(0, 0, 0, 0.3);
     overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba($tech-cyan, 0.62) rgba(255, 255, 255, 0.06);
+  }
+
+  :deep(pre::-webkit-scrollbar) {
+    height: 6px;
+  }
+
+  :deep(pre::-webkit-scrollbar-track) {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+  }
+
+  :deep(pre::-webkit-scrollbar-thumb) {
+    background: linear-gradient(90deg, rgba($tech-cyan, 0.76), rgba($tech-green, 0.48));
+    border-radius: 999px;
+  }
+
+  :deep(pre::-webkit-scrollbar-thumb:hover) {
+    background: linear-gradient(90deg, rgba($tech-cyan, 0.92), rgba($tech-green, 0.68));
   }
 
   :deep(pre code) {
@@ -541,6 +587,7 @@ watch(
   width: 100%;
   min-height: 112px;
   resize: none;
+  overflow-y: auto;
   border-radius: 14px;
   border: 1px solid rgba($tech-cyan, 0.22);
   background: rgba(255, 255, 255, 0.03);
@@ -549,6 +596,26 @@ watch(
   font-size: 16px;
   line-height: 1.7;
   outline: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba($tech-cyan, 0.62) rgba(255, 255, 255, 0.06);
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba($tech-cyan, 0.76), rgba($tech-green, 0.48));
+    border-radius: 999px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba($tech-cyan, 0.92), rgba($tech-green, 0.68));
+  }
 
   &:focus {
     border-color: rgba($tech-cyan, 0.45);

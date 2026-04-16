@@ -9,7 +9,11 @@ import {
 } from '@/api/modules/dashboard-carbon';
 import { getCarbonRowsFromApi } from './hooks/useChart';
 import { useAiAssistant } from './hooks/aiAssistant';
-import { useCarbonMap } from './hooks/useMap';
+import {
+  useCarbonMap,
+  createHiddenCarbonTooltip,
+  type CarbonMapTooltipState,
+} from './hooks/useMap';
 import BizMacro from './BizMacro.vue';
 import {
   NO_PANEL_DATA_REGIONS_LEGEND,
@@ -40,6 +44,8 @@ const noPanelRegionsLegend = NO_PANEL_DATA_REGIONS_LEGEND;
 
 const activeCarbonView = ref<CarbonViewMode>('map-carbon');
 const lastMapView = ref<'map-carbon' | 'map-gdp'>('map-carbon');
+const mapAreaRef = ref<HTMLElement | null>(null);
+const carbonMapTooltip = ref<CarbonMapTooltipState>(createHiddenCarbonTooltip());
 const selectedCarbonProvince = ref('');
 const cityCarbonRows = ref<CityCarbonRow[]>([]);
 const cityCarbonTotalWanTon = ref(0);
@@ -67,12 +73,14 @@ function resetCityCarbon() {
 }
 
 function selectCarbonProvince(provinceName: string) {
+  carbonMapTooltip.value = createHiddenCarbonTooltip();
   selectedCarbonProvince.value = provinceName;
   resetCityCarbon();
 }
 
 function clearCarbonProvince() {
   cityCarbonFetchSeq += 1;
+  carbonMapTooltip.value = createHiddenCarbonTooltip();
   selectedCarbonProvince.value = '';
   resetCityCarbon();
 }
@@ -86,6 +94,7 @@ useCarbonMap({
   metric: currentMetric,
   selectedProvince: selectedCarbonProvince,
   cityRows: cityCarbonRows,
+  tooltipRef: carbonMapTooltip,
   onProvinceClick: selectCarbonProvince,
 });
 
@@ -196,6 +205,32 @@ const sidebarEmptyText = computed(() => {
   }
   return `暂无全国省级${currentMetricLabel.value}数据`;
 });
+const carbonTooltipStyle = computed(() => {
+  const tooltip = carbonMapTooltip.value;
+  const area = mapAreaRef.value;
+  if (!tooltip.visible || !area) return { display: 'none' as const };
+
+  const padding = 10;
+  const estimatedWidth = 360;
+  const estimatedHeight = 170 + Math.max(1, Math.ceil(tooltip.rows.length / 2)) * 56 + 108;
+  const areaWidth = area.clientWidth;
+  const areaHeight = area.clientHeight;
+
+  let left = tooltip.left;
+  let top = tooltip.top;
+
+  if (left + estimatedWidth > areaWidth - padding) {
+    left = Math.max(padding, areaWidth - estimatedWidth - padding);
+  }
+  if (top + estimatedHeight > areaHeight - padding) {
+    top = Math.max(padding, areaHeight - estimatedHeight - padding);
+  }
+
+  return {
+    left: `${Math.max(padding, left)}px`,
+    top: `${Math.max(padding, top)}px`,
+  };
+});
 
 function handleSidebarRowClick(row: CarbonSidebarRow) {
   if (!row.clickable) return;
@@ -220,6 +255,7 @@ function emitResizeSoon() {
 }
 
 function setMapView(view: 'map-carbon' | 'map-gdp') {
+  carbonMapTooltip.value = createHiddenCarbonTooltip();
   lastMapView.value = view;
   activeCarbonView.value = view;
   emitResizeSoon();
@@ -230,6 +266,7 @@ function toggleMapMetricView() {
 }
 
 function toggleMacroView() {
+  carbonMapTooltip.value = createHiddenCarbonTooltip();
   if (activeCarbonView.value === 'macro') {
     activeCarbonView.value = lastMapView.value;
   } else {
@@ -293,6 +330,7 @@ watch([selectedCarbonProvince, selectedYear], loadCityCarbonData, { immediate: t
 const unregisterAiContext = registerPageContext('carbon', () => ({
   year: selectedYear.value,
   selectedProvince: selectedCarbonProvince.value || undefined,
+  drillProvince: selectedCarbonProvince.value || undefined,
   snapshot: {
     viewMode: activeCarbonView.value,
     mapMetric: currentMetric.value,
@@ -405,7 +443,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div class="biz-wrap-map">
+      <div ref="mapAreaRef" class="biz-wrap-map">
         <button v-if="selectedCarbonProvince" type="button" class="carbon-back-map" @click="clearCarbonProvince">
           返回全国视角
         </button>
@@ -424,6 +462,43 @@ onUnmounted(() => {
             @change="commitTimelineYear"
           />
           <div class="map-timeline__badge">{{ timelineYear }}年</div>
+        </div>
+
+        <div
+          v-show="carbonMapTooltip.visible"
+          class="carbon-map-tooltip"
+          :style="carbonTooltipStyle"
+        >
+          <div class="carbon-map-tooltip__head">
+            <span class="carbon-map-tooltip__name">{{ carbonMapTooltip.regionName }}</span>
+            <span class="carbon-map-tooltip__year">{{ carbonMapTooltip.year }} 年</span>
+          </div>
+          <div class="carbon-map-tooltip__score-row">
+            <span class="carbon-map-tooltip__score-label">{{ carbonMapTooltip.headlineLabel }}</span>
+            <span class="carbon-map-tooltip__score-val">{{ carbonMapTooltip.headlineValue }}</span>
+            <span
+              v-if="carbonMapTooltip.headlineValue !== '—' && carbonMapTooltip.headlineUnit"
+              class="carbon-map-tooltip__score-unit"
+            >
+              {{ carbonMapTooltip.headlineUnit }}
+            </span>
+          </div>
+          <div v-if="carbonMapTooltip.rows.length" class="carbon-map-tooltip__grid">
+            <div
+              v-for="(cell, idx) in carbonMapTooltip.rows"
+              :key="idx"
+              class="carbon-map-tooltip__cell"
+            >
+              <span class="carbon-map-tooltip__cell-label">{{ cell.label }}</span>
+              <span class="carbon-map-tooltip__cell-value">{{ cell.value }}</span>
+            </div>
+          </div>
+          <div class="carbon-map-tooltip__ai">
+            <div class="carbon-map-tooltip__ai-title">AI 分析</div>
+            <div class="carbon-map-tooltip__ai-text">
+              {{ carbonMapTooltip.aiLoading ? 'AI 分析生成中...' : carbonMapTooltip.aiInsight }}
+            </div>
+          </div>
         </div>
 
         <div class="map-legend">
@@ -651,6 +726,137 @@ onUnmounted(() => {
       font-weight: bold;
       box-shadow: inset 0 0 14px rgba($tech-cyan, 0.08);
       white-space: nowrap;
+    }
+
+    .carbon-map-tooltip {
+      position: absolute;
+      z-index: 1200;
+      width: min(360px, calc(100% - 20px));
+      max-height: min(420px, calc(100% - 24px));
+      overflow: auto;
+      pointer-events: none;
+      padding: 14px 16px 16px;
+      border-radius: 10px;
+      background: rgba(9, 16, 34, 0.82);
+      border: 1px solid rgba($tech-cyan, 0.42);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow:
+        0 0 24px rgba($tech-cyan, 0.22),
+        0 8px 32px rgba(0, 0, 0, 0.45),
+        inset 0 0 28px rgba($tech-cyan, 0.06);
+
+      &::-webkit-scrollbar {
+        width: 4px;
+      }
+
+      &::-webkit-scrollbar-thumb {
+        background: rgba($tech-cyan, 0.2);
+        border-radius: 2px;
+      }
+    }
+
+    .carbon-map-tooltip__head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .carbon-map-tooltip__name {
+      color: rgba($tech-cyan, 0.92);
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-shadow: 0 0 12px rgba($tech-cyan, 0.35);
+    }
+
+    .carbon-map-tooltip__year {
+      flex-shrink: 0;
+      font-size: 15px;
+      color: rgba(200, 220, 255, 0.55);
+      letter-spacing: 1px;
+    }
+
+    .carbon-map-tooltip__score-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .carbon-map-tooltip__score-label {
+      font-size: 15px;
+      color: rgba(200, 220, 255, 0.5);
+      letter-spacing: 1px;
+    }
+
+    .carbon-map-tooltip__score-val {
+      font-size: 27px;
+      font-weight: 900;
+      font-family: $font-title;
+      letter-spacing: -0.5px;
+      background: linear-gradient(180deg, #ffc66a, $tech-orange);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: drop-shadow(0 0 8px rgba($tech-orange, 0.42));
+    }
+
+    .carbon-map-tooltip__score-unit {
+      font-size: 15px;
+      color: rgba(255, 255, 255, 0.4);
+    }
+
+    .carbon-map-tooltip__grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 14px;
+    }
+
+    .carbon-map-tooltip__cell {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 8px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .carbon-map-tooltip__cell-label {
+      font-size: 14px;
+      color: rgba(200, 210, 225, 0.55);
+      letter-spacing: 0.5px;
+    }
+
+    .carbon-map-tooltip__cell-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: rgba(230, 240, 255, 0.92);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .carbon-map-tooltip__ai {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .carbon-map-tooltip__ai-title {
+      margin-bottom: 6px;
+      color: rgba($tech-cyan, 0.86);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    .carbon-map-tooltip__ai-text {
+      color: rgba(230, 240, 255, 0.88);
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: normal;
     }
 
     .legend-title {

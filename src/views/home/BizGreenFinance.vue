@@ -40,7 +40,7 @@ const gfTooltipStyle = computed(() => {
 
   const padding = 10;
   const estimatedWidth = 292;
-  const estimatedHeight = 400;
+  const estimatedHeight = 460;
   const areaWidth = area.clientWidth;
   const areaHeight = area.clientHeight;
 
@@ -168,8 +168,8 @@ const gfTop10RowsForAi = computed(() => {
     .map((row) => ({
       name: row.province,
       score: Number(((row.score ?? 0) * 100).toFixed(2)),
-      carbonEmission: row.carbonEmission ?? 0,
-      gdp: row.gdp ?? 0,
+      carbonEmission: row.carbonEmission ?? null,
+      gdp: row.gdp ?? null,
     }));
 });
 
@@ -199,13 +199,44 @@ const gfRadarFocusForAi = computed(() => {
   };
 });
 
+const selectedProvinceMetricsForAi = computed(() => {
+  const row = realProvinceData.value.find((item) => item.province === selectedProv.value) || realProvinceData.value[0];
+  if (!row) return null;
+
+  return {
+    name: row.province,
+    score: Number(((row.score ?? 0) * 100).toFixed(2)),
+    gdp: row.gdp ?? null,
+    carbonEmission: row.carbonEmission ?? null,
+    carbonEmissionWanTon: row.carbonEmission == null ? null : Number((row.carbonEmission / 10000).toFixed(2)),
+  };
+});
+
+const gfCityRelationRowsForAi = computed(() => {
+  if (!gfDrillProvince.value) return [];
+
+  return [...realCityData.value]
+    .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0))
+    .slice(0, 12)
+    .map((row) => ({
+      name: row.province,
+      score: Number(((row.score ?? 0) * 100).toFixed(2)),
+      gdp: row.gdp ?? null,
+      carbonEmission: row.carbonEmission ?? null,
+      carbonEmissionWanTon: row.carbonEmission == null ? null : Number((row.carbonEmission / 10000).toFixed(2)),
+    }));
+});
+
 const unregisterAiContext = registerPageContext('greenFinance', () => ({
   year: selectedYear.value,
   selectedProvince: selectedProv.value,
   drillProvince: gfDrillProvince.value || undefined,
   snapshot: {
     viewMode: gfViewMode.value,
+    isDrilled: Boolean(gfDrillProvince.value),
     boardStats: boardStats.value,
+    selectedProvinceMetrics: selectedProvinceMetricsForAi.value,
+    cityRelationRows: gfCityRelationRowsForAi.value,
     top10: gfTop10RowsForAi.value,
     radarFocus: gfRadarFocusForAi.value,
   },
@@ -321,6 +352,12 @@ onUnmounted(() => {
             >
               <span class="gf-map-tooltip__cell-label">{{ cell.label }}</span>
               <span class="gf-map-tooltip__cell-value">{{ cell.value }}</span>
+            </div>
+          </div>
+          <div class="gf-map-tooltip__ai">
+            <div class="gf-map-tooltip__ai-title">AI 分析</div>
+            <div class="gf-map-tooltip__ai-text">
+              {{ gfMapTooltip.aiLoading ? 'AI 分析生成中...' : gfMapTooltip.aiInsight }}
             </div>
           </div>
         </div>
@@ -692,6 +729,24 @@ onUnmounted(() => {
     font-weight: 600;
     color: rgba(230, 240, 255, 0.92);
     font-variant-numeric: tabular-nums;
+  }
+  .gf-map-tooltip__ai {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .gf-map-tooltip__ai-title {
+    margin-bottom: 6px;
+    color: rgba($tech-cyan, 0.86);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .gf-map-tooltip__ai-text {
+    color: rgba(230, 240, 255, 0.88);
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: normal;
   }
 }
 .sidebar-charts {

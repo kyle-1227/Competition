@@ -1,0 +1,22 @@
+[
+  {
+    "id": "city_run_meta",
+    "level": "city",
+    "module": "carbon",
+    "kind": "run_meta",
+    "tags": ["city", "sample", "meta"],
+    "content": "本次地级市运行层级为 city，个体ID为地级市，预处理后样本量为7200。",
+    "source": "模型log.doc",
+    "stability": "medium"
+  },
+  {
+    "id": "city_baseline_result",
+    "level": "city",
+    "module": "carbon",
+    "kind": "baseline_regression",
+    "tags": ["baseline", "gfi_std", "city"],
+    "content": "地级市基准回归中，gfi_std 系数为 -0.1511，p=0.0198，呈显著负向关系。",
+    "source": "模型log.doc",
+    "stability": "medium"
+  }
+]

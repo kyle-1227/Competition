@@ -19,6 +19,7 @@ import {
   indicatorLabels,
   type ProvinceGreenFinance,
 } from './provinceData';
+import { getTooltipAiSnapshot, requestTooltipAi } from './useTooltipAi';
 
 /** 缁胯壊閲戣瀺鍦板浘鎮仠娴锛圴ue 涓?useGreenFinanceMap 鍏辩敤锛?*/
 export interface GfMapTooltipState {
@@ -30,6 +31,9 @@ export interface GfMapTooltipState {
   scoreText: string;
   rows: { label: string; value: string }[];
   mode: 'province' | 'city';
+  aiInsight: string;
+  aiLoading: boolean;
+  aiCacheKey: string;
 }
 
 export function createHiddenGfTooltip(): GfMapTooltipState {
@@ -42,7 +46,62 @@ export function createHiddenGfTooltip(): GfMapTooltipState {
     scoreText: '',
     rows: [],
     mode: 'province',
+    aiInsight: '',
+    aiLoading: false,
+    aiCacheKey: '',
   };
+}
+
+export interface CarbonMapTooltipState {
+  visible: boolean;
+  left: number;
+  top: number;
+  regionName: string;
+  year: number;
+  headlineLabel: string;
+  headlineValue: string;
+  headlineUnit: string;
+  rows: { label: string; value: string }[];
+  mode: 'province' | 'city';
+  metric: 'carbon' | 'gdp';
+  aiInsight: string;
+  aiLoading: boolean;
+  aiCacheKey: string;
+}
+
+export function createHiddenCarbonTooltip(): CarbonMapTooltipState {
+  return {
+    visible: false,
+    left: 0,
+    top: 0,
+    regionName: '',
+    year: selectedYear.value,
+    headlineLabel: '',
+    headlineValue: '—',
+    headlineUnit: '',
+    rows: [],
+    mode: 'province',
+    metric: 'carbon',
+    aiInsight: '',
+    aiLoading: false,
+    aiCacheKey: '',
+  };
+}
+
+function formatTooltipMetricNumber(value: unknown, digits = 2): string {
+  if (value == null) return '—';
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return '—';
+  return parsed.toLocaleString('zh-CN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: digits,
+  });
+}
+
+function formatTooltipMetricCell(value: unknown, unit = '', digits = 2): string {
+  const formatted = formatTooltipMetricNumber(value, digits);
+  if (formatted === '—') return formatted;
+  return unit ? `${formatted} ${unit}` : formatted;
 }
 
 /** 涓冪淮涓庣患鍚堟寚鏁颁竴鑷达細搴撳唴涓?0锝?锛屽睍绀轰负鐧惧垎鍒讹紝淇濈暀 2 浣嶅皬鏁?*/
@@ -86,6 +145,62 @@ function scoreToDisplayText(row: ProvinceGreenFinance | undefined): string {
   return (row.score * 100).toFixed(2);
 }
 
+function buildGreenFinanceTooltipAiPayload(
+  regionName: string,
+  mode: 'province' | 'city',
+  row: ProvinceGreenFinance | undefined,
+) {
+  const indicators = indicatorKeys.reduce((acc, key) => {
+    const rawValue = row?.[key];
+    acc[key] = typeof rawValue === 'number' && Number.isFinite(rawValue) ? Number((rawValue * 100).toFixed(2)) : null;
+    return acc;
+  }, {} as Record<string, number | null>);
+
+  return {
+    regionName,
+    year: selectedYear.value,
+    moduleName: 'greenFinance',
+    tooltipScope: mode === 'province' ? 'greenFinanceMapProvince' : 'greenFinanceMapCity',
+    dataPayload: {
+      regionName,
+      mode,
+      score: row && typeof row.score === 'number' ? Number((row.score * 100).toFixed(2)) : null,
+      indicators,
+    },
+  };
+}
+
+function applyGreenFinanceTooltipAi(
+  tooltipRef: Ref<GfMapTooltipState>,
+  baseState: Omit<GfMapTooltipState, 'aiInsight' | 'aiLoading' | 'aiCacheKey'>,
+  aiPayload: {
+    regionName: string;
+    year: number;
+    moduleName: string;
+    tooltipScope: string;
+    dataPayload: Record<string, unknown>;
+  },
+) {
+  const requestPromise = requestTooltipAi(aiPayload);
+  const snapshot = getTooltipAiSnapshot(aiPayload);
+  tooltipRef.value = {
+    ...baseState,
+    aiInsight: snapshot.content,
+    aiLoading: snapshot.loading,
+    aiCacheKey: snapshot.cacheKey,
+  };
+
+  void requestPromise.then((content) => {
+    const current = tooltipRef.value;
+    if (!current.visible || current.aiCacheKey !== snapshot.cacheKey) return;
+    tooltipRef.value = {
+      ...current,
+      aiInsight: content,
+      aiLoading: false,
+    };
+  });
+}
+
 function attachGreenFinanceMapTooltip(
   layer: PolygonLayer,
   scene: Scene,
@@ -98,14 +213,14 @@ function attachGreenFinanceMapTooltip(
   const OFFSET_X = 14;
   const OFFSET_Y = 14;
 
-  const applyPayload = (name: string, lng: number, lat: number, hasData = true) => {
+  const applyPayload = (name: string, lng: number, lat: number) => {
     const pt = scene.lngLatToContainer([lng, lat]);
     const areaR = mapAreaEl.getBoundingClientRect();
     const mapR = mapRootEl.getBoundingClientRect();
     const left = mapR.left - areaR.left + pt.x + OFFSET_X;
     const top = mapR.top - areaR.top + pt.y + OFFSET_Y;
     const row = mode === 'province' ? findProvinceRow(name) : findCityRow(name);
-    tooltipRef.value = {
+    const baseState = {
       visible: true,
       left,
       top,
@@ -115,6 +230,7 @@ function attachGreenFinanceMapTooltip(
       rows: buildTooltipRowsFromRow(row),
       mode,
     };
+    applyGreenFinanceTooltipAi(tooltipRef, baseState, buildGreenFinanceTooltipAiPayload(name, mode, row));
     if (mode === 'city') {
       gfRadarCityHoverGeoName.value = name;
     }
@@ -596,12 +712,17 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
             const t = tooltipRef.value;
             if (!t.visible || !t.regionName) return;
             const row = t.mode === 'province' ? findProvinceRow(t.regionName) : findCityRow(t.regionName);
-            tooltipRef.value = {
+            const baseState = {
               ...t,
               year: selectedYear.value,
               scoreText: scoreToDisplayText(row),
               rows: buildTooltipRowsFromRow(row),
             };
+            applyGreenFinanceTooltipAi(
+              tooltipRef,
+              baseState,
+              buildGreenFinanceTooltipAiPayload(t.regionName, t.mode, row),
+            );
           },
           { deep: true },
         );
@@ -771,11 +892,176 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
   });
 }
 
+interface CarbonTooltipMetricsRow {
+  city?: string;
+  province?: string;
+  carbonEmissionWanTon?: number;
+  carbonEmission?: number;
+  gdp?: number;
+  primaryIndustry?: number | null;
+  secondaryIndustry?: number | null;
+  tertiaryIndustry?: number | null;
+  primaryIndustryRatio?: number | null;
+  secondaryIndustryRatio?: number | null;
+  tertiaryIndustryRatio?: number | null;
+}
+
 export interface UseCarbonMapOptions {
   metric: Ref<'carbon' | 'gdp'>;
   selectedProvince: Ref<string>;
-  cityRows: Ref<Array<{ city: string; carbonEmissionWanTon?: number; carbonEmission?: number; gdp?: number }>>;
+  cityRows: Ref<CarbonTooltipMetricsRow[]>;
+  tooltipRef: Ref<CarbonMapTooltipState>;
   onProvinceClick?: (provinceName: string) => void;
+}
+
+function findCarbonProvinceRow(fullName: string): ProvinceGreenFinance | undefined {
+  return realProvinceData.value.find(
+    (row) =>
+      row.province === fullName ||
+      fullName.startsWith(row.province) ||
+      row.province.startsWith(fullName),
+  );
+}
+
+function findCarbonCityRow(
+  geoName: string,
+  rows: CarbonTooltipMetricsRow[],
+): CarbonTooltipMetricsRow | undefined {
+  const g = String(geoName || '').trim();
+  if (!g) return undefined;
+  return rows.find((row) => {
+    const name = String(row?.city || '').trim();
+    return name && (name === g || g.startsWith(name) || name.startsWith(g));
+  });
+}
+
+function buildCarbonIndustryTooltipRows(row: CarbonTooltipMetricsRow | ProvinceGreenFinance | undefined) {
+  return [
+    { label: '第一产业增加值', value: formatTooltipMetricCell(row?.primaryIndustry, '亿元') },
+    { label: '第二产业增加值', value: formatTooltipMetricCell(row?.secondaryIndustry, '亿元') },
+    { label: '第三产业增加值', value: formatTooltipMetricCell(row?.tertiaryIndustry, '亿元') },
+    { label: '第一产业占比', value: formatTooltipMetricCell(row?.primaryIndustryRatio, '%') },
+    { label: '第二产业占比', value: formatTooltipMetricCell(row?.secondaryIndustryRatio, '%') },
+    { label: '第三产业占比', value: formatTooltipMetricCell(row?.tertiaryIndustryRatio, '%') },
+  ];
+}
+
+function buildCarbonMapTooltipAiPayload(
+  regionName: string,
+  mode: 'province' | 'city',
+  metric: 'carbon' | 'gdp',
+  dataPayload: Record<string, unknown>,
+) {
+  const tooltipScope = metric === 'gdp'
+    ? (mode === 'province' ? 'carbonMapProvinceGdp' : 'carbonMapCityGdp')
+    : (mode === 'province' ? 'carbonMapProvinceCarbon' : 'carbonMapCityCarbon');
+
+  return {
+    regionName,
+    year: selectedYear.value,
+    moduleName: 'carbon',
+    tooltipScope,
+    dataPayload,
+  };
+}
+
+function applyCarbonMapTooltipAi(
+  tooltipRef: Ref<CarbonMapTooltipState>,
+  baseState: Omit<CarbonMapTooltipState, 'aiInsight' | 'aiLoading' | 'aiCacheKey'>,
+  aiPayload: {
+    regionName: string;
+    year: number;
+    moduleName: string;
+    tooltipScope: string;
+    dataPayload: Record<string, unknown>;
+  },
+) {
+  const requestPromise = requestTooltipAi(aiPayload);
+  const snapshot = getTooltipAiSnapshot(aiPayload);
+  tooltipRef.value = {
+    ...baseState,
+    aiInsight: snapshot.content,
+    aiLoading: snapshot.loading,
+    aiCacheKey: snapshot.cacheKey,
+  };
+
+  void requestPromise.then((content) => {
+    const current = tooltipRef.value;
+    if (!current.visible || current.aiCacheKey !== snapshot.cacheKey) return;
+    tooltipRef.value = {
+      ...current,
+      aiInsight: content,
+      aiLoading: false,
+    };
+  });
+}
+
+function attachCarbonMapTooltip(
+  layer: PolygonLayer,
+  scene: Scene,
+  mapAreaEl: HTMLElement,
+  mapRootEl: HTMLElement,
+  tooltipRef: Ref<CarbonMapTooltipState>,
+  resolveTooltip: (name: string) => {
+    baseState: Omit<CarbonMapTooltipState, 'visible' | 'left' | 'top' | 'aiInsight' | 'aiLoading' | 'aiCacheKey'>;
+    aiPayload: {
+      regionName: string;
+      year: number;
+      moduleName: string;
+      tooltipScope: string;
+      dataPayload: Record<string, unknown>;
+    };
+  } | null,
+  shouldHandle?: (e: any) => boolean,
+) {
+  const OFFSET_X = 14;
+  const OFFSET_Y = 14;
+
+  const hide = () => {
+    tooltipRef.value = createHiddenCarbonTooltip();
+  };
+
+  const onPick = (e: any) => {
+    if (shouldHandle && !shouldHandle(e)) {
+      hide();
+      return;
+    }
+    const name = e.feature?.properties?.name;
+    if (!name || isProvinceExcludedFromPanel(name)) {
+      hide();
+      return;
+    }
+    const ll = e.lngLat ?? e.lnglat;
+    if (!ll) return;
+    const lng = typeof ll.lng === 'number' ? ll.lng : ll[0];
+    const lat = typeof ll.lat === 'number' ? ll.lat : ll[1];
+    if (typeof lng !== 'number' || typeof lat !== 'number') return;
+
+    const resolved = resolveTooltip(name);
+    if (!resolved) {
+      hide();
+      return;
+    }
+
+    const pt = scene.lngLatToContainer([lng, lat]);
+    const areaR = mapAreaEl.getBoundingClientRect();
+    const mapR = mapRootEl.getBoundingClientRect();
+    const left = mapR.left - areaR.left + pt.x + OFFSET_X;
+    const top = mapR.top - areaR.top + pt.y + OFFSET_Y;
+
+    applyCarbonMapTooltipAi(tooltipRef, {
+      ...resolved.baseState,
+      visible: true,
+      left,
+      top,
+    }, resolved.aiPayload);
+  };
+
+  layer.on('mouseenter', onPick);
+  layer.on('mousemove', onPick);
+  layer.on('mouseout', hide);
+
+  return { hide };
 }
 
 function metricValueFromProvinceRow(
@@ -811,6 +1097,89 @@ function matchCarbonValue(
   return { value: Number.isFinite(value) ? value : 0, hasData: true };
 }
 
+function buildCarbonMapTooltipContent(
+  regionName: string,
+  mode: 'province' | 'city',
+  metric: 'carbon' | 'gdp',
+  cityRows: CarbonTooltipMetricsRow[],
+) {
+  if (metric === 'gdp') {
+    const row = mode === 'province'
+      ? findCarbonProvinceRow(regionName)
+      : findCarbonCityRow(regionName, cityRows);
+    const gdp = row ? Number(row.gdp ?? 0) : null;
+    const rows = buildCarbonIndustryTooltipRows(row);
+    return {
+      baseState: {
+        regionName,
+        year: selectedYear.value,
+        headlineLabel: 'GDP 总量',
+        headlineValue: formatTooltipMetricNumber(gdp),
+        headlineUnit: '亿元',
+        rows,
+        mode,
+        metric,
+      },
+      aiPayload: buildCarbonMapTooltipAiPayload(regionName, mode, metric, {
+        metric,
+        level: mode,
+        regionName,
+        gdp,
+        primaryIndustry: row?.primaryIndustry ?? null,
+        secondaryIndustry: row?.secondaryIndustry ?? null,
+        tertiaryIndustry: row?.tertiaryIndustry ?? null,
+        primaryIndustryRatio: row?.primaryIndustryRatio ?? null,
+        secondaryIndustryRatio: row?.secondaryIndustryRatio ?? null,
+        tertiaryIndustryRatio: row?.tertiaryIndustryRatio ?? null,
+      }),
+    };
+  }
+
+  if (mode === 'province') {
+    const row = findCarbonProvinceRow(regionName);
+    const carbonEmissionWanTon = row ? metricValueFromProvinceRow(row, 'carbon') : null;
+    return {
+      baseState: {
+        regionName,
+        year: selectedYear.value,
+        headlineLabel: '碳排放总量',
+        headlineValue: formatTooltipMetricNumber(carbonEmissionWanTon),
+        headlineUnit: '万吨',
+        rows: [],
+        mode,
+        metric,
+      },
+      aiPayload: buildCarbonMapTooltipAiPayload(regionName, mode, metric, {
+        metric,
+        level: mode,
+        regionName,
+        carbonEmissionWanTon,
+      }),
+    };
+  }
+
+  const row = findCarbonCityRow(regionName, cityRows);
+  const carbonEmissionWanTon = row ? metricValueFromCityRow(row, 'carbon') : null;
+  return {
+    baseState: {
+      regionName,
+      year: selectedYear.value,
+      headlineLabel: '碳排放总量',
+      headlineValue: formatTooltipMetricNumber(carbonEmissionWanTon),
+      headlineUnit: '万吨',
+      rows: [],
+      mode,
+      metric,
+    },
+    aiPayload: buildCarbonMapTooltipAiPayload(regionName, mode, metric, {
+      metric,
+      level: mode,
+      regionName,
+      carbonEmissionWanTon,
+    }),
+  };
+}
+
 export function useCarbonMap(options: UseCarbonMapOptions) {
   onMounted(() => {
     const scene = new Scene({
@@ -826,6 +1195,7 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
     scene.on('loaded', () => {
       const mapEl = document.getElementById('carbon-map');
       if (mapEl) mapEl.style.background = '#131722';
+      const mapAreaEl = mapEl?.parentElement instanceof HTMLElement ? mapEl.parentElement : null;
       const nativeMap = scene.getMapService?.()?.map || scene.map;
 
       nativeMap?.doubleClickZoom?.disable?.();
@@ -995,6 +1365,17 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
             options.onProvinceClick?.(name);
           }
         });
+        if (mapAreaEl && mapEl) {
+          attachCarbonMapTooltip(
+            provinceFillLayer,
+            scene,
+            mapAreaEl,
+            mapEl,
+            options.tooltipRef,
+            (name) => buildCarbonMapTooltipContent(name, 'province', options.metric.value, options.cityRows.value),
+            () => !options.selectedProvince.value,
+          );
+        }
 
         const provinceBoundaryLayer = new LineLayer({ zIndex: 10 })
           .source(fullOutlineGeo)
@@ -1041,6 +1422,17 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
               .style({ pickLight: true, opacity: CARBON_FILL_OPACITY })
               .active({ color: GF_ACTIVE_COLOR });
             scene.addLayer(cityFillLayer);
+            if (mapAreaEl && mapEl) {
+              attachCarbonMapTooltip(
+                cityFillLayer,
+                scene,
+                mapAreaEl,
+                mapEl,
+                options.tooltipRef,
+                (name) => buildCarbonMapTooltipContent(name, 'city', options.metric.value, options.cityRows.value),
+                () => !!options.selectedProvince.value,
+              );
+            }
           }
           if (!cityBoundaryLayer) {
             cityBoundaryLayer = new LineLayer({ zIndex: 16 })
@@ -1074,6 +1466,7 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
         watch(
           [realProvinceData, options.metric],
           () => {
+            options.tooltipRef.value = createHiddenCarbonTooltip();
             const nextGeo = options.selectedProvince.value
               ? buildProvinceBackdropGeo(options.selectedProvince.value)
               : restoreProvinceForegroundGeo();
@@ -1087,6 +1480,7 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
           [options.cityRows, options.metric],
           () => {
             if (!options.selectedProvince.value || !cityBaseSnapshot || citySnapshotProvince !== options.selectedProvince.value) return;
+            options.tooltipRef.value = createHiddenCarbonTooltip();
             const nextGeo = restoreCityForegroundGeo();
             if (!nextGeo) return;
             setCityLayerData(nextGeo, false);
@@ -1095,11 +1489,20 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
           { deep: true },
         );
 
+        watch(
+          [options.metric, options.selectedProvince],
+          () => {
+            options.tooltipRef.value = createHiddenCarbonTooltip();
+          },
+          { immediate: true },
+        );
+
 
         watch(
           options.selectedProvince,
           async (prov) => {
             const gen = ++drillGen;
+            options.tooltipRef.value = createHiddenCarbonTooltip();
 
             if (!prov) {
               cityFillLayer?.hide();
