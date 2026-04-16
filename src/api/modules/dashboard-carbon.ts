@@ -8,6 +8,9 @@ export interface CityCarbonRow {
   carbonEmission: number;
   carbonEmissionWanTon: number;
   gdp: number;
+  energyConsumption?: number | null;
+  energyPerCapita?: number | null;
+  energyIntensity?: number | null;
   primaryIndustry?: number | null;
   secondaryIndustry?: number | null;
   tertiaryIndustry?: number | null;

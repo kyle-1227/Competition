@@ -16,6 +16,19 @@ export interface ProvinceGreenFinance {
   greenEquity: number;
   carbonEmission?: number | null;
   gdp?: number | null;
+  energyConsumption?: number | null;
+  energyPerCapita?: number | null;
+  energyIntensity?: number | null;
+  energyDataYear?: number | null;
+  coalConsumption?: number | null;
+  cokeConsumption?: number | null;
+  crudeOilConsumption?: number | null;
+  gasolineConsumption?: number | null;
+  keroseneConsumption?: number | null;
+  dieselConsumption?: number | null;
+  fuelOilConsumption?: number | null;
+  naturalGasConsumption?: number | null;
+  powerConsumption?: number | null;
   primaryIndustry?: number | null;
   secondaryIndustry?: number | null;
   tertiaryIndustry?: number | null;
@@ -286,6 +299,21 @@ export function normalizeProvinceRecord(row: Record<string, unknown>): ProvinceG
     greenEquity: toNum(row.greenEquity ?? row.green_equity),
     carbonEmission: toNullableNum(row.carbonEmission ?? row.carbon_emission),
     gdp: toNullableNum(row.gdp ?? row.GDP),
+    energyConsumption: toNullableNum(
+      row.energyConsumption ?? row.energy_consumption ?? row.energyConsume ?? row.energy_consume,
+    ),
+    energyPerCapita: toNullableNum(row.energyPerCapita ?? row.energy_per_capita),
+    energyIntensity: toNullableNum(row.energyIntensity ?? row.energy_intensity),
+    energyDataYear: toNullableNum(row.energyDataYear ?? row.energy_data_year),
+    coalConsumption: toNullableNum(row.coalConsumption ?? row.coal_consumption),
+    cokeConsumption: toNullableNum(row.cokeConsumption ?? row.coke_consumption),
+    crudeOilConsumption: toNullableNum(row.crudeOilConsumption ?? row.crude_oil_consumption),
+    gasolineConsumption: toNullableNum(row.gasolineConsumption ?? row.gasoline_consumption),
+    keroseneConsumption: toNullableNum(row.keroseneConsumption ?? row.kerosene_consumption),
+    dieselConsumption: toNullableNum(row.dieselConsumption ?? row.diesel_consumption),
+    fuelOilConsumption: toNullableNum(row.fuelOilConsumption ?? row.fuel_oil_consumption),
+    naturalGasConsumption: toNullableNum(row.naturalGasConsumption ?? row.natural_gas_consumption),
+    powerConsumption: toNullableNum(row.powerConsumption ?? row.power_consumption),
     primaryIndustry: toNullableNum(row.primaryIndustry ?? row.primary_industry),
     secondaryIndustry: toNullableNum(row.secondaryIndustry ?? row.secondary_industry),
     tertiaryIndustry: toNullableNum(row.tertiaryIndustry ?? row.tertiary_industry),

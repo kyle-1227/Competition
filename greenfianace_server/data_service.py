@@ -78,6 +78,22 @@ def get_province_rows(year: int = 2024) -> list[dict[str, Any]] | None:
                    p.greenEquity,
                    p.carbonEmission,
                    p.energyConsume,
+                   COALESCE(NULLIF(pe.total_energy_consumption_1, 0), pe_latest.total_energy_consumption_1, p.energyConsume) AS energyConsumption,
+                   pp.energy_intensity AS energyIntensity,
+                   pp.energy_per_capita AS energyPerCapita,
+                   CASE
+                       WHEN pe.total_energy_consumption_1 IS NOT NULL AND pe.total_energy_consumption_1 <> 0 THEN pe.year
+                       ELSE pe_latest.year
+                   END AS energyDataYear,
+                   COALESCE(NULLIF(pe.coal_consumption, 0), pe_latest.coal_consumption) AS coalConsumption,
+                   COALESCE(NULLIF(pe.coke_consumption, 0), pe_latest.coke_consumption) AS cokeConsumption,
+                   COALESCE(NULLIF(pe.crude_oil_consumption, 0), pe_latest.crude_oil_consumption) AS crudeOilConsumption,
+                   COALESCE(NULLIF(pe.gasoline_consumption, 0), pe_latest.gasoline_consumption) AS gasolineConsumption,
+                   COALESCE(NULLIF(pe.kerosene_consumption, 0), pe_latest.kerosene_consumption) AS keroseneConsumption,
+                   COALESCE(NULLIF(pe.diesel_consumption, 0), pe_latest.diesel_consumption) AS dieselConsumption,
+                   COALESCE(NULLIF(pe.fuel_oil_consumption, 0), pe_latest.fuel_oil_consumption) AS fuelOilConsumption,
+                   COALESCE(NULLIF(pe.natural_gas_consumption, 0), pe_latest.natural_gas_consumption) AS naturalGasConsumption,
+                   COALESCE(NULLIF(pe.power_consumption, 0), pe_latest.power_consumption) AS powerConsumption,
                    p.gdp,
                    p.did,
                    agg.primaryIndustry,
@@ -110,12 +126,47 @@ def get_province_rows(year: int = 2024) -> list[dict[str, Any]] | None:
             ) AS agg
               ON agg.province = p.province
              AND agg.year = p.year
+            LEFT JOIN province_energy_consumption AS pe
+              ON pe.province = p.province
+             AND pe.year = p.year
+            LEFT JOIN (
+                SELECT source.*
+                FROM province_energy_consumption AS source
+                INNER JOIN (
+                    SELECT province, MAX(year) AS year
+                    FROM province_energy_consumption
+                    WHERE year <= %s
+                      AND total_energy_consumption_1 IS NOT NULL
+                      AND total_energy_consumption_1 <> 0
+                    GROUP BY province
+                ) AS latest
+                  ON latest.province = source.province
+                 AND latest.year = source.year
+            ) AS pe_latest
+              ON pe_latest.province = p.province
+            LEFT JOIN province_panel_data AS pp
+              ON pp.province = p.province
+             AND pp.year = p.year
             WHERE p.year = %s AND p.province != '西藏自治区'
             """,
-            (year,),
+            (year, year),
         )
         rows = cursor.fetchall()
         for row in rows:
+            row["energyConsume"] = optional_rounded(row.get("energyConsume"))
+            row["energyConsumption"] = optional_rounded(row.get("energyConsumption"))
+            row["energyIntensity"] = optional_rounded(row.get("energyIntensity"), 4)
+            row["energyPerCapita"] = optional_rounded(row.get("energyPerCapita"), 4)
+            row["energyDataYear"] = int(row["energyDataYear"]) if row.get("energyDataYear") is not None else None
+            row["coalConsumption"] = optional_rounded(row.get("coalConsumption"))
+            row["cokeConsumption"] = optional_rounded(row.get("cokeConsumption"))
+            row["crudeOilConsumption"] = optional_rounded(row.get("crudeOilConsumption"))
+            row["gasolineConsumption"] = optional_rounded(row.get("gasolineConsumption"))
+            row["keroseneConsumption"] = optional_rounded(row.get("keroseneConsumption"))
+            row["dieselConsumption"] = optional_rounded(row.get("dieselConsumption"))
+            row["fuelOilConsumption"] = optional_rounded(row.get("fuelOilConsumption"))
+            row["naturalGasConsumption"] = optional_rounded(row.get("naturalGasConsumption"))
+            row["powerConsumption"] = optional_rounded(row.get("powerConsumption"))
             row["primaryIndustry"] = optional_rounded(row.get("primaryIndustry"))
             row["secondaryIndustry"] = optional_rounded(row.get("secondaryIndustry"))
             row["tertiaryIndustry"] = optional_rounded(row.get("tertiaryIndustry"))
@@ -147,6 +198,18 @@ def get_province_history_rows(province: str) -> list[dict[str, Any]] | None:
                    p.greenEquity,
                    p.carbonEmission,
                    p.energyConsume,
+                   COALESCE(NULLIF(pe.total_energy_consumption_1, 0), p.energyConsume) AS energyConsumption,
+                   pp.energy_intensity AS energyIntensity,
+                   pp.energy_per_capita AS energyPerCapita,
+                   pe.coal_consumption AS coalConsumption,
+                   pe.coke_consumption AS cokeConsumption,
+                   pe.crude_oil_consumption AS crudeOilConsumption,
+                   pe.gasoline_consumption AS gasolineConsumption,
+                   pe.kerosene_consumption AS keroseneConsumption,
+                   pe.diesel_consumption AS dieselConsumption,
+                   pe.fuel_oil_consumption AS fuelOilConsumption,
+                   pe.natural_gas_consumption AS naturalGasConsumption,
+                   pe.power_consumption AS powerConsumption,
                    p.gdp,
                    p.did,
                    agg.primaryIndustry,
@@ -179,6 +242,12 @@ def get_province_history_rows(province: str) -> list[dict[str, Any]] | None:
             ) AS agg
               ON agg.province = p.province
              AND agg.year = p.year
+            LEFT JOIN province_energy_consumption AS pe
+              ON pe.province = p.province
+             AND pe.year = p.year
+            LEFT JOIN province_panel_data AS pp
+              ON pp.province = p.province
+             AND pp.year = p.year
             WHERE p.province = %s
             ORDER BY p.year ASC
             """,
@@ -186,6 +255,19 @@ def get_province_history_rows(province: str) -> list[dict[str, Any]] | None:
         )
         rows = cursor.fetchall()
         for row in rows:
+            row["energyConsume"] = optional_rounded(row.get("energyConsume"))
+            row["energyConsumption"] = optional_rounded(row.get("energyConsumption"))
+            row["energyIntensity"] = optional_rounded(row.get("energyIntensity"), 4)
+            row["energyPerCapita"] = optional_rounded(row.get("energyPerCapita"), 4)
+            row["coalConsumption"] = optional_rounded(row.get("coalConsumption"))
+            row["cokeConsumption"] = optional_rounded(row.get("cokeConsumption"))
+            row["crudeOilConsumption"] = optional_rounded(row.get("crudeOilConsumption"))
+            row["gasolineConsumption"] = optional_rounded(row.get("gasolineConsumption"))
+            row["keroseneConsumption"] = optional_rounded(row.get("keroseneConsumption"))
+            row["dieselConsumption"] = optional_rounded(row.get("dieselConsumption"))
+            row["fuelOilConsumption"] = optional_rounded(row.get("fuelOilConsumption"))
+            row["naturalGasConsumption"] = optional_rounded(row.get("naturalGasConsumption"))
+            row["powerConsumption"] = optional_rounded(row.get("powerConsumption"))
             row["primaryIndustry"] = optional_rounded(row.get("primaryIndustry"))
             row["secondaryIndustry"] = optional_rounded(row.get("secondaryIndustry"))
             row["tertiaryIndustry"] = optional_rounded(row.get("tertiaryIndustry"))
@@ -219,7 +301,10 @@ def get_city_rows(province: str, year: int = 2024) -> list[dict[str, Any]] | Non
                    cg.city_code AS cityCode,
                    ROUND(cg.gdp / 10000, 2) AS gdp,
                    cg.co2_emission AS carbonEmission,
-                   ROUND(cg.co2_emission / 10000, 2) AS carbonEmissionWanTon
+                   ROUND(cg.co2_emission / 10000, 2) AS carbonEmissionWanTon,
+                   cg.energy_consumption AS energyConsumption,
+                   cg.energy_per_capita AS energyPerCapita,
+                   cg.energy_intensity AS energyIntensity
             FROM city_green_finance AS gf
             LEFT JOIN city_carbon_gdp AS cg
               ON cg.province = gf.province
@@ -235,6 +320,9 @@ def get_city_rows(province: str, year: int = 2024) -> list[dict[str, Any]] | Non
             row["gdp"] = optional_rounded(row.get("gdp"))
             row["carbonEmission"] = optional_rounded(row.get("carbonEmission"))
             row["carbonEmissionWanTon"] = optional_rounded(row.get("carbonEmissionWanTon"))
+            row["energyConsumption"] = optional_rounded(row.get("energyConsumption"))
+            row["energyPerCapita"] = optional_rounded(row.get("energyPerCapita"), 4)
+            row["energyIntensity"] = optional_rounded(row.get("energyIntensity"), 4)
         return rows
     finally:
         conn.close()
@@ -262,7 +350,10 @@ def get_city_history_rows(province: str, city: str) -> list[dict[str, Any]] | No
                    cg.city_code AS cityCode,
                    ROUND(cg.gdp / 10000, 2) AS gdp,
                    cg.co2_emission AS carbonEmission,
-                   ROUND(cg.co2_emission / 10000, 2) AS carbonEmissionWanTon
+                   ROUND(cg.co2_emission / 10000, 2) AS carbonEmissionWanTon,
+                   cg.energy_consumption AS energyConsumption,
+                   cg.energy_per_capita AS energyPerCapita,
+                   cg.energy_intensity AS energyIntensity
             FROM city_green_finance AS gf
             LEFT JOIN city_carbon_gdp AS cg
               ON cg.province = gf.province
@@ -278,6 +369,9 @@ def get_city_history_rows(province: str, city: str) -> list[dict[str, Any]] | No
             row["gdp"] = optional_rounded(row.get("gdp"))
             row["carbonEmission"] = optional_rounded(row.get("carbonEmission"))
             row["carbonEmissionWanTon"] = optional_rounded(row.get("carbonEmissionWanTon"))
+            row["energyConsumption"] = optional_rounded(row.get("energyConsumption"))
+            row["energyPerCapita"] = optional_rounded(row.get("energyPerCapita"), 4)
+            row["energyIntensity"] = optional_rounded(row.get("energyIntensity"), 4)
         return rows
     finally:
         conn.close()
@@ -303,7 +397,10 @@ def get_city_carbon_rows(province: str, year: int = 2024) -> list[dict[str, Any]
                    ROUND(tertiary_industry / 10000, 2) AS tertiaryIndustry,
                    ROUND(primary_industry_ratio, 2) AS primaryIndustryRatio,
                    ROUND(secondary_industry_ratio, 2) AS secondaryIndustryRatio,
-                   ROUND(tertiary_industry_ratio, 2) AS tertiaryIndustryRatio
+                   ROUND(tertiary_industry_ratio, 2) AS tertiaryIndustryRatio,
+                   energy_consumption AS energyConsumption,
+                   energy_per_capita AS energyPerCapita,
+                   energy_intensity AS energyIntensity
             FROM city_carbon_gdp
             WHERE province = %s AND year = %s
             ORDER BY co2_emission DESC, city ASC
@@ -321,6 +418,9 @@ def get_city_carbon_rows(province: str, year: int = 2024) -> list[dict[str, Any]
             row["primaryIndustryRatio"] = optional_rounded(row.get("primaryIndustryRatio"))
             row["secondaryIndustryRatio"] = optional_rounded(row.get("secondaryIndustryRatio"))
             row["tertiaryIndustryRatio"] = optional_rounded(row.get("tertiaryIndustryRatio"))
+            row["energyConsumption"] = optional_rounded(row.get("energyConsumption"))
+            row["energyPerCapita"] = optional_rounded(row.get("energyPerCapita"), 4)
+            row["energyIntensity"] = optional_rounded(row.get("energyIntensity"), 4)
         return rows
     finally:
         conn.close()
@@ -346,7 +446,10 @@ def get_city_carbon_history_rows(province: str, city: str) -> list[dict[str, Any
                    ROUND(tertiary_industry / 10000, 2) AS tertiaryIndustry,
                    ROUND(primary_industry_ratio, 2) AS primaryIndustryRatio,
                    ROUND(secondary_industry_ratio, 2) AS secondaryIndustryRatio,
-                   ROUND(tertiary_industry_ratio, 2) AS tertiaryIndustryRatio
+                   ROUND(tertiary_industry_ratio, 2) AS tertiaryIndustryRatio,
+                   energy_consumption AS energyConsumption,
+                   energy_per_capita AS energyPerCapita,
+                   energy_intensity AS energyIntensity
             FROM city_carbon_gdp
             WHERE province = %s AND city = %s
             ORDER BY year ASC
@@ -364,6 +467,9 @@ def get_city_carbon_history_rows(province: str, city: str) -> list[dict[str, Any
             row["primaryIndustryRatio"] = optional_rounded(row.get("primaryIndustryRatio"))
             row["secondaryIndustryRatio"] = optional_rounded(row.get("secondaryIndustryRatio"))
             row["tertiaryIndustryRatio"] = optional_rounded(row.get("tertiaryIndustryRatio"))
+            row["energyConsumption"] = optional_rounded(row.get("energyConsumption"))
+            row["energyPerCapita"] = optional_rounded(row.get("energyPerCapita"), 4)
+            row["energyIntensity"] = optional_rounded(row.get("energyIntensity"), 4)
         return rows
     finally:
         conn.close()

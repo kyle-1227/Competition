@@ -212,9 +212,10 @@ const carbonTooltipStyle = computed(() => {
 
   const padding = 10;
   const estimatedWidth = 360;
-  const estimatedHeight = 170 + Math.max(1, Math.ceil(tooltip.rows.length / 2)) * 56 + 108;
+  const estimatedContentHeight = 170 + Math.max(1, Math.ceil(tooltip.rows.length / 2)) * 56 + 108;
   const areaWidth = area.clientWidth;
   const areaHeight = area.clientHeight;
+  const estimatedHeight = Math.min(estimatedContentHeight, 420, Math.max(180, areaHeight - padding * 2));
 
   let left = tooltip.left;
   let top = tooltip.top;
@@ -231,6 +232,15 @@ const carbonTooltipStyle = computed(() => {
     top: `${Math.max(padding, top)}px`,
   };
 });
+
+function keepCarbonTooltipOpen(event: Event) {
+  event.stopPropagation();
+}
+
+function hideCarbonTooltipFromPanel(event: Event) {
+  event.stopPropagation();
+  carbonMapTooltip.value = createHiddenCarbonTooltip();
+}
 
 function handleSidebarRowClick(row: CarbonSidebarRow) {
   if (!row.clickable) return;
@@ -468,6 +478,10 @@ onUnmounted(() => {
           v-show="carbonMapTooltip.visible"
           class="carbon-map-tooltip"
           :style="carbonTooltipStyle"
+          @mouseenter="keepCarbonTooltipOpen"
+          @mousemove="keepCarbonTooltipOpen"
+          @mouseleave="hideCarbonTooltipFromPanel"
+          @wheel.stop
         >
           <div class="carbon-map-tooltip__head">
             <span class="carbon-map-tooltip__name">{{ carbonMapTooltip.regionName }}</span>
@@ -734,7 +748,9 @@ onUnmounted(() => {
       width: min(360px, calc(100% - 20px));
       max-height: min(420px, calc(100% - 24px));
       overflow: auto;
-      pointer-events: none;
+      overscroll-behavior: contain;
+      pointer-events: auto;
+      cursor: default;
       padding: 14px 16px 16px;
       border-radius: 10px;
       background: rgba(9, 16, 34, 0.82);

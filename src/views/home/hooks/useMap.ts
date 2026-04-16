@@ -898,6 +898,19 @@ interface CarbonTooltipMetricsRow {
   carbonEmissionWanTon?: number;
   carbonEmission?: number;
   gdp?: number;
+  energyConsumption?: number | null;
+  energyPerCapita?: number | null;
+  energyIntensity?: number | null;
+  energyDataYear?: number | null;
+  coalConsumption?: number | null;
+  cokeConsumption?: number | null;
+  crudeOilConsumption?: number | null;
+  gasolineConsumption?: number | null;
+  keroseneConsumption?: number | null;
+  dieselConsumption?: number | null;
+  fuelOilConsumption?: number | null;
+  naturalGasConsumption?: number | null;
+  powerConsumption?: number | null;
   primaryIndustry?: number | null;
   secondaryIndustry?: number | null;
   tertiaryIndustry?: number | null;
@@ -935,6 +948,56 @@ function findCarbonCityRow(
   });
 }
 
+const energyBreakdownItems = [
+  { key: 'coalConsumption', label: '煤炭消费量' },
+  { key: 'cokeConsumption', label: '焦炭消费量' },
+  { key: 'crudeOilConsumption', label: '原油消费量' },
+  { key: 'gasolineConsumption', label: '汽油消费量' },
+  { key: 'keroseneConsumption', label: '煤油消费量' },
+  { key: 'dieselConsumption', label: '柴油消费量' },
+  { key: 'fuelOilConsumption', label: '燃料油消费量' },
+  { key: 'naturalGasConsumption', label: '天然气消费量' },
+  { key: 'powerConsumption', label: '电力消费量' },
+] as const;
+
+function buildEnergyTooltipRows(
+  row: CarbonTooltipMetricsRow | ProvinceGreenFinance | undefined,
+  includeBreakdown = false,
+) {
+  const rows = [
+    { label: '能源消费总量', value: formatTooltipMetricCell(row?.energyConsumption, '万吨标准煤') },
+    { label: '能源消费强度', value: formatTooltipMetricCell(row?.energyIntensity, '吨标准煤/万元', 4) },
+    { label: '人均能源消耗', value: formatTooltipMetricCell(row?.energyPerCapita, '吨标准煤/人', 4) },
+  ];
+
+  if (!includeBreakdown) return rows;
+  const sourceYear = Number(row?.energyDataYear);
+  const sourceYearRows = Number.isFinite(sourceYear) && sourceYear !== selectedYear.value
+    ? [{ label: '能源明细年份', value: `${sourceYear} 年` }]
+    : [];
+  return [
+    ...rows,
+    ...sourceYearRows,
+    ...energyBreakdownItems.map(({ key, label }) => ({
+      label,
+      value: formatTooltipMetricCell(row?.[key]),
+    })),
+  ];
+}
+
+function buildEnergyDataPayload(row: CarbonTooltipMetricsRow | ProvinceGreenFinance | undefined) {
+  return {
+    energyConsumption: row?.energyConsumption ?? null,
+    energyIntensity: row?.energyIntensity ?? null,
+    energyPerCapita: row?.energyPerCapita ?? null,
+    energyDataYear: row?.energyDataYear ?? null,
+    energyBreakdown: energyBreakdownItems.reduce((acc, { key }) => {
+      acc[key] = row?.[key] ?? null;
+      return acc;
+    }, {} as Record<string, number | null>),
+  };
+}
+
 function buildCarbonIndustryTooltipRows(row: CarbonTooltipMetricsRow | ProvinceGreenFinance | undefined) {
   return [
     { label: '第一产业增加值', value: formatTooltipMetricCell(row?.primaryIndustry, '亿元') },
@@ -944,6 +1007,27 @@ function buildCarbonIndustryTooltipRows(row: CarbonTooltipMetricsRow | ProvinceG
     { label: '第二产业占比', value: formatTooltipMetricCell(row?.secondaryIndustryRatio, '%') },
     { label: '第三产业占比', value: formatTooltipMetricCell(row?.tertiaryIndustryRatio, '%') },
   ];
+}
+
+function buildCarbonDetailTooltipRows(
+  row: CarbonTooltipMetricsRow | ProvinceGreenFinance | undefined,
+  mode: 'province' | 'city',
+) {
+  return [
+    ...buildEnergyTooltipRows(row, mode === 'province'),
+    ...buildCarbonIndustryTooltipRows(row),
+  ];
+}
+
+function buildCarbonIndustryDataPayload(row: CarbonTooltipMetricsRow | ProvinceGreenFinance | undefined) {
+  return {
+    primaryIndustry: row?.primaryIndustry ?? null,
+    secondaryIndustry: row?.secondaryIndustry ?? null,
+    tertiaryIndustry: row?.tertiaryIndustry ?? null,
+    primaryIndustryRatio: row?.primaryIndustryRatio ?? null,
+    secondaryIndustryRatio: row?.secondaryIndustryRatio ?? null,
+    tertiaryIndustryRatio: row?.tertiaryIndustryRatio ?? null,
+  };
 }
 
 function buildCarbonMapTooltipAiPayload(
@@ -1016,12 +1100,26 @@ function attachCarbonMapTooltip(
 ) {
   const OFFSET_X = 14;
   const OFFSET_Y = 14;
+  const HIDE_DELAY = 260;
+  let hideTimer: number | undefined;
+
+  const cancelHide = () => {
+    if (hideTimer === undefined) return;
+    window.clearTimeout(hideTimer);
+    hideTimer = undefined;
+  };
 
   const hide = () => {
-    tooltipRef.value = createHiddenCarbonTooltip();
+    cancelHide();
+    hideTimer = window.setTimeout(() => {
+      hideTimer = undefined;
+      if (typeof document !== 'undefined' && document.querySelector('.carbon-map-tooltip:hover')) return;
+      tooltipRef.value = createHiddenCarbonTooltip();
+    }, HIDE_DELAY);
   };
 
   const onPick = (e: any) => {
+    cancelHide();
     if (shouldHandle && !shouldHandle(e)) {
       hide();
       return;
@@ -1108,7 +1206,7 @@ function buildCarbonMapTooltipContent(
       ? findCarbonProvinceRow(regionName)
       : findCarbonCityRow(regionName, cityRows);
     const gdp = row ? Number(row.gdp ?? 0) : null;
-    const rows = buildCarbonIndustryTooltipRows(row);
+    const rows = buildCarbonDetailTooltipRows(row, mode);
     return {
       baseState: {
         regionName,
@@ -1125,12 +1223,8 @@ function buildCarbonMapTooltipContent(
         level: mode,
         regionName,
         gdp,
-        primaryIndustry: row?.primaryIndustry ?? null,
-        secondaryIndustry: row?.secondaryIndustry ?? null,
-        tertiaryIndustry: row?.tertiaryIndustry ?? null,
-        primaryIndustryRatio: row?.primaryIndustryRatio ?? null,
-        secondaryIndustryRatio: row?.secondaryIndustryRatio ?? null,
-        tertiaryIndustryRatio: row?.tertiaryIndustryRatio ?? null,
+        ...buildCarbonIndustryDataPayload(row),
+        ...buildEnergyDataPayload(row),
       }),
     };
   }
@@ -1138,6 +1232,7 @@ function buildCarbonMapTooltipContent(
   if (mode === 'province') {
     const row = findCarbonProvinceRow(regionName);
     const carbonEmissionWanTon = row ? metricValueFromProvinceRow(row, 'carbon') : null;
+    const rows = buildCarbonDetailTooltipRows(row, mode);
     return {
       baseState: {
         regionName,
@@ -1145,7 +1240,7 @@ function buildCarbonMapTooltipContent(
         headlineLabel: '碳排放总量',
         headlineValue: formatTooltipMetricNumber(carbonEmissionWanTon),
         headlineUnit: '万吨',
-        rows: [],
+        rows,
         mode,
         metric,
       },
@@ -1154,12 +1249,15 @@ function buildCarbonMapTooltipContent(
         level: mode,
         regionName,
         carbonEmissionWanTon,
+        ...buildCarbonIndustryDataPayload(row),
+        ...buildEnergyDataPayload(row),
       }),
     };
   }
 
   const row = findCarbonCityRow(regionName, cityRows);
   const carbonEmissionWanTon = row ? metricValueFromCityRow(row, 'carbon') : null;
+  const rows = buildCarbonDetailTooltipRows(row, mode);
   return {
     baseState: {
       regionName,
@@ -1167,7 +1265,7 @@ function buildCarbonMapTooltipContent(
       headlineLabel: '碳排放总量',
       headlineValue: formatTooltipMetricNumber(carbonEmissionWanTon),
       headlineUnit: '万吨',
-      rows: [],
+      rows,
       mode,
       metric,
     },
@@ -1176,6 +1274,8 @@ function buildCarbonMapTooltipContent(
       level: mode,
       regionName,
       carbonEmissionWanTon,
+      ...buildCarbonIndustryDataPayload(row),
+      ...buildEnergyDataPayload(row),
     }),
   };
 }
@@ -1366,7 +1466,7 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
           }
         });
         if (mapAreaEl && mapEl) {
-          attachCarbonMapTooltip(
+          const provinceTooltip = attachCarbonMapTooltip(
             provinceFillLayer,
             scene,
             mapAreaEl,
@@ -1376,7 +1476,7 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
             () => !options.selectedProvince.value,
           );
           mapEl.addEventListener('mouseleave', () => {
-            options.tooltipRef.value = createHiddenCarbonTooltip();
+            provinceTooltip.hide();
           });
         }
 
