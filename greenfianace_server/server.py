@@ -15,12 +15,12 @@ from data_service import (
     get_city_rows,
     get_db_connection,
     get_macro_stats_records,
-    get_predict_payload,
     get_province_rows,
     safe_float,
 )
+from predict_results_service import get_predict_data_payload, get_predict_meta_payload
 
-app = FastAPI(title="缁胯壊閲戣瀺纰冲噺鎺掑彲瑙嗗寲澶у睆 API")
+app = FastAPI(title="绿色金融碳减排可视化大屏 API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -67,7 +67,7 @@ def get_city_data(province: str, year: int = 2024):
     if rows is None:
         return {"code": 500, "msg": "数据库连接失败", "data": []}
     if not rows:
-        return {"code": 200, "msg": f"鏆傛湭鑾峰彇鍒?{province} 鐨勫湴绾у競鏁版嵁", "data": []}
+        return {"code": 200, "msg": f"暂未获取到 {province} 的地级市数据", "data": []}
     return {"code": 200, "msg": "success", "data": rows}
 
 
@@ -79,7 +79,7 @@ def get_macro_cities(province: Optional[str] = None):
 
     try:
         cursor = conn.cursor()
-        if province and province != "鍏ㄥ浗":
+        if province and province != "全国":
             cursor.execute(
                 """
                 SELECT DISTINCT province, city
@@ -100,7 +100,7 @@ def get_macro_cities(province: Optional[str] = None):
         data = cursor.fetchall()
         return {"code": 200, "msg": "success", "data": data}
     except Exception as exc:
-        return {"code": 500, "msg": f"瀹忚鍩庡競鍒楄〃鏌ヨ澶辫触: {exc}", "data": []}
+        return {"code": 500, "msg": f"宏观城市列表查询失败: {exc}", "data": []}
     finally:
         conn.close()
 
@@ -116,7 +116,7 @@ def get_macro_data(province: Optional[str] = None, city: Optional[str] = None):
         carbon_needs_wanton = True
         if city:
             carbon_needs_wanton = False
-            if province and province != "鍏ㄥ浗":
+            if province and province != "全国":
                 cursor.execute(
                     """
                     SELECT year, gdp / 10000 AS gdp, co2_emission / 10000 AS carbonEmission
@@ -136,7 +136,7 @@ def get_macro_data(province: Optional[str] = None, city: Optional[str] = None):
                     """,
                     (city,),
                 )
-        elif province and province != "鍏ㄥ浗":
+        elif province and province != "全国":
             cursor.execute(
                 """
                 SELECT year, gdp, carbonEmission
@@ -168,17 +168,34 @@ def get_macro_data(province: Optional[str] = None, city: Optional[str] = None):
 
         return {"code": 200, "msg": "success", "data": data}
     except Exception as exc:
-        return {"code": 500, "msg": f"瀹忚鏃堕棿搴忓垪鏌ヨ澶辫触: {exc}", "data": []}
+        return {"code": 500, "msg": f"宏观时间序列查询失败: {exc}", "data": []}
     finally:
         conn.close()
 
 
+@app.get("/api/dashboard/predict-meta")
+def get_predict_meta():
+    try:
+        payload = get_predict_meta_payload()
+        return {"code": 200, "msg": "success", "data": payload}
+    except Exception as exc:
+        return {"code": 500, "msg": f"预测元数据读取失败: {exc}", "data": None}
+
+
 @app.get("/api/dashboard/predict-data")
-def get_predict_data():
-    payload = get_predict_payload()
-    if payload is None:
-        return {"code": 500, "msg": "数据库连接失败", "data": None}
-    return {"code": 200, "msg": "success", "data": payload}
+def get_predict_data(
+    level: str = "province",
+    target: str = "carbonIntensity",
+    province: Optional[str] = None,
+    city: Optional[str] = None,
+):
+    try:
+        payload = get_predict_data_payload(level=level, target=target, province=province, city=city)
+        return {"code": 200, "msg": "success", "data": payload}
+    except ValueError as exc:
+        return {"code": 400, "msg": str(exc), "data": None}
+    except Exception as exc:
+        return {"code": 500, "msg": f"预测结果读取失败: {exc}", "data": None}
 
 
 @app.get("/api/dashboard/macro-stats")
@@ -208,7 +225,7 @@ def ai_chat(payload: AiChatRequest):
     except AiServiceError as exc:
         return {"code": 500, "msg": str(exc), "data": None}
     except Exception as exc:  # pragma: no cover
-        return {"code": 500, "msg": f"AI 鑱婂ぉ璋冪敤澶辫触: {exc}", "data": None}
+        return {"code": 500, "msg": f"AI 聊天调用失败: {exc}", "data": None}
 
 
 @app.post("/api/ai/summary")
@@ -230,7 +247,7 @@ def ai_summary(payload: AiSummaryRequest):
     except AiServiceError as exc:
         return {"code": 500, "msg": str(exc), "data": None}
     except Exception as exc:  # pragma: no cover
-        return {"code": 500, "msg": f"AI 鎬荤粨璋冪敤澶辫触: {exc}", "data": None}
+        return {"code": 500, "msg": f"AI 总结调用失败: {exc}", "data": None}
 
 
 @app.post("/api/ai/tooltip")

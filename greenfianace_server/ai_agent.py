@@ -19,7 +19,7 @@ TOOL_STATUS_LABELS: dict[str, str] = {
     "get_carbon_city_data": "正在查询当前省份的城市碳排放与 GDP 对比数据…",
     "get_carbon_province_history": "正在查询当前省份的碳排放历史趋势…",
     "get_carbon_city_history": "正在查询当前城市的碳排放历史趋势…",
-    "get_energy_prediction_data": "正在查询预测历史序列与模型系数…",
+    "get_energy_prediction_data": "正在查询预测历史、三情景结果、对比线与模型系数…",
     "get_macro_series_data": "正在查询宏观时间序列…",
     "get_macro_stats_data": "正在查询宏观描述性统计…",
 }

@@ -137,7 +137,7 @@ const toolNameMap: Record<string, string> = {
   get_carbon_city_data: '城市碳排放对比数据',
   get_carbon_province_history: '省级碳排放历史',
   get_carbon_city_history: '城市碳排放历史',
-  get_energy_prediction_data: '预测历史与模型系数',
+  get_energy_prediction_data: '预测情景与对比数据',
   get_macro_series_data: '宏观时间序列',
   get_macro_stats_data: '宏观描述性统计',
 };

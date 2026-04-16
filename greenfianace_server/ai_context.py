@@ -42,7 +42,7 @@ TOOLTIP_SYSTEM_PROMPT_PLACEHOLDER = load_tooltip_prompt_template(DEFAULT_TOOLTIP
 PAGE_FOCUS: dict[str, str] = {
     "greenFinance": "绿色金融综合指数页面，重点关注综合分、Top10、七维指标、下钻视角和县级 mock 数据。",
     "carbon": "碳排放底色页面，重点关注当前年份、Top10 省份、总量、均值和空间分布。",
-    "energy": "碳排放强度预测页面，重点关注当前区域、滑块参数、历史序列、预测序列和最终预测结果。",
+    "energy": "碳排放强度预测页面，重点关注当前层级、省市选择、三情景结果、自定义参数推演、对比线和最终预测结果。",
     "macro": "宏观经济页面，重点关注区域 GDP、碳排放序列、最新年份表现和变化趋势。",
 }
 
@@ -62,6 +62,15 @@ CARBON_ANALYSIS_GUIDE = (
     "2. 如果用户询问历史趋势、变化轨迹、近年变化或长期关系，优先调用碳排放页的省级/城市历史工具。\n"
     "3. 如果用户询问省际对比，优先调用指定年份的省级工具；如果用户询问城市对比，优先调用当前下钻省份的城市工具。\n"
     "4. 如果当前页面快照不足以支撑趋势或对比分析，必须先使用当前页工具补查，再判断是否数据不足。"
+)
+
+ENERGY_PREDICTION_GUIDE = (
+    "预测页补充规则：\n"
+    "1. 必须严格区分历史观测与模型推演：2000-2024 是历史观测，2025-2027 是模型推演，不得写成未来真实已发生结果。\n"
+    "2. 如果当前页面处于保守/基准/乐观三情景，回答时优先引用离线情景结果；如果当前页面处于自定义模式，回答时优先引用当前滑块参数、参数贡献估算和页面对比线。\n"
+    "3. 如果用户询问为什么预测上升或下降，优先引用 compareSummary、sourceMode 和 contributionBreakdown；如果上下文不足，必须先调用预测页工具补查。\n"
+    "4. 如果工具结果里没有 R²、MAE、RMSE，就不能编造模型评价指标；可以说明本页当前未展示正式精度指标。\n"
+    "5. 情景区间只能表述为情景区间，不得表述为统计置信区间。"
 )
 
 
@@ -104,6 +113,8 @@ def _build_page_specific_guide(page_context: AiPageContext) -> str:
         return GREEN_FINANCE_RELATION_GUIDE
     if page_context.page == "carbon":
         return CARBON_ANALYSIS_GUIDE
+    if page_context.page == "energy":
+        return ENERGY_PREDICTION_GUIDE
     return ""
 
 

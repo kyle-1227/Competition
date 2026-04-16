@@ -20,5 +20,11 @@
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],
   // 编译器默认排除的编译文件
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "src/views/home/BizCarbonPrediction.vue",
+    "src/views/home/BizCarbonPredictionV2.vue",
+    "src/views/home/hooks/carbonPredictTooltip.ts",
+    "src/views/home/hooks/carbonPredictTooltipV2.ts"
+  ]
 }

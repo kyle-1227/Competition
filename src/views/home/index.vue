@@ -73,7 +73,7 @@ type HomeTabKey = 'greenFinance' | 'carbon' | 'energy';
 const tabComponents: Record<HomeTabKey, ReturnType<typeof defineAsyncComponent>> = {
   greenFinance: defineAsyncComponent(() => import('./BizGreenFinance.vue')),
   carbon: defineAsyncComponent(() => import('./BizCarbon.vue')),
-  energy: defineAsyncComponent(() => import('./BizCarbonPrediction.vue')),
+  energy: defineAsyncComponent(() => import('./BizCarbonPredictionV3.vue')),
 };
 
 const visitedTabs = reactive<Record<HomeTabKey, boolean>>({

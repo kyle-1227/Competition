@@ -11,10 +11,10 @@ from data_service import (
     get_city_rows,
     get_macro_rows,
     get_macro_stats_records,
-    get_predict_payload,
     get_province_history_rows,
     get_province_rows,
 )
+from predict_results_service import get_predict_data_payload
 
 
 class AiToolError(RuntimeError):
@@ -44,6 +44,13 @@ def _coerce_city(value: Any, fallback: str | None = None) -> str:
     if not city:
         raise AiToolError("缺少城市参数")
     return city
+
+
+def _coerce_level(value: Any, fallback: str | None = None) -> str:
+    level = str(value or fallback or "province").strip().lower()
+    if level not in {"province", "city"}:
+        raise AiToolError(f"不支持的预测层级: {level}")
+    return level
 
 
 def _json_loads(arguments: str) -> dict[str, Any]:
@@ -294,16 +301,39 @@ def _carbon_city_history_result(province: str, city: str) -> dict[str, Any]:
     return {"province": province, "city": city, **_history_payload(normalized)}
 
 
-def _energy_result(province: str) -> dict[str, Any]:
-    payload = get_predict_payload()
-    if payload is None:
-        raise AiToolError("数据库连接失败")
-    history_data = payload["historyData"]
+def _energy_result(level: str, province: str, city: str | None = None) -> dict[str, Any]:
+    try:
+        payload = get_predict_data_payload(
+            level=level,
+            target="carbonIntensity",
+            province=province,
+            city=city,
+        )
+    except ValueError as exc:
+        raise AiToolError(str(exc)) from exc
+
+    compare_series = payload.get("compareSeries") or {}
+    compare_history = compare_series.get("historyPoints") or []
+    compare_future = compare_series.get("scenarioPoints") or {}
+
     return {
-        "province": province,
-        "coefficients": payload["coefficients"],
-        "historySeries": history_data.get(province) or history_data.get("全国") or [],
-        "nationalHistorySeries": history_data.get("全国") or [],
+        "level": payload.get("level"),
+        "province": payload.get("province"),
+        "city": payload.get("city"),
+        "entityLabel": payload.get("entityLabel"),
+        "historySeries": payload.get("historySeries") or [],
+        "compareSeries": {
+            "name": compare_series.get("name"),
+            "historyPoints": compare_history,
+            "scenarioPoints": compare_future,
+        },
+        "scenarios": payload.get("scenarios") or [],
+        "scenarioBand": payload.get("scenarioBand") or [],
+        "coefficients": payload.get("coefficients") or {},
+        "sampleMeta": payload.get("sampleMeta") or {},
+        "sourceNotice": payload.get("sourceNotice"),
+        "weightType": payload.get("weightType"),
+        "availableScenarios": payload.get("availableScenarios") or [],
     }
 
 
@@ -466,13 +496,15 @@ def build_page_tools(page_context: AiPageContext) -> list[dict[str, Any]]:
                 "type": "function",
                 "function": {
                     "name": "get_energy_prediction_data",
-                    "description": "查询指定区域的碳排放强度预测历史序列与模型系数。",
+                    "description": "查询预测页当前层级的历史观测、离线三情景结果、对比线和模型系数，可用于解释历史趋势、情景差异和为什么预测上升或下降。",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "province": {"type": "string", "description": "区域名称，例如 全国、广东省"},
+                            "level": {"type": "string", "description": "预测层级，province 或 city；不传时默认根据当前页面快照推断"},
+                            "province": {"type": "string", "description": "省份名称，例如 全国、广东省；市级模式下必须是具体省份"},
+                            "city": {"type": "string", "description": "市级模式下的地级市名称，例如 深圳市"},
                         },
-                        "required": ["province"],
+                        "required": [],
                         "additionalProperties": False,
                     },
                 },
@@ -549,8 +581,16 @@ def execute_page_tool(page_context: AiPageContext, tool_name: str, arguments_jso
         return _carbon_city_history_result(province, city)
 
     if tool_name == "get_energy_prediction_data" and page_context.page == "energy":
-        province = _coerce_province(args.get("province"), page_context.selectedProvince or "全国")
-        return _energy_result(province)
+        snapshot = page_context.snapshot or {}
+        fallback_level = str(snapshot.get("level") or "province")
+        level = _coerce_level(args.get("level"), fallback_level)
+        fallback_province = page_context.drillProvince or page_context.selectedProvince or "全国"
+        province = _coerce_province(args.get("province"), fallback_province)
+        city = None
+        if level == "city":
+            fallback_city = page_context.drillCity or str(snapshot.get("city") or "").strip() or None
+            city = _coerce_city(args.get("city"), fallback_city)
+        return _energy_result(level, province, city)
 
     if tool_name == "get_macro_series_data" and page_context.page == "macro":
         province = _coerce_province(args.get("province"), page_context.selectedProvince or "全国")
@@ -580,7 +620,12 @@ def summarize_tool_result(tool_name: str, result: dict[str, Any]) -> str:
     if tool_name == "get_carbon_city_history":
         return f"已获取 {result.get('province')}{result.get('city')} {result.get('startYear')} 至 {result.get('endYear')} 年的城市碳排放历史序列。"
     if tool_name == "get_energy_prediction_data":
-        return f"已获取 {result.get('province')} 的预测历史序列和模型系数。"
+        level = "市级" if result.get("level") == "city" else "省级"
+        entity = result.get("city") or result.get("province") or result.get("entityLabel") or "当前区域"
+        return (
+            f"已获取 {level}预测对象 {entity} 的历史观测、离线情景结果、对比线和模型系数，"
+            f"可用于解释趋势、情景差异和预测变化原因。"
+        )
     if tool_name == "get_macro_series_data":
         return f"已获取 {result.get('province')} 的宏观时间序列，共 {result.get('count', 0)} 条记录。"
     if tool_name == "get_macro_stats_data":
