@@ -235,7 +235,7 @@ provide('activeTab', activeTab);
   display: flex;
   justify-content: center;
   gap: 14px;
-  padding: 4px 320px 14px 40px;
+  padding: 4px 40px 14px;
   flex-wrap: wrap;
   position: relative;
   z-index: 50;
