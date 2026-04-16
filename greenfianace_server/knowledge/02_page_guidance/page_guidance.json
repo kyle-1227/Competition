@@ -54,7 +54,7 @@
     "title": "碳排放页主口径",
     "tags": ["carbonEmission", "co2_emission", "gdp", "总量", "强度"],
     "trigger_tokens": ["碳排放", "碳排放量", "碳排放总量", "GDP", "地图", "底色"],
-    "content": "碳排放底色页主要解释碳排放总量或 GDP 的空间分布，不是碳排放强度页。地图可能在碳排放模式、GDP 模式和宏观联动视图之间切换，回答时应先确认当前 mapMetric 或用户指定指标。",
+    "content": "碳排放+GDP底色页主要解释碳排放总量或 GDP 的空间分布，不是碳排放强度页。地图可能在碳排放模式、GDP 模式和宏观联动视图之间切换，回答时应先确认当前 mapMetric 或用户指定指标。",
     "source": "绿色金融项目知识库 Markdown 实施稿.docx",
     "stability": "high",
     "sort_order": 10

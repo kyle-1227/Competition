@@ -1,62 +1,56 @@
 <template>
   <div class="predict-page">
-    <div class="predict-top">
-      <div class="predict-copy">
-        <div class="predict-copy__eyebrow">碳排放强度预测</div>
-        <div class="predict-copy__title">历史观测 + 三情景推演 + 自定义沙盘</div>
-        <div class="predict-copy__desc">{{ boundaryNotice }}</div>
-      </div>
+    <div class="predict-bar">
+      <div class="predict-controls-row">
+        <div class="predict-actions">
+          <div class="chip-group">
+            <button
+              v-for="item in levelOptions"
+              :key="item.key"
+              type="button"
+              class="chip"
+              :class="{ active: selectedLevel === item.key }"
+              @click="selectedLevel = item.key"
+            >
+              {{ item.label }}
+            </button>
+          </div>
 
-      <div class="predict-actions">
+          <div class="selector-grid">
+            <label class="field">
+              <span class="field__label">{{ selectedLevel === 'province' ? '分析区域' : '所属省份' }}</span>
+              <el-select v-model="selectedProvince" popper-class="dark-popper">
+                <el-option
+                  v-for="item in provinceOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </label>
+
+            <label v-if="selectedLevel === 'city'" class="field">
+              <span class="field__label">地级市</span>
+              <el-select v-model="selectedCity" popper-class="dark-popper" :disabled="!cityOptions.length">
+                <el-option v-for="city in cityOptions" :key="city" :label="city" :value="city" />
+              </el-select>
+            </label>
+          </div>
+        </div>
+
         <div class="chip-group">
           <button
-            v-for="item in levelOptions"
+            v-for="item in scenarioOptions"
             :key="item.key"
             type="button"
             class="chip"
-            :class="{ active: selectedLevel === item.key }"
-            @click="selectedLevel = item.key"
+            :class="{ active: selectedMode === item.key, disabled: item.disabled }"
+            :disabled="item.disabled"
+            @click="selectedMode = item.key"
           >
             {{ item.label }}
           </button>
         </div>
-
-        <div class="selector-grid">
-          <label class="field">
-            <span class="field__label">{{ selectedLevel === 'province' ? '分析区域' : '所属省份' }}</span>
-            <el-select v-model="selectedProvince" popper-class="dark-popper">
-              <el-option
-                v-for="item in provinceOptions"
-                :key="item.value"
-                :label="item.label"
-                :value="item.value"
-              />
-            </el-select>
-          </label>
-
-          <label v-if="selectedLevel === 'city'" class="field">
-            <span class="field__label">地级市</span>
-            <el-select v-model="selectedCity" popper-class="dark-popper" :disabled="!cityOptions.length">
-              <el-option v-for="city in cityOptions" :key="city" :label="city" :value="city" />
-            </el-select>
-          </label>
-        </div>
-      </div>
-    </div>
-
-    <div class="predict-bar">
-      <div class="chip-group">
-        <button
-          v-for="item in scenarioOptions"
-          :key="item.key"
-          type="button"
-          class="chip"
-          :class="{ active: selectedMode === item.key, disabled: item.disabled }"
-          :disabled="item.disabled"
-          @click="selectedMode = item.key"
-        >
-          {{ item.label }}
-        </button>
       </div>
       <div class="predict-bar__text">{{ sourceNotice }}</div>
     </div>
@@ -761,11 +755,13 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 .predict-page { height: 100%; display: flex; flex-direction: column; gap: 14px; color: #f8fafc; }
-.predict-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; }
 .predict-copy__eyebrow { color: rgba($tech-cyan, 0.84); font-size: 14px; letter-spacing: 0.16em; }
 .predict-copy__title { margin-top: 6px; font-size: 24px; font-family: $font-title; color: rgba(235, 246, 255, 0.96); }
 .predict-copy__desc, .predict-bar__text, .info-note { color: rgba(148, 163, 184, 0.76); font-size: 13px; line-height: 1.7; }
 .predict-actions, .side, .control-list, .info-list { display: grid; gap: 12px; }
+.predict-actions { display: flex; align-items: end; justify-content: flex-start; gap: 12px; width: auto; }
+.predict-actions .chip-group, .predict-bar .chip-group { display: flex; flex-wrap: nowrap; gap: 8px; }
+.predict-controls-row { display: flex; align-items: end; justify-content: space-between; gap: 18px; }
 .chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip, .reset-btn { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba($tech-cyan, 0.18); background: rgba(255,255,255,0.04); color: rgba(226, 232, 240, 0.9); cursor: pointer; }
 .chip.active { border-color: rgba($tech-cyan, 0.5); background: rgba($tech-cyan, 0.14); color: #fff; }
@@ -773,7 +769,35 @@ onUnmounted(() => {
 .selector-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 420px; }
 .field { display: grid; gap: 6px; }
 .field__label, .panel__title { color: rgba($tech-cyan, 0.92); font-size: 15px; }
-.predict-bar { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 16px; border: 1px solid rgba($tech-cyan, 0.14); background: rgba(255,255,255,0.03); }
+.field :deep(.el-select__wrapper) {
+  min-height: 40px;
+  border-radius: 10px;
+  background: rgba(8, 17, 36, 0.78);
+  border: 1px solid rgba($tech-cyan, 0.26);
+  box-shadow:
+    inset 0 0 16px rgba($tech-cyan, 0.05),
+    0 0 0 1px rgba(255, 255, 255, 0.02);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.field :deep(.el-select__wrapper.is-focused),
+.field :deep(.el-select__wrapper:hover) {
+  background: rgba(10, 22, 46, 0.92);
+  border-color: rgba($tech-cyan, 0.62);
+  box-shadow:
+    0 0 18px rgba($tech-cyan, 0.18),
+    inset 0 0 18px rgba($tech-cyan, 0.08);
+}
+.field :deep(.el-select__placeholder),
+.field :deep(.el-select__selected-item) {
+  color: rgba(235, 246, 255, 0.92);
+  font-size: 15px;
+  font-weight: 600;
+}
+.field :deep(.el-select__caret) {
+  color: rgba($tech-cyan, 0.78);
+}
+.predict-bar { display: grid; gap: 12px; padding: 12px 14px; border-radius: 16px; border: 1px solid rgba($tech-cyan, 0.14); background: rgba(255,255,255,0.03); }
+.predict-bar__text { text-align: right; }
 .predict-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; }
 .panel { padding: 14px 16px; border-radius: 18px; border: 1px solid rgba($tech-cyan, 0.14); background: rgba(5,12,28,0.52); box-shadow: inset 0 0 18px rgba($tech-cyan,0.04); }
 .chart-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); }
@@ -796,5 +820,39 @@ onUnmounted(() => {
 .control input[type='range'] { width: 100%; margin-top: 8px; appearance: none; height: 5px; border-radius: 999px; background: linear-gradient(90deg, rgba($tech-green, 0.24), rgba($tech-cyan, 0.18)); }
 .control input[type='range']::-webkit-slider-thumb { appearance: none; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, $tech-cyan, #00bf79); box-shadow: 0 0 0 2px rgba(15,23,42,0.82), 0 0 12px rgba($tech-cyan,0.4); cursor: pointer; }
 @media (max-width: 1320px) { .predict-main { grid-template-columns: minmax(0, 1fr); } .side { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 980px) { .predict-top { grid-template-columns: minmax(0, 1fr); } .selector-grid, .stat-grid, .coef-grid, .side { grid-template-columns: minmax(0, 1fr); min-width: 0; } .predict-bar { flex-direction: column; } }
+@media (max-width: 980px) { .predict-actions, .predict-controls-row { flex-direction: column; align-items: stretch; } .selector-grid, .stat-grid, .coef-grid, .side { grid-template-columns: minmax(0, 1fr); min-width: 0; } .predict-bar__text { text-align: left; } }
+</style>
+
+<style lang="scss">
+.dark-popper.el-select__popper {
+  border: 1px solid rgba($tech-cyan, 0.28);
+  border-radius: 10px;
+  background: rgba(8, 17, 36, 0.96);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.42), 0 0 18px rgba($tech-cyan, 0.12);
+
+  .el-popper__arrow::before {
+    background: rgba(8, 17, 36, 0.96);
+    border-color: rgba($tech-cyan, 0.28);
+  }
+
+  .el-select-dropdown {
+    background: transparent;
+  }
+
+  .el-select-dropdown__item {
+    color: rgba(226, 232, 240, 0.82);
+    font-weight: 600;
+
+    &.hover,
+    &:hover {
+      background: rgba($tech-cyan, 0.12);
+      color: #fff;
+    }
+
+    &.selected {
+      color: $tech-cyan;
+      background: rgba($tech-cyan, 0.08);
+    }
+  }
+}
 </style>

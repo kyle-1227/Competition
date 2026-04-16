@@ -41,7 +41,7 @@ TOOLTIP_SYSTEM_PROMPT_PLACEHOLDER = load_tooltip_prompt_template(DEFAULT_TOOLTIP
 
 PAGE_FOCUS: dict[str, str] = {
     "greenFinance": "绿色金融综合指数页面，重点关注综合分、Top10、七维指标、下钻视角和县级 mock 数据。",
-    "carbon": "碳排放底色页面，重点关注当前年份、Top10 省份、总量、均值和空间分布。",
+    "carbon": "碳排放+GDP底色页面，重点关注当前年份、Top10 省份、总量、均值和空间分布。",
     "energy": "碳排放强度预测页面，重点关注当前层级、省市选择、三情景结果、自定义参数推演、对比线和最终预测结果。",
     "macro": "宏观经济页面，重点关注区域 GDP、碳排放序列、最新年份表现和变化趋势。",
 }

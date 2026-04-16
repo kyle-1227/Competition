@@ -112,13 +112,13 @@ watch(selectedProvince, (province) => {
 
 const tabs = [
   { key: 'greenFinance', label: '绿色金融综合指数' },
-  { key: 'carbon', label: '碳排放底色' },
+  { key: 'carbon', label: '碳排放+GDP底色' },
   { key: 'energy', label: '碳排放强度预测' },
 ] as Array<{ key: HomeTabKey; label: string }>;
 
 const tabLabelMap: Record<HomeTabKey, string> = {
   greenFinance: '绿色金融综合指数',
-  carbon: '碳排放底色',
+  carbon: '碳排放+GDP底色',
   energy: '碳排放强度预测',
 };
 
