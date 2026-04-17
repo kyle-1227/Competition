@@ -187,10 +187,54 @@ function shortRegionLabel(name: string): string {
   return name.replace(/(省|市|自治区|壮族|回族|维吾尔)/g, '');
 }
 
+const READABLE_TOOLTIP_EXTRA_CSS = [
+  'z-index: 5000',
+  'white-space: normal',
+  'box-sizing: border-box',
+  'max-width: min(286px, calc(100vw - 28px))',
+  'padding: 10px 12px',
+  'border-radius: 8px',
+  'line-height: 1.55',
+  'box-shadow: 0 14px 30px rgba(0,0,0,0.46), 0 0 18px rgba(0,229,255,0.14)',
+  'backdrop-filter: blur(10px)',
+].join(';');
+
+function keepTooltipInsideView(
+  point: number[],
+  _params: unknown,
+  dom: HTMLElement,
+  _rect: unknown,
+  size: { viewSize: number[] },
+) {
+  const gap = 14;
+  const padding = 8;
+  const viewWidth = size?.viewSize?.[0] || window.innerWidth;
+  const viewHeight = size?.viewSize?.[1] || window.innerHeight;
+  const boxWidth = Math.min(dom.offsetWidth || 260, Math.max(120, viewWidth - padding * 2));
+  const boxHeight = Math.min(dom.offsetHeight || 180, Math.max(120, viewHeight - padding * 2));
+
+  let left = point[0] + gap;
+  let top = point[1] - boxHeight / 2;
+
+  if (left + boxWidth > viewWidth - padding) {
+    left = point[0] - boxWidth - gap;
+  }
+
+  left = Math.max(padding, Math.min(left, viewWidth - boxWidth - padding));
+  top = Math.max(padding, Math.min(top, viewHeight - boxHeight - padding));
+
+  return [left, top];
+}
+
 function appendTooltipAi(baseHtml: string, payload: AiTooltipRequest, title = 'AI 分析'): string {
   const snapshot = getTooltipAiSnapshot(payload);
   void requestTooltipAi(payload, snapshot.domId);
-  return `${baseHtml}${renderTooltipAiHtml(getTooltipAiSnapshot(payload), title)}`;
+  return `
+    <div style="width:252px;max-width:calc(100vw - 52px);max-height:min(420px, calc(100vh - 52px));overflow:auto;white-space:normal;overflow-wrap:anywhere;box-sizing:border-box;">
+      ${baseHtml}
+      ${renderTooltipAiHtml(getTooltipAiSnapshot(payload), title)}
+    </div>
+  `;
 }
 
 /** 七维堆叠横向柱：彩虹色（与 Top10 图例顺序一致） */
@@ -278,8 +322,9 @@ export function useGreenFinanceTop10Bar() {
           appendToBody: true,
           backgroundColor: 'rgba(10,15,30,0.92)',
           borderColor: 'rgba(0,229,255,0.35)',
-          extraCssText: 'z-index: 5000;',
+          extraCssText: READABLE_TOOLTIP_EXTRA_CSS,
           textStyle: { color: '#fff', fontSize: 12 },
+          position: keepTooltipInsideView,
           formatter: (p: unknown) => {
             const payload = p as {
               seriesName?: string;
@@ -299,21 +344,21 @@ export function useGreenFinanceTop10Bar() {
             const weightedScore = Number(payload.data?.weightedScore ?? 0);
             const totalScore = Number(payload.data?.totalScore ?? 0);
             const baseHtml = `
-              <div style="font-weight:600;color:#00e5ff;margin-bottom:8px">${payloadRegion}</div>
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+              <div style="font-weight:600;color:#00e5ff;margin-bottom:8px;font-size:13px;">${payloadRegion}</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;min-width:0;">
                 ${payload.marker ?? ''}
-                <span style="color:#aaa">${payloadDim}</span>
+                <span style="color:#aaa;min-width:0;white-space:normal;">${payloadDim}</span>
               </div>
-              <div style="display:flex;justify-content:space-between;gap:16px;margin:2px 0">
-                <span style="color:rgba(255,255,255,0.6)">原始数据</span>
+              <div style="display:flex;justify-content:space-between;gap:12px;margin:4px 0;align-items:baseline;">
+                <span style="color:rgba(255,255,255,0.66)">原始数据</span>
                 <b style="color:#fff">${rawValue.toFixed(4)}</b>
               </div>
-              <div style="display:flex;justify-content:space-between;gap:16px;margin:2px 0">
-                <span style="color:rgba(255,255,255,0.6)">加权分数</span>
+              <div style="display:flex;justify-content:space-between;gap:12px;margin:4px 0;align-items:baseline;">
+                <span style="color:rgba(255,255,255,0.66)">加权分数</span>
                 <b style="color:#fff">${weightedScore.toFixed(2)} 分</b>
               </div>
-              <div style="display:flex;justify-content:space-between;gap:16px;margin:2px 0">
-                <span style="color:rgba(255,255,255,0.45)">综合分</span>
+              <div style="display:flex;justify-content:space-between;gap:12px;margin:4px 0;align-items:baseline;">
+                <span style="color:rgba(255,255,255,0.5)">综合分</span>
                 <span style="color:#ffd54f">${totalScore.toFixed(2)} 分</span>
               </div>
             `;
@@ -482,25 +527,9 @@ export function useGreenFinanceRadar(selectedProv: Ref<string>) {
           appendToBody: true,
           backgroundColor: 'rgba(10,15,30,0.9)',
           borderColor: 'rgba(0,229,255,0.3)',
-          extraCssText: 'z-index: 5000;',
+          extraCssText: READABLE_TOOLTIP_EXTRA_CSS,
           textStyle: { color: '#fff', fontSize: 12 },
-          position(point: number[], _params: unknown, dom: HTMLElement, _rect: unknown, size: { viewSize: number[] }) {
-            const gap = 18;
-            const viewWidth = size.viewSize[0];
-            const viewHeight = size.viewSize[1];
-            const boxWidth = dom.offsetWidth;
-            const boxHeight = dom.offsetHeight;
-            let left = point[0] + gap;
-            let top = point[1] - boxHeight / 2;
-            if (left + boxWidth > viewWidth - 8) {
-              left = Math.max(8, point[0] - boxWidth - gap);
-            }
-            if (top < 8) top = 8;
-            if (top + boxHeight > viewHeight - 8) {
-              top = Math.max(8, viewHeight - boxHeight - 8);
-            }
-            return [left, top];
-          },
+          position: keepTooltipInsideView,
           formatter() {
             let s = `<b style="color:#00e5ff">${item.province}</b><br/>`;
             greenFinanceIndicators.forEach((ind, i) => {
