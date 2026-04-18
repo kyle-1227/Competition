@@ -949,15 +949,15 @@ function findCarbonCityRow(
 }
 
 const energyBreakdownItems = [
-  { key: 'coalConsumption', label: '煤炭消费量' },
-  { key: 'cokeConsumption', label: '焦炭消费量' },
-  { key: 'crudeOilConsumption', label: '原油消费量' },
-  { key: 'gasolineConsumption', label: '汽油消费量' },
-  { key: 'keroseneConsumption', label: '煤油消费量' },
-  { key: 'dieselConsumption', label: '柴油消费量' },
-  { key: 'fuelOilConsumption', label: '燃料油消费量' },
-  { key: 'naturalGasConsumption', label: '天然气消费量' },
-  { key: 'powerConsumption', label: '电力消费量' },
+  { key: 'coalConsumption', label: '煤炭消费量', unit: '万吨标准煤' },
+  { key: 'cokeConsumption', label: '焦炭消费量', unit: '万吨标准煤' },
+  { key: 'crudeOilConsumption', label: '原油消费量', unit: '万吨标准煤' },
+  { key: 'gasolineConsumption', label: '汽油消费量', unit: '万吨标准煤' },
+  { key: 'keroseneConsumption', label: '煤油消费量', unit: '万吨标准煤' },
+  { key: 'dieselConsumption', label: '柴油消费量', unit: '万吨标准煤' },
+  { key: 'fuelOilConsumption', label: '燃料油消费量', unit: '万吨标准煤' },
+  { key: 'naturalGasConsumption', label: '天然气消费量', unit: '万吨标准煤' },
+  { key: 'powerConsumption', label: '电力消费量', unit: '万吨标准煤' },
 ] as const;
 
 function buildEnergyTooltipRows(
@@ -978,9 +978,9 @@ function buildEnergyTooltipRows(
   return [
     ...rows,
     ...sourceYearRows,
-    ...energyBreakdownItems.map(({ key, label }) => ({
+    ...energyBreakdownItems.map(({ key, label, unit }) => ({
       label,
-      value: formatTooltipMetricCell(row?.[key]),
+      value: formatTooltipMetricCell(row?.[key], unit),
     })),
   ];
 }

@@ -38,18 +38,29 @@
           </div>
         </div>
 
-        <div class="chip-group">
+        <div class="predict-actions-right">
           <button
-            v-for="item in scenarioOptions"
-            :key="item.key"
             type="button"
-            class="chip"
-            :class="{ active: selectedMode === item.key, disabled: item.disabled }"
-            :disabled="item.disabled"
-            @click="selectedMode = item.key"
+            class="export-btn"
+            :disabled="!canExport"
+            @click="handleExport"
           >
-            {{ item.label }}
+            导出预测结果
           </button>
+
+          <div class="chip-group">
+            <button
+              v-for="item in scenarioOptions"
+              :key="item.key"
+              type="button"
+              class="chip"
+              :class="{ active: selectedMode === item.key, disabled: item.disabled }"
+              :disabled="item.disabled"
+              @click="selectedMode = item.key"
+            >
+              {{ item.label }}
+            </button>
+          </div>
         </div>
       </div>
       <div class="predict-bar__text">{{ sourceNotice }}</div>
@@ -161,7 +172,7 @@ import { ElMessage } from 'element-plus';
 import * as echarts from 'echarts/core';
 import type { EChartsCoreOption, EChartsType } from 'echarts/core';
 import { LineChart } from 'echarts/charts';
-import { GridComponent, TitleComponent, TooltipComponent } from 'echarts/components';
+import { GridComponent, LegendComponent, TitleComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import {
   getCarbonPredictData,
@@ -177,6 +188,7 @@ import {
 } from '@/api/modules/dashboard-carbon-predict';
 import { useAiAssistant } from './hooks/aiAssistant';
 import { getCarbonPredictTooltipHtml } from './hooks/carbonPredictTooltipV3';
+import { exportPredictCsv, type PredictExportSeriesPoint } from './hooks/predictExport';
 import {
   computeContributionBreakdown,
   computeSdmPredictedSeries,
@@ -186,7 +198,7 @@ import {
   type SdmCoefficients,
 } from './hooks/useCarbonPredictV2';
 
-echarts.use([GridComponent, TitleComponent, TooltipComponent, LineChart, CanvasRenderer]);
+echarts.use([GridComponent, LegendComponent, TitleComponent, TooltipComponent, LineChart, CanvasRenderer]);
 
 const FUTURE_YEARS = [2025, 2026, 2027];
 const CUSTOM_MODE: PredictViewMode = 'custom';
@@ -319,6 +331,19 @@ const scenarioOptions = computed(() => [
 ]);
 const entityLabel = computed(() => currentData.value?.entityLabel || (selectedLevel.value === 'city' ? selectedCity.value : selectedProvince.value));
 const compareName = computed(() => currentData.value?.compareSeries.name || TEXT.compareFallback);
+const entityLegendBase = computed(() => {
+  if (selectedLevel.value === 'city') return `${entityLabel.value}（当前城市）`;
+  if (selectedProvince.value === TEXT.nationwide) return TEXT.nationwide;
+  return `${entityLabel.value}（当前省份）`;
+});
+const compareLegendBase = computed(() => {
+  if (selectedLevel.value === 'city') return `${compareName.value}（所属省市级均值）`;
+  return `${compareName.value}（全国平均）`;
+});
+const entityHistoryLegend = computed(() => `${entityLegendBase.value}${TEXT.historySuffix}`);
+const entityFutureLegend = computed(() => `${entityLegendBase.value}${TEXT.futureSuffix}`);
+const compareHistoryLegend = computed(() => `${compareLegendBase.value}${TEXT.historySuffix}`);
+const compareFutureLegend = computed(() => `${compareLegendBase.value}${TEXT.futureSuffix}`);
 const selectedModeLabel = computed(() => (
   selectedMode.value === CUSTOM_MODE
     ? TEXT.custom
@@ -434,6 +459,13 @@ const changeClass = computed(() => ({
   negative: changePctDisplay.value < -0.01,
 }));
 const isCustomMode = computed(() => selectedMode.value === CUSTOM_MODE);
+const canExport = computed(() => {
+  if (!currentData.value) return false;
+  if (selectedLevel.value === 'city' && !selectedCity.value) return false;
+  const hasHistory = historySeries.value.length > 0;
+  const hasFuture = currentData.value.scenarios.some((item) => item.points.length > 0) || selectedFutureSeries.value.length > 0;
+  return hasHistory || hasFuture;
+});
 const sampleRange = computed(() => `${currentData.value?.sampleMeta.historyStartYear ?? '—'} - ${currentData.value?.sampleMeta.historyEndYear ?? '—'}`);
 const forecastRange = computed(() => `${currentData.value?.sampleMeta.forecastStartYear ?? '—'} - ${currentData.value?.sampleMeta.forecastEndYear ?? '—'}`);
 
@@ -512,6 +544,146 @@ function formatSigned(value: number) {
   return Number.isFinite(value) ? `${value > 0 ? '+' : ''}${value.toFixed(4)}` : '—';
 }
 
+function toExportSeriesPoints(
+  displayPoints: Array<{ year: number; value: number | null }>,
+  rawPoints: Array<{ year: number; value: number | null }>,
+): PredictExportSeriesPoint[] {
+  const rawMap = new Map<number, number | null>(rawPoints.map((item) => [item.year, item.value]));
+  return displayPoints.map((item) => ({
+    year: item.year,
+    displayValue: item.value,
+    rawValue: rawMap.get(item.year) ?? null,
+  }));
+}
+
+function buildControlSnapshot() {
+  return Object.fromEntries(
+    Object.entries(controls).map(([key, control]) => [key, Number(control.value.toFixed(2))]),
+  );
+}
+
+function handleExport() {
+  if (!canExport.value || !currentData.value) {
+    ElMessage.warning('当前暂无可导出的预测结果');
+    return;
+  }
+
+  try {
+    const hideCompare = selectedLevel.value === 'province' && selectedProvince.value === TEXT.nationwide;
+    const exportFilename = exportPredictCsv({
+      level: selectedLevel.value,
+      province: selectedProvince.value,
+      city: selectedLevel.value === 'city' ? selectedCity.value : null,
+      entityLabel: entityLabel.value,
+      compareLabel: compareName.value,
+      target: 'carbonIntensity',
+      selectedMode: selectedMode.value,
+      sourceMode: sourceModeLabel.value,
+      weightType: currentData.value.weightType || '',
+      historySeries: toExportSeriesPoints(historySeriesDisplay.value, historySeries.value),
+      scenarios: currentData.value.scenarios.map((scenario) => ({
+        key: scenario.key,
+        label: scenario.label,
+        points: toExportSeriesPoints(
+          scaleDisplaySeries(toDisplaySeries(scenario.points), forecastDisplayScale.value),
+          scenario.points,
+        ),
+      })),
+      selectedModeSeries: {
+        key: selectedMode.value,
+        label: `${selectedModeLabel.value}·当前模式`,
+        points: toExportSeriesPoints(selectedFutureSeriesDisplay.value, selectedFutureSeries.value),
+      },
+      compareHistorySeries: hideCompare
+        ? []
+        : toExportSeriesPoints(compareHistorySeriesDisplay.value, compareHistorySeries.value),
+      compareSelectedModeSeries: hideCompare
+        ? []
+        : toExportSeriesPoints(compareFutureSeriesDisplay.value, compareFutureSeries.value),
+      scenarioBand: scenarioBandDisplay.value.map((item) => {
+        const rawBand = scenarioBand.value.find((raw) => raw.year === item.year);
+        return {
+          year: item.year,
+          displayMin: item.min,
+          displayMax: item.max,
+          rawMin: rawBand?.min ?? null,
+          rawMax: rawBand?.max ?? null,
+        };
+      }),
+      summaryRows: [
+        {
+          label: '2027预测值',
+          year: currentData.value.sampleMeta.forecastEndYear ?? '',
+          displayValue: finalPredictionDisplay.value,
+          rawValue: finalPrediction.value,
+          unit: '吨/万元',
+        },
+        {
+          label: '较2024变化',
+          year: currentData.value.sampleMeta.forecastEndYear ?? '',
+          displayValue: Number((changePctDisplay.value * 100).toFixed(2)),
+          rawValue: Number((changePct.value * 100).toFixed(2)),
+          unit: '%',
+        },
+        {
+          label: '变化方向',
+          year: currentData.value.sampleMeta.forecastEndYear ?? '',
+          displayValue: directionLabel.value,
+          rawValue: '',
+          unit: '',
+        },
+        {
+          label: '相对对比线差距',
+          year: currentData.value.sampleMeta.forecastEndYear ?? '',
+          displayValue: compareGapDisplay.value,
+          rawValue: compareGap.value,
+          unit: '同图表展示口径',
+        },
+        {
+          label: '数据来源',
+          displayValue: sourceModeLabel.value,
+          rawValue: '',
+          unit: '',
+          note: sourceNotice.value,
+        },
+        {
+          label: '样本期',
+          displayValue: sampleRange.value,
+          rawValue: '',
+          unit: '',
+        },
+        {
+          label: '预测期',
+          displayValue: forecastRange.value,
+          rawValue: '',
+          unit: '',
+        },
+        {
+          label: '边界说明',
+          displayValue: boundaryNotice.value,
+          rawValue: '',
+          unit: '',
+        },
+        ...(isCustomMode.value
+          ? [{
+            label: '自定义参数快照',
+            displayValue: '',
+            rawValue: '',
+            unit: '',
+            note: Object.entries(buildControlSnapshot()).map(([key, value]) => `${key}=${Math.round(value * 100)}%`).join('; '),
+          }]
+          : []),
+      ],
+      contributionBreakdown: isCustomMode.value ? contributionBreakdown.value : null,
+      controlSnapshot: isCustomMode.value ? buildControlSnapshot() : null,
+    });
+    ElMessage.success(`预测结果已导出：${exportFilename}`);
+  } catch (error) {
+    console.error(error);
+    ElMessage.error('导出预测结果失败');
+  }
+}
+
 function buildLineData(points: Array<{ year: number; value: number | null }>, anchor?: { year?: number | null; value?: number | null }) {
   const pointMap = new Map<number, number | null>(points.map((item) => [item.year, item.value]));
   return allYears.value.map((year) => {
@@ -564,6 +736,16 @@ function updateChart() {
     value: compareHistorySeriesDisplay.value.at(-1)?.value ?? null,
   };
   const hideCompare = selectedLevel.value === 'province' && selectedProvince.value === TEXT.nationwide;
+  const legendItems = [
+    entityHistoryLegend.value,
+    entityFutureLegend.value,
+    ...(
+      hideCompare
+        ? []
+        : [compareHistoryLegend.value, compareFutureLegend.value]
+    ),
+    TEXT.band,
+  ];
 
   const option: EChartsCoreOption = {
     tooltip: {
@@ -587,7 +769,19 @@ function updateChart() {
         contributionBreakdown: isCustomMode.value ? contributionBreakdown.value : null,
       }),
     },
-    grid: { top: 24, right: 18, bottom: 30, left: 18, containLabel: true },
+    legend: {
+      top: 0,
+      left: 18,
+      right: 18,
+      itemWidth: 18,
+      itemHeight: 10,
+      textStyle: {
+        color: 'rgba(226,232,240,0.88)',
+        fontSize: 12,
+      },
+      data: legendItems,
+    },
+    grid: { top: 72, right: 18, bottom: 30, left: 18, containLabel: true },
     xAxis: {
       type: 'category',
       data: allYears.value,
@@ -623,7 +817,7 @@ function updateChart() {
         data: allYears.value.map((year) => buildBandDelta(year, bandMap)),
       },
       {
-        name: `${entityLabel.value}${TEXT.historySuffix}`,
+        name: entityHistoryLegend.value,
         type: 'line',
         symbol: 'circle',
         symbolSize: 6,
@@ -632,7 +826,7 @@ function updateChart() {
         data: buildLineData(historySeriesDisplay.value),
       },
       {
-        name: `${entityLabel.value}${TEXT.futureSuffix}`,
+        name: entityFutureLegend.value,
         type: 'line',
         symbol: 'circle',
         symbolSize: 7,
@@ -641,14 +835,14 @@ function updateChart() {
         data: buildLineData(selectedFutureSeriesDisplay.value, entityAnchor),
       },
       {
-        name: `${compareName.value}${TEXT.historySuffix}`,
+        name: compareHistoryLegend.value,
         type: 'line',
         symbol: 'none',
         lineStyle: { color: 'rgba(203,213,225,0.42)', width: 2 },
         data: hideCompare ? [] : buildLineData(compareHistorySeriesDisplay.value),
       },
       {
-        name: `${compareName.value}${TEXT.futureSuffix}`,
+        name: compareFutureLegend.value,
         type: 'line',
         symbol: 'none',
         lineStyle: { color: 'rgba(203,213,225,0.42)', width: 2, type: 'dashed' },
@@ -758,14 +952,21 @@ onUnmounted(() => {
 .predict-copy__eyebrow { color: rgba($tech-cyan, 0.84); font-size: 14px; letter-spacing: 0.16em; }
 .predict-copy__title { margin-top: 6px; font-size: 24px; font-family: $font-title; color: rgba(235, 246, 255, 0.96); }
 .predict-copy__desc, .predict-bar__text, .info-note { color: rgba(148, 163, 184, 0.76); font-size: 13px; line-height: 1.7; }
-.predict-actions, .side, .control-list, .info-list { display: grid; gap: 12px; }
+.predict-actions, .side, .control-list, .info-list, .predict-actions-right { display: grid; gap: 12px; }
 .predict-actions { display: flex; align-items: end; justify-content: flex-start; gap: 12px; width: auto; }
+.predict-actions-right { justify-items: end; align-self: end; }
 .predict-actions .chip-group, .predict-bar .chip-group { display: flex; flex-wrap: nowrap; gap: 8px; }
 .predict-controls-row { display: flex; align-items: end; justify-content: space-between; gap: 18px; }
 .chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip, .reset-btn { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba($tech-cyan, 0.18); background: rgba(255,255,255,0.04); color: rgba(226, 232, 240, 0.9); cursor: pointer; }
+.chip, .reset-btn, .export-btn { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba($tech-cyan, 0.18); background: rgba(255,255,255,0.04); color: rgba(226, 232, 240, 0.9); cursor: pointer; }
 .chip.active { border-color: rgba($tech-cyan, 0.5); background: rgba($tech-cyan, 0.14); color: #fff; }
-.chip.disabled, .chip:disabled, .reset-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.export-btn {
+  min-width: 138px;
+  border-color: rgba($tech-cyan, 0.42);
+  background: linear-gradient(135deg, rgba($tech-cyan, 0.16), rgba(45, 212, 191, 0.08));
+  box-shadow: 0 0 16px rgba($tech-cyan, 0.12);
+}
+.chip.disabled, .chip:disabled, .reset-btn:disabled, .export-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .selector-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 420px; }
 .field { display: grid; gap: 6px; }
 .field__label, .panel__title { color: rgba($tech-cyan, 0.92); font-size: 15px; }
@@ -820,7 +1021,7 @@ onUnmounted(() => {
 .control input[type='range'] { width: 100%; margin-top: 8px; appearance: none; height: 5px; border-radius: 999px; background: linear-gradient(90deg, rgba($tech-green, 0.24), rgba($tech-cyan, 0.18)); }
 .control input[type='range']::-webkit-slider-thumb { appearance: none; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, $tech-cyan, #00bf79); box-shadow: 0 0 0 2px rgba(15,23,42,0.82), 0 0 12px rgba($tech-cyan,0.4); cursor: pointer; }
 @media (max-width: 1320px) { .predict-main { grid-template-columns: minmax(0, 1fr); } .side { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 980px) { .predict-actions, .predict-controls-row { flex-direction: column; align-items: stretch; } .selector-grid, .stat-grid, .coef-grid, .side { grid-template-columns: minmax(0, 1fr); min-width: 0; } .predict-bar__text { text-align: left; } }
+@media (max-width: 980px) { .predict-actions, .predict-controls-row { flex-direction: column; align-items: stretch; } .predict-actions-right { justify-items: stretch; } .selector-grid, .stat-grid, .coef-grid, .side { grid-template-columns: minmax(0, 1fr); min-width: 0; } .predict-bar__text { text-align: left; } }
 </style>
 
 <style lang="scss">
