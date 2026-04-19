@@ -21,7 +21,7 @@ import {
 } from './provinceData';
 import { getTooltipAiSnapshot, requestTooltipAi } from './useTooltipAi';
 
-/** 缁胯壊閲戣瀺鍦板浘鎮仠娴锛圴ue 涓?useGreenFinanceMap 鍏辩敤锛?*/
+/** 绿色金融地图悬停浮框状态（Vue 中与 useGreenFinanceMap 共用） */
 export interface GfMapTooltipState {
   visible: boolean;
   left: number;
@@ -104,7 +104,7 @@ function formatTooltipMetricCell(value: unknown, unit = '', digits = 2): string 
   return unit ? `${formatted} ${unit}` : formatted;
 }
 
-/** 涓冪淮涓庣患鍚堟寚鏁颁竴鑷达細搴撳唴涓?0锝?锛屽睍绀轰负鐧惧垎鍒讹紝淇濈暀 2 浣嶅皬鏁?*/
+/** 七维指标与综合指数一致：库内为 0-1，展示为百分制，保留 2 位小数 */
 function formatIndicatorCell(v: unknown): string {
   if (v == null || (typeof v === 'number' && !Number.isFinite(v))) return '—';
   if (typeof v === 'number') {
@@ -266,13 +266,13 @@ function attachGreenFinanceMapTooltip(
   return { hide };
 }
 
-/** 缁块噾 3D 鏌变綋椤堕潰澶栬疆寤撶櫧绾匡紙涓庢煴椤跺悓楂橈紝鍖哄垎閭荤渷/甯傦級 */
+/** 绿金 3D 柱体顶面外轮廓白线（与柱顶同高，用于区分邻省/市） */
 const GF_EXTRUDE_TOP_LINE_COLOR = 'rgba(255,255,255,0.9)';
 const GF_EXTRUDE_TOP_LINE_WIDTH = 1.15;
 const GF_BACKDROP_COLOR = 'rgba(40, 50, 70, 0.4)';
 const GF_BACKDROP_TOP_LINE_COLOR = 'rgba(180, 196, 220, 0.3)';
 const GF_BACKDROP_SCORE = 100;
-/** 涓?PolygonLayer `.size('_score', range)` 涓€鑷?*/
+/** 与 PolygonLayer `.size('_score', range)` 的线性映射保持一致 */
 const GF_PROVINCE_EXTRUDE_RANGE: [number, number] = [20000, 2000000];
 const GF_CITY_EXTRUDE_RANGE: [number, number] = [12000, 1800000];
 const COUNTY_NO_DATA_COLOR = '#5c6470';
@@ -392,7 +392,7 @@ function extrudeHeightMForScores(
   };
 }
 
-/** 澶氳竟褰㈠鐜?鈫?甯︾粺涓€ Z锛堟煴椤堕珮搴︾背锛夌殑 LineString锛屼緵 LineLayer 缁樺埗椤惰竟 */
+/** 多边形外环转为带统一 Z（柱顶高度，米）的 LineString，供 LineLayer 绘制顶边 */
 function buildExtrudeTopOutlines(
   fc: { features: any[] },
   range: [number, number],
@@ -881,12 +881,12 @@ export function useGreenFinanceMap(selectedProv: Ref<string>, tooltipRef: Ref<Gf
             runCinematicFit(boundsFromFeatures(cityGeo.features));
             return;
           } catch (err) {
-            console.error('缁胯壊閲戣瀺鍦板浘涓嬮捇澶辫触:', err);
+            console.error('绿色金融地图下钻失败:', err);
             gfDrillProvince.value = '';
           }
         });
       }).catch((err) => {
-        console.error('缁胯壊閲戣瀺鍦板浘鐪佺骇 GeoJSON 鍔犺浇澶辫触:', err);
+        console.error('绿色金融地图省级 GeoJSON 加载失败:', err);
       });
     });
   });
@@ -1660,14 +1660,14 @@ export function useCarbonMap(options: UseCarbonMapOptions) {
               scene.render();
               runCinematicFit(boundsFromFeatures(cityGeo.features));
             } catch (err) {
-              console.error('纰虫帓鏀惧湴鍥惧競绾т笅閽诲け璐?', err);
+              console.error('碳排放地图市级下钻失败:', err);
               options.onProvinceClick?.('');
             }
           },
           { immediate: true },
         );
       }).catch((err) => {
-        console.error('纰虫帓鍦板浘鐪佺骇 GeoJSON 鍔犺浇澶辫触:', err);
+        console.error('碳排放地图省级 GeoJSON 加载失败:', err);
       });
     });
   });
