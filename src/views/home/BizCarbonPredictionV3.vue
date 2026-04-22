@@ -38,6 +38,10 @@
           </div>
         </div>
 
+        <div class="predict-copy predict-copy--inline">
+          <div class="predict-copy__title">碳排放强度预测 · 2000-2027</div>
+        </div>
+
         <div class="predict-actions-right">
           <button
             type="button"
@@ -63,7 +67,10 @@
           </div>
         </div>
       </div>
-      <div class="predict-bar__text">{{ sourceNotice }}</div>
+      <div class="predict-meta-row">
+        <div class="predict-copy__desc">历史观测为 2000-2024，情景预测为 2025-2027 · 对比线与情景推演联动展示</div>
+        <div class="predict-bar__text">{{ sourceNotice }}</div>
+      </div>
     </div>
 
     <div class="predict-main">
@@ -418,14 +425,18 @@ const historySeriesDisplay = computed(() => toDisplayHistorySeries(historySeries
 const compareHistorySeriesDisplay = computed(() => toDisplaySeries(compareHistorySeries.value));
 const selectedFutureSeriesMagnitude = computed(() => toDisplaySeries(selectedFutureSeries.value));
 const compareFutureSeriesMagnitude = computed(() => toDisplaySeries(compareFutureSeries.value));
-const forecastDisplayScale = computed(() => buildAdaptiveForecastScale(
-  historySeriesDisplay.value,
-  selectedFutureSeriesMagnitude.value,
-));
-const compareForecastDisplayScale = computed(() => buildAdaptiveForecastScale(
-  compareHistorySeriesDisplay.value,
-  compareFutureSeriesMagnitude.value,
-));
+// Temporarily disable frontend adaptive forecast scaling so the page shows
+// the raw future trajectory from the current prediction pipeline.
+// const forecastDisplayScale = computed(() => buildAdaptiveForecastScale(
+//   historySeriesDisplay.value,
+//   selectedFutureSeriesMagnitude.value,
+// ));
+// const compareForecastDisplayScale = computed(() => buildAdaptiveForecastScale(
+//   compareHistorySeriesDisplay.value,
+//   compareFutureSeriesMagnitude.value,
+// ));
+const forecastDisplayScale = computed(() => 1);
+const compareForecastDisplayScale = computed(() => 1);
 const selectedFutureSeriesDisplay = computed(() => scaleDisplaySeries(
   selectedFutureSeriesMagnitude.value,
   forecastDisplayScale.value,
@@ -482,8 +493,8 @@ const unregisterAiContext = registerPageContext('energy', () => ({
     availableScenarios: currentData.value?.availableScenarios ?? [],
     sourceMode: sourceModeLabel.value,
     sourceNotice: sourceNotice.value,
-    displayValueMode: 'absoluteCarbonIntensityAdaptiveForecast',
-    displayValueNote: '页面展示的碳排放强度为显示层正向化后的绝对值；预测段另做前端自适应缩放以衔接历史折线，原始模型值保留在 raw* 字段。',
+    displayValueMode: 'absoluteCarbonIntensityRawForecast',
+    displayValueNote: '页面展示的碳排放强度仍为显示层正向化后的绝对值；前端自适应缩放已暂时关闭，预测段直接展示当前模型输出，raw* 字段保留原始值。',
     forecastDisplayScale: toRoundedNumber(forecastDisplayScale.value, 6),
     compareForecastDisplayScale: toRoundedNumber(compareForecastDisplayScale.value, 6),
     compareSummary: `${selectedModeLabel.value}\u4e0b\uff0c${entityLabel.value} \u76f8\u5bf9 ${compareName.value}${formatGap(compareGapDisplay.value)}\u3002`,
@@ -949,14 +960,40 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 .predict-page { height: 100%; display: flex; flex-direction: column; gap: 14px; color: #f8fafc; }
+.predict-copy { display: grid; justify-items: center; text-align: center; }
+.predict-copy--inline { align-self: center; min-width: 0; padding: 0 6px; }
 .predict-copy__eyebrow { color: rgba($tech-cyan, 0.84); font-size: 14px; letter-spacing: 0.16em; }
-.predict-copy__title { margin-top: 6px; font-size: 24px; font-family: $font-title; color: rgba(235, 246, 255, 0.96); }
+.predict-copy__title {
+  margin-top: 0;
+  font-size: clamp(18px, 1.1vw, 22px);
+  font-family: $font-title;
+  color: rgba($tech-cyan, 0.88);
+  line-height: 1.1;
+  letter-spacing: 0.14em;
+  text-shadow: 0 0 10px rgba($tech-cyan, 0.16);
+  white-space: nowrap;
+}
 .predict-copy__desc, .predict-bar__text, .info-note { color: rgba(148, 163, 184, 0.76); font-size: 13px; line-height: 1.7; }
+.predict-copy__desc {
+  grid-column: 2;
+  color: rgba(200, 220, 255, 0.4);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  text-align: center;
+  white-space: nowrap;
+}
 .predict-actions, .side, .control-list, .info-list, .predict-actions-right { display: grid; gap: 12px; }
-.predict-actions { display: flex; align-items: end; justify-content: flex-start; gap: 12px; width: auto; }
-.predict-actions-right { justify-items: end; align-self: end; }
+.predict-actions { display: flex; align-items: end; justify-content: flex-start; gap: 12px; width: auto; min-width: 0; }
+.predict-actions-right { justify-items: end; align-self: end; min-width: 0; }
 .predict-actions .chip-group, .predict-bar .chip-group { display: flex; flex-wrap: nowrap; gap: 8px; }
-.predict-controls-row { display: flex; align-items: end; justify-content: space-between; gap: 18px; }
+.predict-actions-right .chip-group { justify-content: flex-end; }
+.predict-controls-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 18px;
+}
 .chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip, .reset-btn, .export-btn { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba($tech-cyan, 0.18); background: rgba(255,255,255,0.04); color: rgba(226, 232, 240, 0.9); cursor: pointer; }
 .chip.active { border-color: rgba($tech-cyan, 0.5); background: rgba($tech-cyan, 0.14); color: #fff; }
@@ -997,8 +1034,19 @@ onUnmounted(() => {
 .field :deep(.el-select__caret) {
   color: rgba($tech-cyan, 0.78);
 }
-.predict-bar { display: grid; gap: 12px; padding: 12px 14px; border-radius: 16px; border: 1px solid rgba($tech-cyan, 0.14); background: rgba(255,255,255,0.03); }
-.predict-bar__text { text-align: right; }
+.predict-bar { display: grid; gap: 10px; padding: 12px 14px; border-radius: 16px; border: 1px solid rgba($tech-cyan, 0.14); background: rgba(255,255,255,0.03); }
+.predict-meta-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+.predict-bar__text {
+  grid-column: 3;
+  justify-self: end;
+  max-width: min(520px, 100%);
+  text-align: right;
+}
 .predict-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; }
 .panel { padding: 14px 16px; border-radius: 18px; border: 1px solid rgba($tech-cyan, 0.14); background: rgba(5,12,28,0.52); box-shadow: inset 0 0 18px rgba($tech-cyan,0.04); }
 .chart-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); }
@@ -1021,7 +1069,19 @@ onUnmounted(() => {
 .control input[type='range'] { width: 100%; margin-top: 8px; appearance: none; height: 5px; border-radius: 999px; background: linear-gradient(90deg, rgba($tech-green, 0.24), rgba($tech-cyan, 0.18)); }
 .control input[type='range']::-webkit-slider-thumb { appearance: none; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, $tech-cyan, #00bf79); box-shadow: 0 0 0 2px rgba(15,23,42,0.82), 0 0 12px rgba($tech-cyan,0.4); cursor: pointer; }
 @media (max-width: 1320px) { .predict-main { grid-template-columns: minmax(0, 1fr); } .side { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 980px) { .predict-actions, .predict-controls-row { flex-direction: column; align-items: stretch; } .predict-actions-right { justify-items: stretch; } .selector-grid, .stat-grid, .coef-grid, .side { grid-template-columns: minmax(0, 1fr); min-width: 0; } .predict-bar__text { text-align: left; } }
+@media (max-width: 980px) {
+  .predict-controls-row { grid-template-columns: minmax(0, 1fr); }
+  .predict-meta-row { grid-template-columns: minmax(0, 1fr); }
+  .predict-actions, .predict-actions-right { justify-self: stretch; }
+  .predict-actions, .predict-actions-right { justify-items: stretch; }
+  .predict-actions { flex-direction: column; align-items: stretch; }
+  .predict-copy--inline { order: -1; padding: 0; }
+  .predict-copy__desc,
+  .predict-bar__text { grid-column: auto; justify-self: stretch; max-width: none; text-align: left; white-space: normal; }
+  .predict-actions .chip-group, .predict-bar .chip-group { flex-wrap: wrap; }
+  .predict-actions-right .chip-group { justify-content: flex-start; }
+  .selector-grid, .stat-grid, .coef-grid, .side { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+}
 </style>
 
 <style lang="scss">

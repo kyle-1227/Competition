@@ -1,18 +1,33 @@
 ﻿<template>
-  <div class="ai-assistant" :class="{ 'is-open': panelOpen }">
-    <button type="button" class="ai-assistant__trigger" @click="togglePanel()">
+  <div class="ai-assistant" :class="{ 'is-open': panelOpen, 'is-expanded': isExpanded }">
+    <button v-if="!isExpanded" type="button" class="ai-assistant__trigger" @click="handlePanelToggle()">
       <span class="ai-assistant__trigger-dot" />
       <span>{{ panelOpen ? '收起 AI 助手' : '打开 AI 助手' }}</span>
     </button>
 
+    <transition name="ai-overlay-fade">
+      <button
+        v-if="panelOpen && isExpanded"
+        type="button"
+        class="ai-assistant__overlay"
+        aria-label="退出放大查看"
+        @click="collapseExpanded"
+      />
+    </transition>
+
     <transition name="ai-panel-fade">
-      <section v-if="panelOpen" class="ai-assistant__panel">
+      <section v-if="panelOpen" class="ai-assistant__panel" :class="{ 'is-expanded': isExpanded }">
         <div class="ai-assistant__header">
           <div>
-            <div class="ai-assistant__title">DeepSeek 答疑助手</div>
+            <div class="ai-assistant__title">AI答疑</div>
             <div class="ai-assistant__subtitle">当前页面：{{ currentTabLabel }}</div>
           </div>
-          <button type="button" class="ai-assistant__close" @click="togglePanel(false)">×</button>
+          <div class="ai-assistant__header-actions">
+            <button type="button" class="ai-assistant__header-button" @click="toggleExpanded">
+              {{ isExpanded ? '恢复原尺寸' : '放大查看' }}
+            </button>
+            <button type="button" class="ai-assistant__close" @click="handlePanelToggle(false)">×</button>
+          </div>
         </div>
 
         <div class="ai-assistant__toolbar">
@@ -112,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import MarkdownIt from 'markdown-it';
 import { useAiAssistant, type AiAssistantMessage } from '../hooks/aiAssistant';
 import type { AiPageKey } from '@/api/modules/ai';
@@ -143,6 +158,7 @@ const toolNameMap: Record<string, string> = {
 };
 
 const draft = ref('');
+const isExpanded = ref(false);
 const messageListRef = ref<HTMLElement | null>(null);
 
 const {
@@ -162,6 +178,23 @@ const messageSignature = computed(() => messages.value.map((message) => `${messa
 
 function friendlyToolName(name: string) {
   return toolNameMap[name] || name;
+}
+
+function handlePanelToggle(force?: boolean) {
+  const nextOpen = typeof force === 'boolean' ? force : !panelOpen.value;
+  if (!nextOpen) {
+    isExpanded.value = false;
+  }
+  togglePanel(force);
+}
+
+function collapseExpanded() {
+  isExpanded.value = false;
+}
+
+function toggleExpanded() {
+  if (!panelOpen.value) return;
+  isExpanded.value = !isExpanded.value;
 }
 
 function renderAssistantContent(content: string, status: AiAssistantMessage['status']) {
@@ -192,6 +225,20 @@ async function handleSummary() {
   }
 }
 
+function handleWindowKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || !panelOpen.value || !isExpanded.value) return;
+  event.preventDefault();
+  collapseExpanded();
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleWindowKeydown);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleWindowKeydown);
+});
+
 watch(
   messageSignature,
   async () => {
@@ -201,11 +248,18 @@ watch(
     el.scrollTop = el.scrollHeight;
   },
 );
+
+watch(panelOpen, (open) => {
+  if (!open) {
+    isExpanded.value = false;
+  }
+});
 </script>
 
 <style lang="scss" scoped>
 .ai-assistant {
   position: relative;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -213,8 +267,20 @@ watch(
   pointer-events: none;
 }
 
+.ai-assistant.is-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 420;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  gap: 0;
+}
+
 .ai-assistant__trigger,
+.ai-assistant__overlay,
 .ai-assistant__panel,
+.ai-assistant__header-button,
 .ai-assistant__close,
 .ai-assistant__action,
 .ai-assistant__send {
@@ -251,7 +317,18 @@ watch(
   box-shadow: 0 0 10px rgba($tech-cyan, 0.72);
 }
 
+.ai-assistant__overlay {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(3, 10, 24, 0.72);
+  backdrop-filter: blur(10px);
+  cursor: zoom-out;
+}
+
 .ai-assistant__panel {
+  position: relative;
+  z-index: 1;
   width: min(520px, calc(100vw - 60px));
   height: min(68vh, 740px);
   display: grid;
@@ -264,6 +341,20 @@ watch(
     0 20px 54px rgba(0, 0, 0, 0.46),
     inset 0 0 28px rgba($tech-cyan, 0.08);
   overflow: hidden;
+  transition:
+    width 0.24s ease,
+    height 0.24s ease,
+    border-color 0.24s ease,
+    box-shadow 0.24s ease;
+}
+
+.ai-assistant__panel.is-expanded {
+  width: min(1100px, 85vw);
+  height: min(860px, 80vh);
+  border-color: rgba($tech-cyan, 0.5);
+  box-shadow:
+    0 32px 88px rgba(0, 0, 0, 0.54),
+    inset 0 0 34px rgba($tech-cyan, 0.12);
 }
 
 .ai-assistant__header {
@@ -286,6 +377,33 @@ watch(
   margin-top: 6px;
   color: rgba(220, 235, 255, 0.56);
   font-size: 16px;
+}
+
+.ai-assistant__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-assistant__header-button {
+  min-height: 38px;
+  border: 1px solid rgba($tech-cyan, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(235, 246, 255, 0.92);
+  padding: 0 14px;
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    border-color: rgba($tech-cyan, 0.46);
+    background: rgba($tech-cyan, 0.1);
+  }
 }
 
 .ai-assistant__close {
@@ -579,13 +697,18 @@ watch(
 }
 
 .ai-assistant__composer {
+  display: grid;
+  gap: 12px;
   padding: 14px 18px 18px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .ai-assistant__textarea {
+  display: block;
+  box-sizing: border-box;
   width: 100%;
-  min-height: 112px;
+  min-height: 96px;
+  max-height: 156px;
   resize: none;
   overflow-y: auto;
   border-radius: 14px;
@@ -595,6 +718,7 @@ watch(
   padding: 14px 16px;
   font-size: 16px;
   line-height: 1.7;
+  font-family: inherit;
   outline: none;
   scrollbar-width: thin;
   scrollbar-color: rgba($tech-cyan, 0.62) rgba(255, 255, 255, 0.06);
@@ -632,7 +756,12 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 12px;
+  min-height: 48px;
+}
+
+.ai-assistant__panel.is-expanded .ai-assistant__textarea {
+  min-height: 108px;
+  max-height: 180px;
 }
 
 .ai-assistant__hint {
@@ -655,6 +784,16 @@ watch(
     opacity: 0.46;
     cursor: not-allowed;
   }
+}
+
+.ai-overlay-fade-enter-active,
+.ai-overlay-fade-leave-active {
+  transition: opacity 0.24s ease;
+}
+
+.ai-overlay-fade-enter-from,
+.ai-overlay-fade-leave-to {
+  opacity: 0;
 }
 
 .ai-panel-fade-enter-active,
