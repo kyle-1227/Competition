@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 AiRole = Literal["user", "assistant"]
 AiPage = Literal["greenFinance", "carbon", "energy", "macro"]
+AiAudienceRole = Literal["general", "government", "enterprise", "finance", "research", "student"]
 
 
 class AiHistoryMessage(BaseModel):
@@ -30,11 +31,13 @@ class AiChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     pageContext: AiPageContext
     history: list[AiHistoryMessage] = Field(default_factory=list)
+    audienceRole: AiAudienceRole = "general"
 
 
 class AiSummaryRequest(BaseModel):
     pageContext: AiPageContext
     history: list[AiHistoryMessage] = Field(default_factory=list)
+    audienceRole: AiAudienceRole = "general"
 
 
 class AiTooltipRequest(BaseModel):

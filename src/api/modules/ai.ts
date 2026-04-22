@@ -4,6 +4,7 @@ import type { ApiEnvelope } from '@/api/types';
 export type AiPageKey = 'greenFinance' | 'carbon' | 'energy';
 export type AiHistoryRole = 'user' | 'assistant';
 export type AiResultKind = 'chat' | 'summary';
+export type AiAudienceRole = 'general' | 'government' | 'enterprise' | 'finance' | 'research' | 'student';
 export type AiStreamEventType = 'start' | 'tool_start' | 'tool_result' | 'delta' | 'done' | 'error';
 export type AiTooltipResultKind = 'tooltip';
 
@@ -26,11 +27,13 @@ export interface AiChatRequest {
   question: string;
   pageContext: AiPageContext;
   history: AiHistoryMessage[];
+  audienceRole?: AiAudienceRole;
 }
 
 export interface AiSummaryRequest {
   pageContext: AiPageContext;
   history: AiHistoryMessage[];
+  audienceRole?: AiAudienceRole;
 }
 
 export interface AiTooltipRequest {

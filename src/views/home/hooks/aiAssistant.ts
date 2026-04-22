@@ -4,6 +4,7 @@ import {
   postAiChatStream,
   postAiSummary,
   postAiSummaryStream,
+  type AiAudienceRole,
   type AiChatRequest,
   type AiHistoryMessage,
   type AiPageContext,
@@ -134,6 +135,7 @@ async function fallbackToNonStream(
   const response = kind === 'chat'
     ? await postAiChat(payload)
     : await postAiSummary({
+      audienceRole: payload.audienceRole,
       pageContext: payload.pageContext,
       history: payload.history,
     });
@@ -213,7 +215,11 @@ async function runStreamRequest(
     if (kind === 'chat') {
       await postAiChatStream(payload, handlers);
     } else {
-      await postAiSummaryStream({ pageContext: payload.pageContext, history: payload.history }, handlers);
+      await postAiSummaryStream({
+        audienceRole: payload.audienceRole,
+        pageContext: payload.pageContext,
+        history: payload.history,
+      }, handlers);
     }
 
     const finalMessage = messages.value.find((item) => item.id === messageId);
@@ -253,7 +259,7 @@ export function useAiAssistant() {
     };
   }
 
-  async function sendQuestion(question: string, page: AiPageKey, pageTitle: string) {
+  async function sendQuestion(question: string, page: AiPageKey, pageTitle: string, audienceRole: AiAudienceRole) {
     const content = question.trim();
     if (!content || loading.value) return null;
 
@@ -290,6 +296,7 @@ export function useAiAssistant() {
         'chat',
         {
           question: content,
+          audienceRole,
           pageContext,
           history,
         },
@@ -302,7 +309,7 @@ export function useAiAssistant() {
     }
   }
 
-  async function generateSummary(page: AiPageKey, pageTitle: string) {
+  async function generateSummary(page: AiPageKey, pageTitle: string, audienceRole: AiAudienceRole) {
     if (loading.value) return null;
 
     panelOpen.value = true;
@@ -327,6 +334,7 @@ export function useAiAssistant() {
         'summary',
         {
           question: '请总结当前页面',
+          audienceRole,
           pageContext,
           history,
         },

@@ -102,6 +102,26 @@
         <div v-if="errorText" class="ai-assistant__error">{{ errorText }}</div>
 
         <div class="ai-assistant__composer">
+          <div class="ai-assistant__audience-row">
+            <span class="ai-assistant__audience-label">回答对象</span>
+            <div class="ai-assistant__audience-control">
+              <el-select
+                v-model="selectedAudienceRole"
+                class="ai-assistant__audience-select"
+                popper-class="dark-popper ai-assistant__audience-popper"
+                placement="top-start"
+                :disabled="loading"
+              >
+                <el-option
+                  v-for="option in audienceRoleOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
+              </el-select>
+            </div>
+          </div>
+
           <textarea
             v-model="draft"
             class="ai-assistant__textarea"
@@ -130,7 +150,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import MarkdownIt from 'markdown-it';
 import { useAiAssistant, type AiAssistantMessage } from '../hooks/aiAssistant';
-import type { AiPageKey } from '@/api/modules/ai';
+import type { AiAudienceRole, AiPageKey } from '@/api/modules/ai';
 
 const props = defineProps<{
   activeTab: AiPageKey;
@@ -157,8 +177,18 @@ const toolNameMap: Record<string, string> = {
   get_macro_stats_data: '宏观描述性统计',
 };
 
+const audienceRoleOptions: Array<{ value: AiAudienceRole; label: string }> = [
+  { value: 'general', label: '通用视角' },
+  { value: 'government', label: '政府/监管部门' },
+  { value: 'enterprise', label: '企业管理者' },
+  { value: 'finance', label: '金融从业者' },
+  { value: 'research', label: '研究/分析人员' },
+  { value: 'student', label: '学生/公众' },
+];
+
 const draft = ref('');
 const isExpanded = ref(false);
+const selectedAudienceRole = ref<AiAudienceRole>('general');
 const messageListRef = ref<HTMLElement | null>(null);
 
 const {
@@ -210,7 +240,7 @@ async function handleAsk() {
   if (!question || loading.value) return;
   draft.value = '';
   try {
-    await sendQuestion(question, props.activeTab, currentTabLabel.value);
+    await sendQuestion(question, props.activeTab, currentTabLabel.value, selectedAudienceRole.value);
   } catch {
     // 错误态已经在共享 AI 状态中处理，这里不重复抛出提示。
   }
@@ -219,7 +249,7 @@ async function handleAsk() {
 async function handleSummary() {
   if (loading.value) return;
   try {
-    await generateSummary(props.activeTab, currentTabLabel.value);
+    await generateSummary(props.activeTab, currentTabLabel.value, selectedAudienceRole.value);
   } catch {
     // 错误态已经在共享 AI 状态中处理，这里不重复抛出提示。
   }
@@ -703,6 +733,79 @@ watch(panelOpen, (open) => {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.ai-assistant__audience-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.ai-assistant__audience-label {
+  color: rgba($tech-cyan, 0.88);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.ai-assistant__audience-control {
+  min-width: 0;
+}
+
+.ai-assistant__audience-select {
+  width: 100%;
+}
+
+:deep(.ai-assistant__audience-select .el-select__wrapper) {
+  min-height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(8, 20, 40, 0.94), rgba(7, 15, 32, 0.9));
+  border: 1px solid rgba($tech-cyan, 0.24);
+  box-shadow:
+    inset 0 0 18px rgba($tech-cyan, 0.06),
+    0 0 0 1px rgba(255, 255, 255, 0.02);
+  padding: 0 14px;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+:deep(.ai-assistant__audience-select .el-select__wrapper:hover),
+:deep(.ai-assistant__audience-select .el-select__wrapper.is-focused) {
+  background: linear-gradient(135deg, rgba(10, 26, 52, 0.98), rgba(8, 18, 38, 0.96));
+  border-color: rgba($tech-cyan, 0.54);
+  box-shadow:
+    0 0 18px rgba($tech-cyan, 0.16),
+    inset 0 0 22px rgba($tech-cyan, 0.08);
+}
+
+:deep(.ai-assistant__audience-select .el-select__selection) {
+  min-width: 0;
+}
+
+:deep(.ai-assistant__audience-select .el-select__selected-item),
+:deep(.ai-assistant__audience-select .el-select__placeholder) {
+  color: rgba(245, 248, 255, 0.94);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+:deep(.ai-assistant__audience-select .el-select__placeholder) {
+  color: rgba(220, 235, 255, 0.42);
+}
+
+:deep(.ai-assistant__audience-select .el-select__caret) {
+  color: rgba($tech-cyan, 0.82);
+  font-size: 14px;
+}
+
+:deep(.ai-assistant__audience-select.is-disabled .el-select__wrapper) {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
 .ai-assistant__textarea {
   display: block;
   box-sizing: border-box;
@@ -764,6 +867,10 @@ watch(panelOpen, (open) => {
   max-height: 180px;
 }
 
+.ai-assistant__panel.is-expanded :deep(.ai-assistant__audience-select .el-select__wrapper) {
+  min-height: 46px;
+}
+
 .ai-assistant__hint {
   color: rgba(220, 235, 255, 0.44);
   font-size: 13px;
@@ -805,5 +912,53 @@ watch(panelOpen, (open) => {
 .ai-panel-fade-leave-to {
   opacity: 0;
   transform: translateY(-8px) scale(0.985);
+}
+</style>
+
+<style lang="scss">
+.ai-assistant__audience-popper.el-select__popper,
+.ai-assistant__audience-popper.el-popper {
+  border: 1px solid rgba($tech-cyan, 0.32);
+  border-radius: 14px;
+  background: rgba(7, 15, 32, 0.97);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.46),
+    0 0 22px rgba($tech-cyan, 0.16),
+    inset 0 0 20px rgba($tech-cyan, 0.05);
+  backdrop-filter: blur(14px);
+
+  .el-popper__arrow::before {
+    background: rgba(7, 15, 32, 0.97);
+    border-color: rgba($tech-cyan, 0.32);
+  }
+
+  .el-select-dropdown {
+    background: transparent;
+  }
+
+  .el-select-dropdown__list {
+    padding: 8px;
+  }
+
+  .el-select-dropdown__item {
+    min-height: 42px;
+    line-height: 42px;
+    border-radius: 10px;
+    color: rgba(226, 232, 240, 0.84);
+    font-size: 15px;
+    font-weight: 600;
+    transition: background 0.18s ease, color 0.18s ease;
+
+    &.is-hovering,
+    &:hover {
+      background: rgba($tech-cyan, 0.12);
+      color: rgba(245, 248, 255, 0.98);
+    }
+
+    &.is-selected {
+      color: rgba($tech-cyan, 0.96);
+      background: linear-gradient(135deg, rgba($tech-cyan, 0.12), rgba($tech-green, 0.08));
+    }
+  }
 }
 </style>

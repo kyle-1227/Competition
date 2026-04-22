@@ -18,7 +18,8 @@ SYSTEM_PROMPT = """你是本项目的数据答疑助手和总结生成器。
 3. 只有在页面快照和可用工具查询后仍然不足时，才能明确说明“当前页面数据不足”。
 4. 回答默认使用中文，语气专业、清晰，偏向业务汇报与数据分析。
 5. 优先解释趋势、结构、异常点和业务含义，避免输出与当前页面无关的空泛内容。
-6. 如果工具返回结果与页面快照冲突，以工具返回结果为准。"""
+6. 如果工具返回结果与页面快照冲突，以工具返回结果为准。
+7. 如果提供了回答对象的职业或身份，要据此调整术语深度、分析重点和建议颗粒度。"""
 
 DEFAULT_CHAT_PROMPT_GUIDE = (
     "回答时优先基于当前页面上下文。若知识库提供了指标释义、单位、政策背景或模型结果卡片，"
@@ -73,6 +74,33 @@ ENERGY_PREDICTION_GUIDE = (
     "5. 情景区间只能表述为情景区间，不得表述为统计置信区间。"
 )
 
+AUDIENCE_ROLE_GUIDE: dict[str, dict[str, str]] = {
+    "general": {
+        "label": "通用视角",
+        "guide": "保持专业、清晰、易懂，兼顾关键结论、原因解释和业务含义。",
+    },
+    "government": {
+        "label": "政府/监管部门",
+        "guide": "优先突出区域对比、趋势研判、政策含义、风险点和可执行建议，适合汇报或决策参考。",
+    },
+    "enterprise": {
+        "label": "企业管理者",
+        "guide": "优先突出经营影响、行业机会、成本风险、资源投入方向和可落地动作，避免过度学术化。",
+    },
+    "finance": {
+        "label": "金融从业者",
+        "guide": "优先突出投融资机会、风险识别、行业和区域比较、客户沟通口径及金融业务含义。",
+    },
+    "research": {
+        "label": "研究/分析人员",
+        "guide": "优先说明指标口径、方法边界、可比性、假设条件和谨慎推断，避免把相关性写成因果。",
+    },
+    "student": {
+        "label": "学生/公众",
+        "guide": "先解释概念再给结论，尽量少用术语或同时解释术语，表达通俗易懂。",
+    },
+}
+
 
 def _compact_json(payload: object) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
@@ -118,14 +146,26 @@ def _build_page_specific_guide(page_context: AiPageContext) -> str:
     return ""
 
 
+def _build_audience_role_guide(audience_role: str | None) -> str:
+    profile = AUDIENCE_ROLE_GUIDE.get(str(audience_role or "general"), AUDIENCE_ROLE_GUIDE["general"])
+    return (
+        f"回答对象身份: {profile['label']}\n"
+        f"回答风格要求: {profile['guide']}\n"
+        "回答时请优先围绕该对象最关心的问题组织结论、解释和建议。"
+    )
+
+
 def build_chat_messages(payload: AiChatRequest) -> list[dict[str, str]]:
     context_text = _page_context_to_text(payload.pageContext)
     knowledge_text = get_page_knowledge_context(payload.pageContext, include_results=True, indicator_limit=6).strip()
     page_guide = _build_page_specific_guide(payload.pageContext).strip()
+    audience_guide = _build_audience_role_guide(getattr(payload, "audienceRole", "general")).strip()
     messages: list[dict[str, str]] = [
         {"role": "system", "content": f"{SYSTEM_PROMPT}\n\n补充规则:\n{CHAT_PROMPT_GUIDE}"},
         {"role": "user", "content": f"下面是当前页面的结构化上下文，请先理解再回答。\n{context_text}"},
     ]
+    if audience_guide:
+        messages.append({"role": "user", "content": f"当前回答对象要求：\n{audience_guide}"})
     if page_guide:
         messages.append({"role": "user", "content": f"当前页面专项规则：\n{page_guide}"})
     if knowledge_text:
@@ -145,6 +185,7 @@ def build_chat_messages(payload: AiChatRequest) -> list[dict[str, str]]:
             "role": "user",
             "content": (
                 "请结合上面的当前页面上下文回答这个问题。"
+                "回答时请匹配上面的回答对象身份与表达要求。"
                 "如果问题涉及关联分析、历史趋势、省际对比或城市对比，请优先使用当前页面已有字段或当前页工具补查后再判断是否数据不足。"
                 "如果上下文仍然不足，请明确指出不足，不要编造。\n"
                 f"问题：{payload.question.strip()}"
@@ -158,10 +199,13 @@ def build_summary_messages(payload: AiSummaryRequest) -> list[dict[str, str]]:
     context_text = _page_context_to_text(payload.pageContext)
     knowledge_text = get_page_knowledge_context(payload.pageContext, include_results=True, indicator_limit=8).strip()
     page_guide = _build_page_specific_guide(payload.pageContext).strip()
+    audience_guide = _build_audience_role_guide(getattr(payload, "audienceRole", "general")).strip()
     messages: list[dict[str, str]] = [
         {"role": "system", "content": f"{SYSTEM_PROMPT}\n\n补充规则:\n{SUMMARY_PROMPT_GUIDE}"},
         {"role": "user", "content": f"下面是当前页面的结构化上下文，请先理解再生成总结。\n{context_text}"},
     ]
+    if audience_guide:
+        messages.append({"role": "user", "content": f"当前回答对象要求：\n{audience_guide}"})
     if page_guide:
         messages.append({"role": "user", "content": f"当前页面专项规则：\n{page_guide}"})
     if knowledge_text:
@@ -181,6 +225,7 @@ def build_summary_messages(payload: AiSummaryRequest) -> list[dict[str, str]]:
             "role": "user",
             "content": (
                 "请基于当前页面上下文生成 1 到 3 段中文总结。"
+                "总结要匹配上面的回答对象身份与表达要求。"
                 "总结应突出核心结论、结构特征和业务含义；"
                 "如果涉及绿色金融与经济发展、GDP、碳排放、历史趋势或对比关系，请优先使用当前页面指标或工具查询结果组织分析；"
                 "如果数据不足，请明确说明。"
