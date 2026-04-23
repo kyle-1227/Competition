@@ -13,7 +13,10 @@ if hasattr(sys.stderr, "reconfigure"):
 
 # ==================== 【一键切换层级】 ====================
 # 可选：province(省级) / city(地级市)
-RUN_LEVEL = "province"
+# 允许通过环境变量临时切换层级，避免手改配置文件。
+RUN_LEVEL = (os.environ.get("GF_RUN_LEVEL") or "province").strip().lower()
+if RUN_LEVEL not in {"province", "city"}:
+    raise ValueError(f"无效的 GF_RUN_LEVEL: {RUN_LEVEL}")
 
 # ==================== 一、全局路径配置（自动分文件夹，防覆盖） ====================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

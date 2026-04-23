@@ -308,6 +308,7 @@ def _energy_result(level: str, province: str, city: str | None = None) -> dict[s
             target="carbonIntensity",
             province=province,
             city=city,
+            source="combo",
         )
     except ValueError as exc:
         raise AiToolError(str(exc)) from exc
@@ -318,6 +319,8 @@ def _energy_result(level: str, province: str, city: str | None = None) -> dict[s
 
     return {
         "level": payload.get("level"),
+        "source": payload.get("source"),
+        "sourceLabel": payload.get("sourceLabel"),
         "province": payload.get("province"),
         "city": payload.get("city"),
         "entityLabel": payload.get("entityLabel"),
@@ -329,11 +332,14 @@ def _energy_result(level: str, province: str, city: str | None = None) -> dict[s
         },
         "scenarios": payload.get("scenarios") or [],
         "scenarioBand": payload.get("scenarioBand") or [],
-        "coefficients": payload.get("coefficients") or {},
         "sampleMeta": payload.get("sampleMeta") or {},
         "sourceNotice": payload.get("sourceNotice"),
-        "weightType": payload.get("weightType"),
         "availableScenarios": payload.get("availableScenarios") or [],
+        "supportsCustom": payload.get("supportsCustom") or False,
+        "customDrivers": payload.get("customDrivers") or [],
+        "stirpatElasticities": payload.get("stirpatElasticities") or {},
+        "customBasis": payload.get("customBasis"),
+        "customNotice": payload.get("customNotice"),
     }
 
 

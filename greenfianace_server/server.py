@@ -188,9 +188,10 @@ def get_predict_data(
     target: str = "carbonIntensity",
     province: Optional[str] = None,
     city: Optional[str] = None,
+    source: str = "combo",
 ):
     try:
-        payload = get_predict_data_payload(level=level, target=target, province=province, city=city)
+        payload = get_predict_data_payload(level=level, target=target, province=province, city=city, source=source)
         return {"code": 200, "msg": "success", "data": payload}
     except ValueError as exc:
         return {"code": 400, "msg": str(exc), "data": None}

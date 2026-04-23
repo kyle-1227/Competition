@@ -2,19 +2,16 @@ import http from '@/api/http';
 
 export type PredictLevel = 'province' | 'city';
 export type PredictTargetKey = 'carbonIntensity';
-export type PredictScenarioKey = 'conservative' | 'baseline' | 'optimistic';
+export type PredictScenarioKey = 'baseline' | 'lowCarbon' | 'optimized';
+export type PredictSourceKey = 'combo' | 'stirpat' | 'systemDynamics';
 export type PredictViewMode = PredictScenarioKey | 'custom';
-
-export interface CarbonPredictCoefficients {
-  core: number;
-  control: number;
-  control_ln_pop: number;
-  policy: number;
-  spatial: number;
-  rho: number;
-  mediator: number;
-  raw?: Record<string, number>;
-}
+export type PredictCustomDriverKey =
+  | 'population'
+  | 'affluence'
+  | 'technology'
+  | 'industry'
+  | 'energyStructure'
+  | 'greenFinance';
 
 export interface CarbonHistoryPoint {
   year: number;
@@ -61,26 +58,52 @@ export interface PredictSampleMeta {
   boundaryNotice: string;
 }
 
+export interface PredictCustomDriver {
+  key: PredictCustomDriverKey;
+  label: string;
+  hint: string;
+  coefficient: number;
+  featureLabel?: string | null;
+  active: boolean;
+}
+
+export interface CarbonPredictStirpatElasticities {
+  population: number;
+  affluence: number;
+  technology: number;
+  industry: number;
+  energyStructure: number;
+  greenFinance: number;
+  raw?: Record<string, number>;
+}
+
 export interface CarbonPredictDataPayload {
   level: PredictLevel;
   target: PredictTargetKey;
+  source: PredictSourceKey;
+  sourceLabel: string;
   entityLabel: string;
   province: string;
   city?: string | null;
-  coefficients: CarbonPredictCoefficients;
   historySeries: CarbonHistoryPoint[];
   compareSeries: PredictCompareSeries;
   scenarios: PredictScenarioSeries[];
   scenarioBand: PredictScenarioBandPoint[];
   sampleMeta: PredictSampleMeta;
   sourceNotice: string;
-  weightType: string;
   availableScenarios: PredictScenarioKey[];
+  supportsCustom: boolean;
+  customDrivers: PredictCustomDriver[];
+  stirpatElasticities?: CarbonPredictStirpatElasticities | null;
+  customBasis?: 'stirpat' | null;
+  customNotice?: string | null;
 }
 
 export interface CarbonPredictMetaPayload {
   levels: Array<{ key: PredictLevel; label: string }>;
   targets: Array<{ key: PredictTargetKey; label: string }>;
+  sources: Array<{ key: PredictSourceKey; label: string }>;
+  defaultSource: PredictSourceKey;
   scenarios: Array<{ key: PredictScenarioKey; label: string; sourceLabel: string }>;
   provinces: string[];
   citiesByProvince: Record<string, string[]>;
@@ -93,6 +116,7 @@ export interface CarbonPredictMetaPayload {
 
 export interface CarbonPredictQuery {
   level: PredictLevel;
+  source?: PredictSourceKey;
   target?: PredictTargetKey;
   province?: string;
   city?: string;
@@ -111,6 +135,7 @@ export const getCarbonPredictData = (query: CarbonPredictQuery, signal?: AbortSi
     'api/dashboard/predict-data',
     {
       ...query,
+      source: query.source ?? 'combo',
       target: query.target ?? 'carbonIntensity',
     },
     signal ? { signal } : undefined,

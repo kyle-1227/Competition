@@ -16,7 +16,7 @@
 - 碳排放+GDP底色页内置 `GDP 和碳排放组合图`
 - 宏观经济不再作为独立 Tab，而是并入碳排放+GDP底色页
 - 绿色金融页和碳排放+GDP底色页当前都只保留 `全国省级 -> 省内市级` 两级下钻
-- 碳排放强度预测页使用 `BizCarbonPredictionV3.vue`，预测值在前端采用展示层正向化与自适应缩放，不改变后端原始模型结果
+- 碳排放强度预测页使用 `BizCarbonPredictionV3.vue`，前端统一展示 `组合预测` 结果；展示层仍对碳排放强度做正向化，但不再对预测段做自适应缩放
 
 ## 技术栈
 
@@ -191,6 +191,48 @@ uvicorn server:app --reload --host 0.0.0.0 --port 8000
 http://127.0.0.1:8000/api
 ```
 
+### 3.1 运行新预测模型所需文件
+
+新预测链路已切换为 `greenfianace_server/analysis_models/prediction_model.py`，默认实现为：
+
+- `STIRPAT 面板预测`
+- `系统动力学情景仿真`
+- `组合预测`
+- `Logit 风险预警`
+
+旧版 `SDM + LSTM` 预测实现没有删除，已备份为：
+
+- `archive/repo_cleanup_2026-04-23/recommended-archive/greenfianace_server/analysis_models/prediction_model_legacy.py`
+- legacy 清理归档说明见：`archive/repo_cleanup_2026-04-23/README.md`
+
+说明：当前主路径已收敛为“预处理 + 新预测模型 + API/前端展示”链路。旧的基准回归、DID、中介效应、异质性、稳健性和空间模型模块已移入 `archive/repo_cleanup_2026-04-23/recommended-archive/greenfianace_server/analysis_models/`，不再作为默认运行入口的一部分。
+
+运行前至少需要以下文件存在：
+
+- 原始输入文件
+  - `greenfianace_server/data/model_inputs_v2/省级绿色金融指数+碳排放+能源+DID数据(剔除西藏）.xlsx`
+  - `greenfianace_server/data/model_inputs_v2/地级市绿色金融+碳排放+能源+DID数据（剔除西藏）.xlsx`
+  - `greenfianace_server/data/model_inputs_v2/中国省级行政区经纬度表.xlsx`
+- 预处理产物
+  - `greenfianace_server/empirical_results/province/中国绿色金融-能源平衡面板数据集(最终版).csv`
+  - `greenfianace_server/empirical_results/city/中国绿色金融-能源平衡面板数据集(最终版).csv`
+
+如果预处理 CSV 不存在，建议运行顺序是：
+
+1. 先执行 `analysis_models/main.py` 的预处理步骤生成最终清洗数据集。
+2. 再运行新的预测步骤生成 `prediction_results/` 下的三类情景文件、评估文件和 STIRPAT 结果。
+3. 最后启动 FastAPI 和前端页面读取这些离线产物。
+
+切换运行层级时不需要手改 `config.py`，可以直接通过环境变量控制：
+
+```powershell
+$env:GF_RUN_LEVEL='province'
+python greenfianace_server/analysis_models/prediction_model.py
+
+$env:GF_RUN_LEVEL='city'
+python greenfianace_server/analysis_models/prediction_model.py
+```
+
 ### 4. 启动前端
 
 回到项目根目录后执行：
@@ -255,10 +297,12 @@ VITE_APP_DOMAIN=/api
 ### 3. 碳排放强度预测
 
 - 首页 `碳排放强度预测` Tab 当前挂载 `src/views/home/BizCarbonPredictionV3.vue`
-- 支持省级预测、市级预测、区域选择、保守/基准/乐观/自定义情景
+- 支持省级预测、市级预测、区域选择，前端固定展示 `组合预测`
+- 后端官方情景键仍为 `baseline / lowCarbon / optimized`，前端展示为 `保守 / 基准 / 乐观 / 自定义`
 - 历史观测与 2025-2027 年预测结果在同一张折线图中展示
-- 前端展示层将碳排放强度主指标正向化，并对预测段做自适应缩放以衔接历史折线
-- 模型原始值、系数、权重、贡献分解不被前端展示层改写，AI 上下文中保留 `raw*` 字段用于追溯
+- 前端展示层将碳排放强度主指标正向化，但预测段直接展示当前模型输出，不再做自适应缩放
+- 页面保留统一的组合预测展示，不恢复来源切换；主交互改为 `保守 / 基准 / 乐观 / 自定义` 四态切换
+- AI 上下文中保留 `raw*` 字段用于追溯，并固定使用组合预测口径
 - Tooltip 和右侧结论卡使用同一展示口径，避免同一指标出现正负或尺度不一致
 
 ### 4. AI 助手
@@ -438,6 +482,15 @@ DeepSeek 请求失败: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in viola
 - 碳排放+GDP底色页市级 GDP / 碳排放 / 能源消费联动数据来自 `city_carbon_gdp`
 - 碳排放+GDP底色页省级能源消费明细来自 `province_energy_consumption`
 - 预测页显示层正向化只影响用户可见的碳排放强度展示值，不改变后端预测接口和模型原始结果
+
+## 预测页补充说明（2026-04）
+
+- 预测页当前仍然只展示 `组合预测`，不恢复 `STIRPAT / 系统动力学` 来源切换。
+- 省级和市级统一改成 `保守 / 基准 / 乐观 / 自定义` 四态切换。
+- `自定义` 固定基于 `基准` 官方曲线，统一使用 6 个驱动项：`人口 / 富裕度 / 技术或能耗 / 产业结构 / 能源结构 / 绿色金融`。
+- 这套调节不是后端重新训练或正式重算，而是基于 `STIRPAT` 弹性系数，对当前 `组合预测` 做前端近似推演。
+- `自定义` 模式下会同时展示 `基准官方预测` 与 `自定义调节曲线`；对比线和“官方情景区间”保持官方组合预测结果不变。
+- 页面展示层仍然保持碳排放强度的绝对值口径，参数调节计算则基于原始预测值完成，再进入展示层。
 
 ## License
 

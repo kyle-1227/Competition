@@ -1,5 +1,4 @@
 import type { PredictLevel } from '@/api/modules/dashboard-carbon-predict';
-import type { PredictContributionBreakdown } from './useCarbonPredictV2';
 
 type ExportCell = string | number | null | undefined;
 
@@ -40,17 +39,16 @@ export interface PredictExportContext {
   compareLabel: string;
   target: string;
   selectedMode: string;
-  sourceMode: string;
-  weightType: string;
+  selectedModeLabel: string;
+  methodLabel: string;
   historySeries: PredictExportSeriesPoint[];
   scenarios: PredictExportScenarioSeries[];
   selectedModeSeries: PredictExportScenarioSeries;
+  officialSelectedModeSeries?: PredictExportScenarioSeries | null;
   compareHistorySeries?: PredictExportSeriesPoint[];
   compareSelectedModeSeries?: PredictExportSeriesPoint[];
   scenarioBand: PredictExportBandPoint[];
   summaryRows: PredictExportSummaryRow[];
-  contributionBreakdown?: PredictContributionBreakdown | null;
-  controlSnapshot?: Record<string, number> | null;
   exportTime?: Date;
 }
 
@@ -63,8 +61,8 @@ export interface PredictExportRow {
   compareLabel: string;
   target: string;
   selectedMode: string;
-  sourceMode: string;
-  weightType: string;
+  selectedModeLabel: string;
+  methodLabel: string;
   section: string;
   scenarioKey: string;
   seriesLabel: string;
@@ -84,8 +82,8 @@ const EXPORT_COLUMNS: Array<keyof PredictExportRow> = [
   'compareLabel',
   'target',
   'selectedMode',
-  'sourceMode',
-  'weightType',
+  'selectedModeLabel',
+  'methodLabel',
   'section',
   'scenarioKey',
   'seriesLabel',
@@ -137,7 +135,10 @@ function downloadCsv(filename: string, rows: PredictExportRow[]) {
   URL.revokeObjectURL(href);
 }
 
-function createBaseRow(context: PredictExportContext, exportTime: string): Omit<PredictExportRow, 'section' | 'scenarioKey' | 'seriesLabel' | 'year' | 'displayValue' | 'rawValue' | 'unit' | 'note'> {
+function createBaseRow(
+  context: PredictExportContext,
+  exportTime: string,
+): Omit<PredictExportRow, 'section' | 'scenarioKey' | 'seriesLabel' | 'year' | 'displayValue' | 'rawValue' | 'unit' | 'note'> {
   return {
     exportTime,
     level: context.level,
@@ -147,8 +148,8 @@ function createBaseRow(context: PredictExportContext, exportTime: string): Omit<
     compareLabel: context.compareLabel,
     target: context.target,
     selectedMode: context.selectedMode,
-    sourceMode: context.sourceMode,
-    weightType: context.weightType,
+    selectedModeLabel: context.selectedModeLabel,
+    methodLabel: context.methodLabel,
   };
 }
 
@@ -197,61 +198,41 @@ function buildBandRows(context: PredictExportContext, exportTime: string): Predi
     {
       ...base,
       section: 'scenario_band',
-      scenarioKey: 'band',
-      seriesLabel: '情景区间下界',
+      scenarioKey: 'official_band',
+      seriesLabel: '官方情景区间下界',
       year: item.year,
       displayValue: item.displayMin,
       rawValue: item.rawMin,
       unit: '吨/万元',
-      note: '情景区间，不是统计置信区间',
+      note: '官方情景区间，不是统计置信区间。',
     },
     {
       ...base,
       section: 'scenario_band',
-      scenarioKey: 'band',
-      seriesLabel: '情景区间上界',
+      scenarioKey: 'official_band',
+      seriesLabel: '官方情景区间上界',
       year: item.year,
       displayValue: item.displayMax,
       rawValue: item.rawMax,
       unit: '吨/万元',
-      note: '情景区间，不是统计置信区间',
+      note: '官方情景区间，不是统计置信区间。',
     },
   ]));
-}
-
-function buildContributionRows(context: PredictExportContext, exportTime: string): PredictExportRow[] {
-  if (!context.contributionBreakdown) return [];
-  const base = createBaseRow(context, exportTime);
-  const rows: Array<[string, number]> = [
-    ['baselineTrend', context.contributionBreakdown.baselineTrend],
-    ['core', context.contributionBreakdown.core],
-    ['control', context.contributionBreakdown.control],
-    ['policy', context.contributionBreakdown.policy],
-    ['spatial', context.contributionBreakdown.spatial],
-    ['mediator', context.contributionBreakdown.mediator],
-  ];
-  const note = context.controlSnapshot
-    ? Object.entries(context.controlSnapshot).map(([key, value]) => `${key}=${Math.round(value * 100)}%`).join('; ')
-    : '';
-
-  return rows.map(([label, value]) => ({
-    ...base,
-    section: 'custom_contribution',
-    scenarioKey: 'custom',
-    seriesLabel: label,
-    year: '',
-    displayValue: value,
-    rawValue: value,
-    unit: '同图表展示口径',
-    note,
-  }));
 }
 
 export function buildPredictExportRows(context: PredictExportContext): PredictExportRow[] {
   const timestamp = formatExportTimestamp(context.exportTime ?? new Date());
   const rows: PredictExportRow[] = [
     ...buildSummaryRows(context, timestamp.display),
-    ...buildPointRows(context, timestamp.display, 'entity_history', 'history', `${context.entityLabel}·历史观测`, context.historySeries, '吨/万元'),
+    ...buildPointRows(
+      context,
+      timestamp.display,
+      'entity_history',
+      'history',
+      `${context.entityLabel}-历史观测`,
+      context.historySeries,
+      '吨/万元',
+    ),
     ...context.scenarios.flatMap((scenario) =>
       buildPointRows(context, timestamp.display, 'entity_scenario', scenario.key, scenario.label, scenario.points, '吨/万元'),
     ),
@@ -264,14 +245,41 @@ export function buildPredictExportRows(context: PredictExportContext): PredictEx
       context.selectedModeSeries.points,
       '吨/万元',
     ),
+    ...(context.officialSelectedModeSeries?.points.length
+      ? buildPointRows(
+          context,
+          timestamp.display,
+          'entity_selected_mode_official',
+          context.officialSelectedModeSeries.key,
+          context.officialSelectedModeSeries.label,
+          context.officialSelectedModeSeries.points,
+          '吨/万元',
+          '官方组合预测值，未叠加自定义调节。',
+        )
+      : []),
     ...(context.compareHistorySeries?.length
-      ? buildPointRows(context, timestamp.display, 'compare_history', 'history', `${context.compareLabel}·历史观测`, context.compareHistorySeries, '吨/万元')
+      ? buildPointRows(
+          context,
+          timestamp.display,
+          'compare_history',
+          'history',
+          `${context.compareLabel}-历史观测`,
+          context.compareHistorySeries,
+          '吨/万元',
+        )
       : []),
     ...(context.compareSelectedModeSeries?.length
-      ? buildPointRows(context, timestamp.display, 'compare_selected_mode', context.selectedModeSeries.key, `${context.compareLabel}·当前模式`, context.compareSelectedModeSeries, '吨/万元')
+      ? buildPointRows(
+          context,
+          timestamp.display,
+          'compare_selected_mode',
+          context.selectedModeSeries.key,
+          `${context.compareLabel}-当前展示`,
+          context.compareSelectedModeSeries,
+          '吨/万元',
+        )
       : []),
     ...buildBandRows(context, timestamp.display),
-    ...buildContributionRows(context, timestamp.display),
   ];
 
   return rows;
@@ -283,7 +291,7 @@ export function buildPredictExportFilename(context: PredictExportContext) {
   const region = context.level === 'city'
     ? `${context.province}-${context.city ?? context.entityLabel}`
     : context.province;
-  return `预测结果_${level}_${sanitizeFilenamePart(region)}_${sanitizeFilenamePart(context.selectedMode)}_${timestamp.fileStamp}.csv`;
+  return `预测结果_${level}_${sanitizeFilenamePart(region)}_${sanitizeFilenamePart(context.selectedModeLabel)}_${timestamp.fileStamp}.csv`;
 }
 
 export function exportPredictCsv(context: PredictExportContext) {

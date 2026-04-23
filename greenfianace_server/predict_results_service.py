@@ -8,31 +8,87 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent
 EMPIRICAL_RESULTS_ROOT = ROOT / "empirical_results"
 
+PROVINCE_FIELD = "省份"
+CITY_FIELD = "地级市"
+YEAR_FIELD = "年份"
+NATIONWIDE = "全国"
+PANEL_FILE = "中国绿色金融-能源平衡面板数据集(最终版).csv"
+
 TARGETS: dict[str, dict[str, str]] = {
     "carbonIntensity": {
         "label": "碳排放强度",
-        "scenarioFile": "碳排放强度_三情景预测结果.csv",
         "historyFieldProvince": "碳排放强度",
         "historyFieldCity": "碳排放强度",
     }
 }
 
 SCENARIO_LABELS = {
-    "conservative": "保守",
     "baseline": "基准",
-    "optimistic": "乐观",
+    "lowCarbon": "低碳",
+    "optimized": "优化",
 }
 
 SCENARIO_NAME_MAP = {
-    "保守情景": "conservative",
     "基准情景": "baseline",
-    "乐观情景": "optimistic",
+    "低碳情景": "lowCarbon",
+    "优化情景": "optimized",
 }
 
-WEIGHT_FILE_PRIORITY = [
-    ("nested", "嵌套权重"),
-    ("economic", "经济权重"),
-    ("geographic", "地理权重"),
+SOURCES: dict[str, dict[str, str]] = {
+    "combo": {
+        "label": "组合预测",
+        "scenarioFile": "组合预测结果.csv",
+        "valueField": "组合预测值",
+    },
+    "stirpat": {
+        "label": "STIRPAT",
+        "scenarioFile": "STIRPAT三情景预测结果.csv",
+        "valueField": "预测值",
+    },
+    "systemDynamics": {
+        "label": "系统动力学",
+        "scenarioFile": "系统动力学情景仿真结果.csv",
+        "valueFieldTemplate": "预测_{target_label}",
+    },
+}
+
+CUSTOM_DRIVER_CONFIG: list[dict[str, Any]] = [
+    {
+        "key": "population",
+        "label": "人口",
+        "hint": "调节人口规模变化对未来碳排放强度的弹性影响。",
+        "aliases": ["ln_年末常住人口", "ln_年末常住人口数"],
+    },
+    {
+        "key": "affluence",
+        "label": "富裕度",
+        "hint": "调节人均 GDP 变化对未来碳排放强度的弹性影响。",
+        "aliases": ["ln_人均地区生产总值"],
+    },
+    {
+        "key": "technology",
+        "label": "技术或能耗",
+        "hint": "优先使用人均能源消耗弹性，反映技术进步或能耗变化。",
+        "aliases": ["ln_人均能源消耗"],
+    },
+    {
+        "key": "industry",
+        "label": "产业结构",
+        "hint": "使用产业结构相关弹性，模拟产业升级或回摆的影响。",
+        "aliases": ["ln_第二产业增加值占GDP比重", "ln_产业结构高级化"],
+    },
+    {
+        "key": "energyStructure",
+        "label": "能源结构",
+        "hint": "优先使用天然气占比；若缺失则退化为能源强度相关弹性。",
+        "aliases": ["ln_天然气占比", "ln_能源消费强度", "ln_能源强度"],
+    },
+    {
+        "key": "greenFinance",
+        "label": "绿色金融",
+        "hint": "模拟绿色金融投入变化对未来碳排放强度的影响。",
+        "aliases": ["ln_绿色金融综合指数", "ln_gfi_std"],
+    },
 ]
 
 FUTURE_YEARS = (2025, 2026, 2027)
@@ -45,7 +101,7 @@ def _safe_float(value: Any) -> float | None:
         result = float(value)
     except (TypeError, ValueError):
         return None
-    if result != result:  # NaN
+    if result != result:
         return None
     return result
 
@@ -71,14 +127,13 @@ def _read_csv_rows(path: Path) -> list[dict[str, str]]:
 
     with path.open("r", encoding="utf-8-sig", newline="") as csv_file:
         reader = csv.DictReader(csv_file)
-        normalized: list[dict[str, str]] = []
+        rows: list[dict[str, str]] = []
         for row in reader:
-            clean_row: dict[str, str] = {}
+            normalized: dict[str, str] = {}
             for key, value in row.items():
-                normalized_key = (key or "").strip()
-                clean_row[normalized_key] = (value or "").strip()
-            normalized.append(clean_row)
-        return normalized
+                normalized[(key or "").strip()] = (value or "").strip()
+            rows.append(normalized)
+        return rows
 
 
 def _level_root(level: str) -> Path:
@@ -87,67 +142,31 @@ def _level_root(level: str) -> Path:
 
 @lru_cache(maxsize=2)
 def _load_panel_rows(level: str) -> list[dict[str, str]]:
-    panel_path = _level_root(level) / "中国绿色金融-能源平衡面板数据集(最终版).csv"
-    return _read_csv_rows(panel_path)
+    return _read_csv_rows(_level_root(level) / PANEL_FILE)
 
 
-@lru_cache(maxsize=4)
-def _load_scenario_rows(level: str, target: str) -> list[dict[str, str]]:
-    target_config = TARGETS.get(target)
-    if not target_config:
-        return []
-    scenario_path = _level_root(level) / "prediction_results" / "scenario" / target_config["scenarioFile"]
+def _source_value_field(source: str, target: str) -> str:
+    source_config = SOURCES[source]
+    if "valueField" in source_config:
+        return source_config["valueField"]
+    return source_config["valueFieldTemplate"].format(target_label=TARGETS[target]["label"])
+
+
+@lru_cache(maxsize=12)
+def _load_source_rows(level: str, source: str, target: str) -> list[dict[str, str]]:
+    scenario_file = SOURCES[source]["scenarioFile"]
+    scenario_path = _level_root(level) / "prediction_results" / "scenario" / scenario_file
     return _read_csv_rows(scenario_path)
 
 
-def _coefficient_path(level: str, target: str, weight_label: str) -> Path:
-    target_label = TARGETS[target]["label"]
-    return _level_root(level) / "spatial" / "主回归结果" / f"{target_label}_{weight_label}_回归系数.csv"
-
-
-@lru_cache(maxsize=6)
-def _load_coefficients(level: str, target: str) -> tuple[dict[str, float], str]:
-    for weight_key, weight_label in WEIGHT_FILE_PRIORITY:
-        rows = _read_csv_rows(_coefficient_path(level, target, weight_label))
-        if not rows:
-            continue
-
-        raw: dict[str, float] = {}
-        for row in rows:
-            name = row.get("") or row.get("Unnamed: 0") or row.get("index") or row.get("参数") or ""
-            value = _safe_float(row.get("parameter") or row.get("value") or row.get("系数"))
-            if name and value is not None:
-                raw[name] = float(value)
-        if raw:
-            return raw, weight_label
-
-    return {}, WEIGHT_FILE_PRIORITY[0][1]
-
-
-def _pick_coefficient(raw: dict[str, float], *names: str) -> float:
-    for name in names:
-        if name in raw:
-            return float(raw[name])
-    return 0.0
-
-
-def _build_frontend_coefficients(level: str, target: str) -> tuple[dict[str, Any], str]:
-    raw, weight_type = _load_coefficients(level, target)
-    coefficients = {
-        "core": _pick_coefficient(raw, "gfi_std"),
-        "control": _pick_coefficient(raw, "人均能源消耗", "能源强度", "能源消费强度"),
-        "control_ln_pop": _pick_coefficient(raw, "ln_pop", "年末常住人口数"),
-        "policy": _pick_coefficient(raw, "DID", "did", "绿色金融试点DID", "碳排放交易DID"),
-        "spatial": _pick_coefficient(raw, "W_gfi_std"),
-        "rho": _pick_coefficient(raw, "W_碳排放强度"),
-        "mediator": _pick_coefficient(raw, "indus_2", "第二产业增加值占GDP比重", "能源利用效率"),
-        "raw": raw,
-    }
-    return coefficients, weight_type
+@lru_cache(maxsize=2)
+def _load_stirpat_rows(level: str) -> list[dict[str, str]]:
+    stirpat_path = _level_root(level) / "prediction_results" / "stirpat" / "STIRPAT面板固定效应结果.csv"
+    return _read_csv_rows(stirpat_path)
 
 
 def _point_from_province_row(row: dict[str, str], target: str) -> dict[str, Any] | None:
-    year = _safe_int(row.get("年份"))
+    year = _safe_int(row.get(YEAR_FIELD))
     value = _safe_float(row.get(TARGETS[target]["historyFieldProvince"]))
     if year is None or value is None:
         return None
@@ -156,13 +175,13 @@ def _point_from_province_row(row: dict[str, str], target: str) -> dict[str, Any]
         "value": _compact_number(value),
         "gfi_std": _compact_number(_safe_float(row.get("gfi_std"))),
         "ln_pop": _compact_number(_safe_float(row.get("ln_pop"))),
-        "energy_intensity": _compact_number(_safe_float(row.get("能源强度"))),
+        "energy_intensity": _compact_number(_safe_float(row.get("能源强度") or row.get("能源消费强度"))),
         "energy_per_capita": _compact_number(_safe_float(row.get("人均能源消耗"))),
     }
 
 
 def _point_from_city_row(row: dict[str, str], target: str) -> dict[str, Any] | None:
-    year = _safe_int(row.get("年份"))
+    year = _safe_int(row.get(YEAR_FIELD))
     value = _safe_float(row.get(TARGETS[target]["historyFieldCity"]))
     if year is None or value is None:
         return None
@@ -170,21 +189,22 @@ def _point_from_city_row(row: dict[str, str], target: str) -> dict[str, Any] | N
         "year": year,
         "value": _compact_number(value),
         "gfi_std": _compact_number(_safe_float(row.get("gfi_std"))),
-        "population": _compact_number(_safe_float(row.get("年末常住人口数")), 2),
-        "energy_intensity": _compact_number(_safe_float(row.get("能源消费强度"))),
+        "population": _compact_number(_safe_float(row.get("年末常住人口数") or row.get("年末常住人口")), 2),
+        "energy_intensity": _compact_number(_safe_float(row.get("能源消费强度") or row.get("能源强度"))),
         "energy_per_capita": _compact_number(_safe_float(row.get("人均能源消耗"))),
         "gdp_growth": _compact_number(_safe_float(row.get("GDP增速")), 2),
         "per_capita_gdp": _compact_number(_safe_float(row.get("人均地区生产总值")), 2),
     }
 
 
-def _average_points(rows: list[dict[str, str]], target: str, value_builder: str) -> list[dict[str, Any]]:
+def _average_points(rows: list[dict[str, str]], value_field: str) -> list[dict[str, Any]]:
     buckets: dict[int, dict[str, list[float]]] = {}
     for row in rows:
-        year = _safe_int(row.get("年份"))
-        value = _safe_float(row.get(TARGETS[target][value_builder]))
+        year = _safe_int(row.get(YEAR_FIELD))
+        value = _safe_float(row.get(value_field))
         if year is None or value is None:
             continue
+
         bucket = buckets.setdefault(
             year,
             {
@@ -196,6 +216,7 @@ def _average_points(rows: list[dict[str, str]], target: str, value_builder: str)
             },
         )
         bucket["value"].append(value)
+
         gfi = _safe_float(row.get("gfi_std"))
         if gfi is not None:
             bucket["gfi_std"].append(gfi)
@@ -228,10 +249,10 @@ def _average_points(rows: list[dict[str, str]], target: str, value_builder: str)
     return points
 
 
-def _average_simple_series(rows: list[dict[str, str]], year_field: str, value_field: str) -> list[dict[str, Any]]:
+def _average_simple_series(rows: list[dict[str, str]], value_field: str) -> list[dict[str, Any]]:
     buckets: dict[int, list[float]] = {}
     for row in rows:
-        year = _safe_int(row.get(year_field))
+        year = _safe_int(row.get(YEAR_FIELD))
         value = _safe_float(row.get(value_field))
         if year is None or value is None:
             continue
@@ -243,7 +264,7 @@ def _average_simple_series(rows: list[dict[str, str]], year_field: str, value_fi
             "value": _compact_number(sum(values) / len(values)),
         }
         for year, values in sorted(buckets.items())
-        if values
+        if values and year in FUTURE_YEARS
     ]
 
 
@@ -251,11 +272,51 @@ def _average_simple_series(rows: list[dict[str, str]], year_field: str, value_fi
 def _city_to_province_map() -> dict[str, str]:
     mapping: dict[str, str] = {}
     for row in _load_panel_rows("city"):
-        city = row.get("地级市", "")
-        province = row.get("省份", "")
+        city = row.get(CITY_FIELD, "")
+        province = row.get(PROVINCE_FIELD, "")
         if city and province:
             mapping.setdefault(city, province)
     return mapping
+
+
+@lru_cache(maxsize=2)
+def _load_stirpat_coefficients(level: str) -> dict[str, float]:
+    raw: dict[str, float] = {}
+    for row in _load_stirpat_rows(level):
+        name = (row.get("变量") or "").strip()
+        value = _safe_float(row.get("系数"))
+        if name and value is not None:
+            raw[name] = float(value)
+    return raw
+
+
+def _pick_alias(raw: dict[str, float], aliases: list[str]) -> tuple[float, str | None]:
+    for alias in aliases:
+        if alias in raw:
+            return float(raw[alias]), alias
+    return 0.0, None
+
+
+def _build_stirpat_custom_meta(level: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    raw = _load_stirpat_coefficients(level)
+    drivers: list[dict[str, Any]] = []
+    elasticities: dict[str, Any] = {"raw": raw}
+
+    for item in CUSTOM_DRIVER_CONFIG:
+        coefficient, matched = _pick_alias(raw, item["aliases"])
+        elasticities[item["key"]] = coefficient
+        drivers.append(
+            {
+                "key": item["key"],
+                "label": item["label"],
+                "hint": item["hint"],
+                "coefficient": _compact_number(coefficient, 6) or 0,
+                "featureLabel": matched.replace("ln_", "") if matched else None,
+                "active": matched is not None,
+            }
+        )
+
+    return drivers, elasticities
 
 
 @lru_cache(maxsize=1)
@@ -263,11 +324,11 @@ def _predict_meta_cache() -> dict[str, Any]:
     province_rows = _load_panel_rows("province")
     city_rows = _load_panel_rows("city")
 
-    provinces = sorted({row.get("省份", "") for row in province_rows if row.get("省份")}, key=lambda value: value)
+    provinces = sorted({row.get(PROVINCE_FIELD, "") for row in province_rows if row.get(PROVINCE_FIELD)})
     cities_by_province: dict[str, list[str]] = {}
     for row in city_rows:
-        province = row.get("省份", "")
-        city = row.get("地级市", "")
+        province = row.get(PROVINCE_FIELD, "")
+        city = row.get(CITY_FIELD, "")
         if not province or not city:
             continue
         cities_by_province.setdefault(province, [])
@@ -277,8 +338,8 @@ def _predict_meta_cache() -> dict[str, Any]:
     for province in cities_by_province:
         cities_by_province[province].sort()
 
-    province_years = sorted({_safe_int(row.get("年份")) for row in province_rows if _safe_int(row.get("年份")) is not None})
-    city_years = sorted({_safe_int(row.get("年份")) for row in city_rows if _safe_int(row.get("年份")) is not None})
+    province_years = sorted({_safe_int(row.get(YEAR_FIELD)) for row in province_rows if _safe_int(row.get(YEAR_FIELD)) is not None})
+    city_years = sorted({_safe_int(row.get(YEAR_FIELD)) for row in city_rows if _safe_int(row.get(YEAR_FIELD)) is not None})
 
     return {
         "levels": [
@@ -288,8 +349,17 @@ def _predict_meta_cache() -> dict[str, Any]:
         "targets": [
             {"key": "carbonIntensity", "label": "碳排放强度"},
         ],
+        "sources": [
+            {"key": key, "label": config["label"]}
+            for key, config in SOURCES.items()
+        ],
+        "defaultSource": "combo",
         "scenarios": [
-            {"key": key, "label": label, "sourceLabel": next(raw for raw, mapped in SCENARIO_NAME_MAP.items() if mapped == key)}
+            {
+                "key": key,
+                "label": label,
+                "sourceLabel": next(raw for raw, mapped in SCENARIO_NAME_MAP.items() if mapped == key),
+            }
             for key, label in SCENARIO_LABELS.items()
         ],
         "provinces": provinces,
@@ -301,7 +371,7 @@ def _predict_meta_cache() -> dict[str, Any]:
                 "forecastStartYear": FUTURE_YEARS[0],
                 "forecastEndYear": FUTURE_YEARS[-1],
                 "coverageCount": len(provinces),
-                "coverageNote": "省级样本基于迁移后的面板总表，全国值按省级样本均值计算。",
+                "coverageNote": "省级历史序列来自最终清洗面板数据，全国线按省级样本均值计算。",
             },
             "city": {
                 "historyStartYear": city_years[0] if city_years else None,
@@ -309,9 +379,9 @@ def _predict_meta_cache() -> dict[str, Any]:
                 "forecastStartYear": FUTURE_YEARS[0],
                 "forecastEndYear": FUTURE_YEARS[-1],
                 "coverageCount": sum(len(cities) for cities in cities_by_province.values()),
-                "coverageNote": "市级样本基于迁移后的地级市面板总表，同省对比线按省内城市样本均值计算。",
+                "coverageNote": "市级历史序列来自最终清洗面板数据，对比线按同省市级样本均值计算。",
             },
-            "boundaryNotice": "2000-2024 为历史观测，2025-2027 为模型推演；情景区间不是统计置信区间。",
+            "boundaryNotice": "2000-2024 为历史观测，2025-2027 为离线模型推演；情景区间是三种官方情景的包络带，不是统计置信区间。",
         },
     }
 
@@ -321,23 +391,22 @@ def get_predict_meta_payload() -> dict[str, Any]:
 
 
 def _get_default_city(province: str) -> str | None:
-    cities_by_province = _predict_meta_cache()["citiesByProvince"]
-    city_list = cities_by_province.get(province) or []
+    city_list = _predict_meta_cache()["citiesByProvince"].get(province) or []
     return city_list[0] if city_list else None
 
 
 def _build_entity_history(level: str, target: str, province: str, city: str | None) -> tuple[str, list[dict[str, Any]]]:
     rows = _load_panel_rows(level)
     if level == "province":
-        if province == "全国":
-            return "全国平均", _average_points(rows, target, "historyFieldProvince")
-        entity_rows = [row for row in rows if row.get("省份") == province]
+        if province == NATIONWIDE:
+            return "全国样本均值", _average_points(rows, TARGETS[target]["historyFieldProvince"])
+        entity_rows = [row for row in rows if row.get(PROVINCE_FIELD) == province]
         points = [point for row in entity_rows if (point := _point_from_province_row(row, target)) is not None]
         points.sort(key=lambda item: item["year"])
         return province, points
 
     selected_city = city or _get_default_city(province)
-    entity_rows = [row for row in rows if row.get("省份") == province and row.get("地级市") == selected_city]
+    entity_rows = [row for row in rows if row.get(PROVINCE_FIELD) == province and row.get(CITY_FIELD) == selected_city]
     points = [point for row in entity_rows if (point := _point_from_city_row(row, target)) is not None]
     points.sort(key=lambda item: item["year"])
     return selected_city or "", points
@@ -346,47 +415,65 @@ def _build_entity_history(level: str, target: str, province: str, city: str | No
 def _build_compare_history(level: str, target: str, province: str) -> tuple[str, list[dict[str, Any]]]:
     rows = _load_panel_rows(level)
     if level == "province":
-        return "全国平均", _average_points(rows, target, "historyFieldProvince")
+        return "全国样本均值", _average_points(rows, TARGETS[target]["historyFieldProvince"])
 
-    compare_rows = [row for row in rows if row.get("省份") == province]
-    return f"{province}市级均值", _average_points(compare_rows, target, "historyFieldCity")
+    compare_rows = [row for row in rows if row.get(PROVINCE_FIELD) == province]
+    return f"{province}市级均值", _average_points(compare_rows, TARGETS[target]["historyFieldCity"])
 
 
-def _build_entity_scenarios(level: str, target: str, province: str, city: str | None) -> tuple[list[dict[str, Any]], list[str]]:
-    rows = _load_scenario_rows(level, target)
+def _build_entity_scenarios(
+    level: str,
+    target: str,
+    province: str,
+    city: str | None,
+    source: str,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    rows = _load_source_rows(level, source, target)
     if not rows:
         return [], []
 
     if level == "province":
-        if province == "全国":
-            entity_rows = rows
-        else:
-            entity_rows = [row for row in rows if row.get("省份") == province]
+        entity_rows = rows if province == NATIONWIDE else [row for row in rows if row.get(PROVINCE_FIELD) == province]
     else:
         selected_city = city or _get_default_city(province)
-        entity_rows = [row for row in rows if row.get("地级市") == selected_city]
+        entity_rows = [row for row in rows if row.get(CITY_FIELD) == selected_city]
 
-    scenario_points: dict[str, list[dict[str, Any]]] = {}
+    value_field = _source_value_field(source, target)
+    scenario_rows_by_key: dict[str, list[dict[str, str]]] = {}
     for row in entity_rows:
         scenario_key = SCENARIO_NAME_MAP.get(row.get("情景", ""))
-        year = _safe_int(row.get("年份"))
-        value = _safe_float(row.get("预测值"))
+        year = _safe_int(row.get(YEAR_FIELD))
+        value = _safe_float(row.get(value_field))
         if scenario_key is None or year not in FUTURE_YEARS or value is None:
             continue
-        scenario_points.setdefault(scenario_key, []).append({"year": year, "value": _compact_number(value)})
+        scenario_rows_by_key.setdefault(scenario_key, []).append(row)
 
-    normalized = []
+    normalized: list[dict[str, Any]] = []
+    should_average_entity_series = level == "province" and province == NATIONWIDE
     for scenario_key, label in SCENARIO_LABELS.items():
-        points = sorted(scenario_points.get(scenario_key, []), key=lambda item: item["year"])
+        scenario_rows = scenario_rows_by_key.get(scenario_key, [])
+        if should_average_entity_series:
+            points = _average_simple_series(scenario_rows, value_field)
+        else:
+            points = sorted(
+                [
+                    {
+                        "year": _safe_int(row.get(YEAR_FIELD)),
+                        "value": _compact_number(_safe_float(row.get(value_field))),
+                    }
+                    for row in scenario_rows
+                    if _safe_int(row.get(YEAR_FIELD)) in FUTURE_YEARS and _safe_float(row.get(value_field)) is not None
+                ],
+                key=lambda item: item["year"],
+            )
         if not points:
             continue
         normalized.append({"key": scenario_key, "label": label, "points": points})
-
     return normalized, [item["key"] for item in normalized]
 
 
-def _build_compare_future(level: str, target: str, province: str) -> dict[str, list[dict[str, Any]]]:
-    rows = _load_scenario_rows(level, target)
+def _build_compare_future(level: str, target: str, province: str, source: str) -> dict[str, list[dict[str, Any]]]:
+    rows = _load_source_rows(level, source, target)
     if not rows:
         return {}
 
@@ -394,20 +481,19 @@ def _build_compare_future(level: str, target: str, province: str) -> dict[str, l
         relevant_rows = rows
     else:
         city_to_province = _city_to_province_map()
-        relevant_rows = [row for row in rows if city_to_province.get(row.get("地级市", "")) == province]
+        relevant_rows = [row for row in rows if city_to_province.get(row.get(CITY_FIELD, "")) == province]
 
+    value_field = _source_value_field(source, target)
     scenario_groups: dict[str, list[dict[str, str]]] = {}
     for row in relevant_rows:
         scenario_key = SCENARIO_NAME_MAP.get(row.get("情景", ""))
-        if not scenario_key:
-            continue
-        scenario_groups.setdefault(scenario_key, []).append(row)
+        if scenario_key:
+            scenario_groups.setdefault(scenario_key, []).append(row)
 
-    compare_future: dict[str, list[dict[str, Any]]] = {}
-    for scenario_key, scenario_rows in scenario_groups.items():
-        compare_future[scenario_key] = _average_simple_series(scenario_rows, "年份", "预测值")
-        compare_future[scenario_key] = [point for point in compare_future[scenario_key] if point["year"] in FUTURE_YEARS]
-    return compare_future
+    return {
+        scenario_key: _average_simple_series(scenario_rows, value_field)
+        for scenario_key, scenario_rows in scenario_groups.items()
+    }
 
 
 def _build_scenario_band(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -420,22 +506,46 @@ def _build_scenario_band(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]
     band: list[dict[str, Any]] = []
     for year in FUTURE_YEARS:
         values = by_year[year]
-        if not values:
-            continue
-        band.append(
-            {
-                "year": year,
-                "min": _compact_number(min(values)),
-                "max": _compact_number(max(values)),
-            }
-        )
+        if values:
+            band.append(
+                {
+                    "year": year,
+                    "min": _compact_number(min(values)),
+                    "max": _compact_number(max(values)),
+                }
+            )
     return band
 
 
-def _default_source_notice(has_scenarios: bool) -> str:
-    if has_scenarios:
-        return "当前三情景结果来自仓库内离线预测输出；自定义模式仍使用页面参数推演。"
-    return "暂无离线情景结果，前端仅可做自定义参数推演。"
+def _source_notice(source: str, has_scenarios: bool) -> str:
+    label = SOURCES[source]["label"]
+    if not has_scenarios:
+        return f"当前来源“{label}”暂无离线预测输出，请先运行新的 prediction_model.py 生成结果文件。"
+    if source == "stirpat":
+        return "当前来源为 STIRPAT 面板预测，可用于解释主要驱动项和弹性方向。"
+    if source == "systemDynamics":
+        return "当前来源为系统动力学情景仿真结果，强调政策反馈与时滞效应。"
+    return "当前来源为组合预测结果，按 STIRPAT 与系统动力学的离线输出加权融合。"
+
+
+def _build_custom_payload(
+    level: str,
+    source: str,
+) -> tuple[bool, list[dict[str, Any]], dict[str, Any] | None, str | None, str | None]:
+    if source not in {"combo", "stirpat"}:
+        return False, [], None, None, None
+
+    custom_drivers, stirpat_elasticities = _build_stirpat_custom_meta(level)
+    supports_custom = any(bool(driver.get("active")) for driver in custom_drivers)
+    if not supports_custom:
+        return False, custom_drivers, stirpat_elasticities, None, None
+
+    custom_notice = (
+        "当前自定义为基于 STIRPAT 弹性的组合预测近似调节，不是后端正式重算。"
+        if source == "combo"
+        else "当前自定义基于 STIRPAT 弹性系数进行推演。"
+    )
+    return True, custom_drivers, stirpat_elasticities, "stirpat", custom_notice
 
 
 def get_predict_data_payload(
@@ -443,27 +553,41 @@ def get_predict_data_payload(
     target: str,
     province: str | None = None,
     city: str | None = None,
+    source: str = "combo",
 ) -> dict[str, Any]:
     if level not in {"province", "city"}:
         raise ValueError(f"不支持的预测层级: {level}")
     if target not in TARGETS:
         raise ValueError(f"不支持的预测目标: {target}")
+    if source not in SOURCES:
+        raise ValueError(f"不支持的预测来源: {source}")
 
-    selected_province = (province or "全国").strip() or "全国"
-    if level == "city" and selected_province == "全国":
+    selected_province = (province or NATIONWIDE).strip() or NATIONWIDE
+    if level == "city" and selected_province == NATIONWIDE:
         raise ValueError("市级预测必须提供省份")
 
     entity_label, history_series = _build_entity_history(level, target, selected_province, city)
-    compare_label, compare_history = _build_compare_history(level, target, selected_province if level == "city" else "全国")
-    scenarios, available_scenarios = _build_entity_scenarios(level, target, selected_province, city)
-    compare_future = _build_compare_future(level, target, selected_province if level == "city" else "全国")
-    coefficients, weight_type = _build_frontend_coefficients(level, target)
+    compare_label, compare_history = _build_compare_history(
+        level,
+        target,
+        selected_province if level == "city" else NATIONWIDE,
+    )
+    scenarios, available_scenarios = _build_entity_scenarios(level, target, selected_province, city, source)
+    compare_future = _build_compare_future(
+        level,
+        target,
+        selected_province if level == "city" else NATIONWIDE,
+        source,
+    )
     meta = _predict_meta_cache()
     sample_meta = meta["sampleMeta"][level]
+    supports_custom, custom_drivers, stirpat_elasticities, custom_basis, custom_notice = _build_custom_payload(level, source)
 
     return {
         "level": level,
         "target": target,
+        "source": source,
+        "sourceLabel": SOURCES[source]["label"],
         "entityLabel": entity_label,
         "province": selected_province,
         "city": city or (entity_label if level == "city" else None),
@@ -475,12 +599,15 @@ def get_predict_data_payload(
         },
         "scenarios": scenarios,
         "scenarioBand": _build_scenario_band(scenarios),
-        "coefficients": coefficients,
         "sampleMeta": {
             **sample_meta,
             "boundaryNotice": meta["sampleMeta"]["boundaryNotice"],
         },
-        "sourceNotice": _default_source_notice(bool(available_scenarios)),
-        "weightType": weight_type,
+        "sourceNotice": _source_notice(source, bool(available_scenarios)),
         "availableScenarios": available_scenarios,
+        "supportsCustom": supports_custom,
+        "customDrivers": custom_drivers,
+        "stirpatElasticities": stirpat_elasticities,
+        "customBasis": custom_basis,
+        "customNotice": custom_notice,
     }
