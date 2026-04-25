@@ -200,12 +200,7 @@ http://127.0.0.1:8000/api
 - `组合预测`
 - `Logit 风险预警`
 
-旧版 `SDM + LSTM` 预测实现没有删除，已备份为：
-
-- `archive/repo_cleanup_2026-04-23/recommended-archive/greenfianace_server/analysis_models/prediction_model_legacy.py`
-- legacy 清理归档说明见：`archive/repo_cleanup_2026-04-23/README.md`
-
-说明：当前主路径已收敛为“预处理 + 新预测模型 + API/前端展示”链路。旧的基准回归、DID、中介效应、异质性、稳健性和空间模型模块已移入 `archive/repo_cleanup_2026-04-23/recommended-archive/greenfianace_server/analysis_models/`，不再作为默认运行入口的一部分。
+说明：当前主路径已收敛为“预处理 + 当前预测模型 + API/前端展示”链路。旧版 `SDM + LSTM` 预测实现，以及旧的基准回归、DID、中介效应、异质性、稳健性和空间模型模块已从仓库中移除，不再作为默认运行入口或作品源码的一部分。
 
 运行前至少需要以下文件存在：
 

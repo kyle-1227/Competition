@@ -7,3 +7,5 @@ dist-ssr
 greenfianace_server/.env
 __pycache__/
 *.pyc
+submission_build/
+*_源码_2026.zip
