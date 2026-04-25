@@ -47,10 +47,13 @@
 │  ├─ requirements.txt
 │  └─ server.py
 ├─ public/
+├─ scripts/
+│  └─ deploy-local.ps1
 ├─ src/
 ├─ .env
 ├─ .env.local.tpl
 ├─ .env.production
+├─ 一键部署.bat
 ├─ package.json
 ├─ pnpm-lock.yaml
 ├─ vite.config.ts
@@ -65,6 +68,29 @@
 - `MySQL 5.7+` 或 `MySQL 8.x`
 
 ## 快速开始
+
+### 0. Windows 一键本地部署
+
+Windows 本地演示环境可直接双击运行：
+
+```text
+一键部署.bat
+```
+
+脚本会依次完成：
+
+- 检查 `mysql`、`node`、`pnpm`、`python` 命令是否可用
+- 在创建数据库前提示输入 MySQL 地址、用户名、数据库名和密码；数据库名会同步写入后端 `greenfianace_server/.env` 的 `DB_NAME`
+- 创建用户指定的数据库（默认 `green_finance`）并导入 `greenfianace_server/green_finance.sql`、`greenfianace_server/city_carbon_gdp.sql`
+- 询问是否启用 AI 助手；启用时需要输入 DeepSeek API Key
+- 自动生成根目录 `.env` 和 `greenfianace_server/.env`
+- 安装前后端依赖，并分别启动 FastAPI 后端和 Vite 前端
+
+如果不启用 AI 助手，AI 问答、页面总结、Tooltip AI 解读、流式问答不可用；地图、图表、数据库查询和预测展示仍可使用。
+
+数据库名以一键部署生成的 `greenfianace_server/.env` 中 `DB_NAME` 为准。若输入非默认数据库名，脚本会二次确认，并保证建库、导入 SQL、后端连接三者一致；后续不要手动把 `DB_NAME` 改成未导入数据的库。
+
+> 源码提交包只包含少量样例 SQL 时，一键部署脚本会自动导入样例数据并提示说明。完整演示请先按概要表中的完整数据集链接恢复完整 SQL 或数据文件。
 
 推荐启动顺序：
 

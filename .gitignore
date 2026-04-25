@@ -5,7 +5,9 @@ dist-ssr
 *.local
 .env
 greenfianace_server/.env
+greenfianace_server/.venv_deploy/
 __pycache__/
 *.pyc
 submission_build/
 *_源码_2026.zip
+*.deploy.log
