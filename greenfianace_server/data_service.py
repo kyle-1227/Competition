@@ -8,8 +8,9 @@ from dbutils.pooled_db import PooledDB
 from dotenv import load_dotenv
 import pymysql
 
-ROOT = Path(__file__).resolve().parent
-load_dotenv(ROOT / ".env")
+BACKEND_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BACKEND_DIR.parent
+load_dotenv(PROJECT_ROOT / ".env")
 
 
 def _db_config_from_env() -> dict[str, Any]:

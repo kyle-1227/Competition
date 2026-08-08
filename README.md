@@ -1,22 +1,15 @@
 # 绿色金融与区域碳减排空间协同智能测算平台
 
-基于 `Vue 3 + Vite 5 + TypeScript + AntV L7 + ECharts + FastAPI + MySQL` 的数据可视化大屏项目，用于展示绿色金融、碳排放空间分布、碳排放强度预测，以及 GDP 与碳排放联动分析。
+本项目是一个面向绿色金融、区域碳排放与能源协同分析的数据可视化平台。前端提供全国省级到省内市级的地图下钻、指标对比、趋势分析和预测交互；后端负责 MySQL 数据查询、实证结果读取、预测计算以及可选的 DeepSeek AI 解读。
 
-## 项目概览
+## 主要功能
 
-当前首页包含 3 个主页面：
-
-- `绿色金融综合指数`
-- `碳排放+GDP底色`
-- `碳排放强度预测`
-
-其中：
-
-- 碳排放+GDP底色页支持两种地图指标视图：`碳排放`、`GDP`
-- 碳排放+GDP底色页内置 `GDP 和碳排放组合图`
-- 宏观经济不再作为独立 Tab，而是并入碳排放+GDP底色页
-- 绿色金融页和碳排放+GDP底色页当前都只保留 `全国省级 -> 省内市级` 两级下钻
-- 碳排放强度预测页使用 `BizCarbonPredictionV3.vue`，前端统一展示 `组合预测` 结果；展示层仍对碳排放强度做正向化，但不再对预测段做自适应缩放
+- 绿色金融综合指数：展示省市绿色金融指标、排名、趋势和空间分布。
+- 碳排放与 GDP：切换碳排放或 GDP 地图底色，并查看二者联动关系。
+- 碳排放强度预测：展示组合预测、情景结果和自定义驱动因素测算。
+- 地图下钻：支持“全国省级 → 省内市级”两级浏览。
+- AI 助手：可选启用问答、页面总结、图表提示词解读和流式回答。
+- 实证结果：保留省级、市级空间计量、稳健性检验、模型评估和情景预测结果。
 
 ## 技术栈
 
@@ -24,495 +17,350 @@
 | --- | --- |
 | 前端 | Vue 3、TypeScript、Vite 5、Element Plus、ECharts、AntV L7、Pinia、Vue Router |
 | 后端 | FastAPI、Uvicorn、PyMySQL、DBUtils、python-dotenv、httpx |
-| 数据库 | MySQL 5.7+ / 8.x |
-| AI 能力 | DeepSeek API（通过 FastAPI 后端代理） |
+| 数据与模型 | MySQL 8、pandas、NumPy、scikit-learn、statsmodels、linearmodels、libpysal、esda |
+| AI | DeepSeek API，由 FastAPI 后端代理调用 |
+| 工程化 | pnpm、ESLint、Prettier、Commitlint、Husky |
 
-## 目录结构
+## 仓库结构
+
+以下为清理后的源码结构；不展示 Git 内部目录，也不包含安装或构建后才生成的依赖、虚拟环境和产物目录。
 
 ```text
 .
-├─ greenfianace_server/
-│  ├─ analysis_models/
+├─ .husky/                         Git 提交钩子
+├─ .vscode/                        推荐的编辑器配置
+├─ greenfianace_server/            FastAPI 后端、数据、模型与 SQL
+│  ├─ analysis_models/             离线分析和预测模型代码
 │  ├─ data/
-│  ├─ empirical_results/
-│  ├─ .env.example
-│  ├─ ai_agent.py
-│  ├─ ai_context.py
-│  ├─ ai_service.py
-│  ├─ ai_tools.py
-│  ├─ ai_types.py
-│  ├─ city_carbon_gdp.sql
-│  ├─ data_service.py
-│  ├─ green_finance.sql
-│  ├─ requirements.txt
-│  └─ server.py
-├─ public/
-├─ scripts/
-│  └─ deploy-local.ps1
-├─ src/
-├─ .env
-├─ .env.local.tpl
-├─ .env.production
-├─ 一键部署.bat
-├─ package.json
-├─ pnpm-lock.yaml
-├─ vite.config.ts
-└─ README.md
+│  │  ├─ model_inputs_v2/          省市模型输入工作簿
+│  │  └─ 2000-2024县级碳排放(1).xlsx
+│  ├─ empirical_results/           省市实证、空间计量与预测结果
+│  ├─ knowledge/
+│  │  ├─ 01_indicator_dictionary/  指标字典 JSON
+│  │  ├─ 02_page_guidance/         页面语义 JSON
+│  │  ├─ 04_result_cards/          结果卡片 JSON
+│  │  └─ 05_prompt_templates/      AI 提示词 TXT
+│  ├─ ai_agent.py                  AI 工具调用编排
+│  ├─ ai_context.py                AI 页面上下文组装
+│  ├─ ai_knowledge.py              知识库加载
+│  ├─ ai_service.py                DeepSeek 请求封装
+│  ├─ ai_tools.py                  AI 可调用的数据工具
+│  ├─ ai_types.py                  AI 数据类型
+│  ├─ city_carbon_gdp.sql          市级碳排放与 GDP 完整数据
+│  ├─ data_service.py              MySQL 数据服务
+│  ├─ green_finance.sql            绿色金融与省级业务完整数据
+│  ├─ predict_results_service.py   预测与实证结果服务
+│  └─ server.py                    FastAPI 入口
+├─ presets/                        前端预设配置
+├─ public/                         图标与全国、省级 GeoJSON
+├─ src/                            Vue 前端业务源码
+│  ├─ api/                         HTTP 客户端、接口与类型
+│  ├─ assets/                      字体和全局样式
+│  ├─ components/                  公共组件
+│  ├─ router/                      路由配置
+│  ├─ utils/                       通用工具
+│  └─ views/                       大屏页面、AI 面板与业务 hooks
+├─ .commitlintrc.js                Commitlint 配置
+├─ .editorconfig                   编辑器基础规范
+├─ .env.example                    可提交的环境配置模板
+├─ .eslintignore                   ESLint 忽略规则
+├─ .eslintrc-auto-import.json      自动导入类型规则
+├─ .eslintrc.js                    ESLint 配置
+├─ .gitattributes                  Git 属性
+├─ .gitignore                      生成物与私密文件忽略规则
+├─ .prettierignore                 Prettier 忽略规则
+├─ docker.yaml                     前端构建平台配置
+├─ index.html                      Vite HTML 入口
+├─ package.json                    前端依赖与命令
+├─ pnpm-lock.yaml                  前端依赖锁文件
+├─ prettier.config.js              Prettier 配置
+├─ requirements.txt                全仓唯一 Python 依赖清单
+├─ tsconfig.json                   TypeScript 配置
+├─ vite.config.ts                  Vite 构建与本地代理配置
+├─ deploy.ps1                      Windows 本地一键部署脚本
+└─ README.md                       唯一项目说明文档
 ```
+
+首次安装或构建后会生成 `node_modules/`、`dist/` 和 `greenfianace_server/.venv/`。这些目录均已忽略，不属于源码提交内容。仓库只跟踪根目录 `.env.example` 和 `requirements.txt`；本地 `.env` 由开发者自行保留，不提交到 Git。
+
+> `greenfianace_server` 是项目沿用的目录名，虽然拼写不是标准的 `greenfinance_server`，但为避免破坏现有路径和接口，本次未重命名。
 
 ## 环境要求
 
-- `Node.js 18+`
-- `pnpm 8+`
-- `Python 3.10+`
-- `MySQL 5.7+` 或 `MySQL 8.x`
+- Windows 10 或 Windows 11，使用 Windows PowerShell 5.1 或 PowerShell 7。
+- Node.js 18 或更高版本。
+- pnpm 8 或更高版本。
+- Python 3.10 或更高版本。
+- MySQL Server 与 MySQL Client 8.0 或更高版本，`mysql.exe` 需加入 `PATH`。
+- 默认端口：前端 `5173`，后端 `8002`，MySQL `3306`。
 
-## 快速开始
+完整 SQL 使用了 MySQL 8 的字符集排序规则，不能保证兼容 MySQL 5.7。
 
-### 0. Windows 一键本地部署
+## Windows 一键部署
 
-Windows 本地演示环境可直接双击运行：
+先在项目根目录执行只读检查：
 
-```text
-一键部署.bat
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\deploy.ps1 -DryRun
+```
+
+检查通过后执行完整部署：
+
+```powershell
+.\deploy.ps1
 ```
 
 脚本会依次完成：
 
-- 检查 `mysql`、`node`、`pnpm`、`python` 命令是否可用
-- 在创建数据库前提示输入 MySQL 地址、用户名、数据库名和密码；数据库名会同步写入后端 `greenfianace_server/.env` 的 `DB_NAME`
-- 创建用户指定的数据库（默认 `green_finance`）并导入 `greenfianace_server/green_finance.sql`、`greenfianace_server/city_carbon_gdp.sql`
-- 询问是否启用 AI 助手；启用时需要输入 DeepSeek API Key
-- 自动生成根目录 `.env` 和 `greenfianace_server/.env`
-- 安装前后端依赖，并分别启动 FastAPI 后端和 Vite 前端
+1. 检查项目路径、完整 SQL、Node.js、pnpm、Python 和 MySQL Client。
+2. 使用固定 MySQL 配置 `127.0.0.1`、用户 `root`、数据库 `green_finance`，只提示输入 MySQL 密码。
+3. 首次运行且缺少 `.env` 时从 `.env.example` 生成本地配置，然后读取其中的可选 DeepSeek 配置，不在部署过程中额外询问。
+4. 检查目标数据库，创建数据库并导入两份完整 SQL。
+5. 保留已有的本地 `.env`，不覆盖其中内容，只将本次输入的数据库密码临时注入后端子进程。
+6. 根据依赖指纹决定是否安装前端和后端依赖。
+7. 检查 `8002`、`5173` 端口，并在两个可见 PowerShell 窗口中启动服务。
 
-如果不启用 AI 助手，AI 问答、页面总结、Tooltip AI 解读、流式问答不可用；地图、图表、数据库查询和预测展示仍可使用。
+启动地址：
 
-数据库名以一键部署生成的 `greenfianace_server/.env` 中 `DB_NAME` 为准。若输入非默认数据库名，脚本会二次确认，并保证建库、导入 SQL、后端连接三者一致；后续不要手动把 `DB_NAME` 改成未导入数据的库。
+- 前端：`http://localhost:5173/vue3-vite5-dashboard/`
+- 后端接口：`http://127.0.0.1:8002/api`
+- FastAPI 文档：`http://127.0.0.1:8002/docs`
 
-> 源码提交包只包含少量样例 SQL 时，一键部署脚本会自动导入样例数据并提示说明。完整演示请先按概要表中的完整数据集链接恢复完整 SQL 或数据文件。
+### 一键部署参数
 
-推荐启动顺序：
+| 参数 | 作用 |
+| --- | --- |
+| `-DryRun` | 只检查路径、文件、工具版本、SQL 重建表、依赖状态、端口和启动命令；不提示输入密码，不写文件，不连接数据库，不安装依赖，不启动服务。 |
+| `-ForceInstall` | 忽略依赖指纹，强制执行 `pnpm install --frozen-lockfile` 和后端 `pip install`。 |
 
-1. 导入 MySQL 数据
-2. 启动后端服务
-3. 启动前端服务
+前端指纹由 `package.json + pnpm-lock.yaml` 计算，保存在 `node_modules/` 内；后端指纹由 `requirements.txt + 虚拟环境 Python 版本` 计算，保存在 `greenfianace_server/.venv/` 内。依赖目录缺失、指纹缺失或输入变化时会自动重装。
 
-### 1. 导入数据库
+### 重复部署与数据库覆盖警告
 
-项目默认使用数据库 `green_finance`。
+两份 SQL 包含 `DROP TABLE IF EXISTS`。目标数据库已存在时，脚本会动态解析 SQL，并展示当前将被删除和重建的表，通常包括：
 
-主要 SQL 文件：
+- `city_carbon_gdp`
+- `city_green_finance`
+- `descriptive_statistics`
+- `province_energy_consumption`
+- `province_green_finance`
+- `province_panel_data`
+- `sdm_coefficients`
 
-- `greenfianace_server/green_finance.sql`
-  作用：绿色金融、省级数据、省级能源消费、预测数据等基础表
-- `greenfianace_server/city_carbon_gdp.sql`
-  作用：市级 GDP、碳排放、能源消费联动数据表 `city_carbon_gdp`
+首次部署且目标数据库不存在时，完整部署只需要输入 MySQL 密码。目标数据库已存在时，出于防止误删数据的安全要求，必须再次输入完整数据库名确认重建；直接回车或输入其他内容会以退出码 `2` 取消，且不会写文件、导入 SQL、安装依赖或启动服务。请勿对含有需保留数据的数据库执行该脚本。
 
-示例：
+脚本退出码：`0` 表示成功，`1` 表示失败，`2` 表示用户取消。
 
-```bash
-cd greenfianace_server
-mysql -u root -p < green_finance.sql
-mysql -u root -p < city_carbon_gdp.sql
-```
+## 手动部署
 
-如果你使用的是 PowerShell，也可以执行：
+### 1. 创建并导入数据库
 
-```powershell
-Set-Location greenfianace_server
-Get-Content .\green_finance.sql -Raw | mysql -u root -p
-Get-Content .\city_carbon_gdp.sql -Raw | mysql -u root -p
-```
-
-说明：
-
-- `green_finance.sql` 负责基础业务表，包含 `province_energy_consumption` 等省级能源消费数据
-- `city_carbon_gdp.sql` 负责市级 GDP / 碳排放 / 能源消费数据库化
-- 碳排放+GDP底色页当前的市级数据已走数据库，不再依赖 Excel
-
-### 2. 配置后端环境变量
-
-后端会读取：
-
-```text
-greenfianace_server/.env
-```
-
-可以先复制模板：
-
-```bash
-cd greenfianace_server
-cp .env.example .env
-```
-
-Windows PowerShell：
+默认数据库名为 `green_finance`。在项目根目录执行：
 
 ```powershell
-Set-Location greenfianace_server
-Copy-Item .env.example .env
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS green_finance CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -u root -p --default-character-set=utf8mb4 green_finance -e "source greenfianace_server/green_finance.sql"
+mysql -u root -p --default-character-set=utf8mb4 green_finance -e "source greenfianace_server/city_carbon_gdp.sql"
 ```
 
-推荐配置如下：
+第二份 SQL 内含 `USE green_finance`。一键部署默认固定使用 `green_finance`；如需自定义数据库名，请同步修改根目录 `.env` 的 `DB_NAME` 和 `deploy.ps1` 顶部的 `$script:DatabaseName`，脚本会在系统临时目录生成替换后的 SQL，并在成功或失败后自动清除。
 
-```env
-DB_HOST=127.0.0.1
-DB_USER=root
-DB_PASSWORD=your_mysql_password
-DB_NAME=green_finance
-DB_CHARSET=utf8mb4
+### 2. 配置并启动后端
 
-DEEPSEEK_API_KEY=your_deepseek_api_key
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-chat
-DEEPSEEK_TIMEOUT=60
-```
-
-字段说明：
-
-- `DB_HOST`：MySQL 地址
-- `DB_USER`：MySQL 用户名
-- `DB_PASSWORD`：MySQL 密码
-- `DB_NAME`：数据库名，默认 `green_finance`
-- `DB_CHARSET`：推荐 `utf8mb4`
-- `DEEPSEEK_API_KEY`：AI 助手调用所需密钥
-- `DEEPSEEK_BASE_URL`：DeepSeek 接口地址
-- `DEEPSEEK_MODEL`：默认模型名
-- `DEEPSEEK_TIMEOUT`：后端请求超时时间，单位秒
-
-注意：
-
-- 根目录下的 `.env` 是给前端 Vite 用的
-- `greenfianace_server/.env` 才是给 FastAPI 后端用的
-- 这两个文件不要混用
-
-### 3. 启动后端
-
-```bash
-cd greenfianace_server
-python -m venv .venv
-```
-
-激活虚拟环境：
-
-- Windows PowerShell：`.venv\Scripts\Activate.ps1`
-- Windows CMD：`.venv\Scripts\activate`
-- macOS / Linux：`source .venv/bin/activate`
-
-安装依赖：
-
-```bash
-pip install -r requirements.txt
-```
-
-启动服务：
-
-```bash
-uvicorn server:app --reload --host 0.0.0.0 --port 8000
-```
-
-启动后默认接口基地址：
-
-```text
-http://127.0.0.1:8000/api
-```
-
-### 3.1 运行新预测模型所需文件
-
-新预测链路已切换为 `greenfianace_server/analysis_models/prediction_model.py`，默认实现为：
-
-- `STIRPAT 面板预测`
-- `系统动力学情景仿真`
-- `组合预测`
-- `Logit 风险预警`
-
-说明：当前主路径已收敛为“预处理 + 当前预测模型 + API/前端展示”链路。旧版 `SDM + LSTM` 预测实现，以及旧的基准回归、DID、中介效应、异质性、稳健性和空间模型模块已从仓库中移除，不再作为默认运行入口或作品源码的一部分。
-
-运行前至少需要以下文件存在：
-
-- 原始输入文件
-  - `greenfianace_server/data/model_inputs_v2/省级绿色金融指数+碳排放+能源+DID数据(剔除西藏）.xlsx`
-  - `greenfianace_server/data/model_inputs_v2/地级市绿色金融+碳排放+能源+DID数据（剔除西藏）.xlsx`
-  - `greenfianace_server/data/model_inputs_v2/中国省级行政区经纬度表.xlsx`
-- 预处理产物
-  - `greenfianace_server/empirical_results/province/中国绿色金融-能源平衡面板数据集(最终版).csv`
-  - `greenfianace_server/empirical_results/city/中国绿色金融-能源平衡面板数据集(最终版).csv`
-
-如果预处理 CSV 不存在，建议运行顺序是：
-
-1. 先执行 `analysis_models/main.py` 的预处理步骤生成最终清洗数据集。
-2. 再运行新的预测步骤生成 `prediction_results/` 下的三类情景文件、评估文件和 STIRPAT 结果。
-3. 最后启动 FastAPI 和前端页面读取这些离线产物。
-
-切换运行层级时不需要手改 `config.py`，可以直接通过环境变量控制：
+后端会读取根目录 `.env`。首次手动部署先复制模板：
 
 ```powershell
-$env:GF_RUN_LEVEL='province'
-python greenfianace_server/analysis_models/prediction_model.py
-
-$env:GF_RUN_LEVEL='city'
-python greenfianace_server/analysis_models/prediction_model.py
+Copy-Item .\.env.example .\.env
 ```
 
-### 4. 启动前端
+然后建议将密码和 API Key 设置为当前 PowerShell 进程变量：
 
-回到项目根目录后执行：
+```powershell
+$env:DB_PASSWORD = 'your_mysql_password'
+$env:DEEPSEEK_API_KEY = ''
 
-```bash
-pnpm install
-pnpm run serve
+python -m venv .\greenfianace_server\.venv
+.\greenfianace_server\.venv\Scripts\python.exe -m pip install -r .\requirements.txt
+
+Set-Location .\greenfianace_server
+.\.venv\Scripts\python.exe -m uvicorn server:app --reload --host 0.0.0.0 --port 8002
 ```
 
-默认访问地址：
+若选择直接修改根目录 `.env`，请勿提交该文件或其中的真实数据库密码、API Key。DeepSeek 配置可以留空。
 
-```text
-http://localhost:5173/vue3-vite5-dashboard/
+### 3. 安装并启动前端
+
+另开一个 PowerShell 窗口，在项目根目录执行：
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm run dev
 ```
 
-说明：
+Vite 会将 `/api` 以及带项目基础路径的 API 请求代理到 `http://127.0.0.1:8002`。
 
-- 当前 `.env` 中默认配置了 `VITE_BASE=/vue3-vite5-dashboard/`
-- `vite.config.ts` 已配置本地 `/api` 代理到 `http://127.0.0.1:8000`
-- 如果你修改了 `VITE_BASE`，前端访问地址也要跟着调整
+## 环境变量
 
-## 前端环境变量
+### 根目录 `.env.example` 与本地 `.env`
 
-根目录 `.env` / `.env.development` / `.env.production` 用于前端配置。
+仓库提交根目录 `.env.example` 作为模板，真实运行配置使用同级本地 `.env`。`.env` 已加入 `.gitignore`，不会被 Git 跟踪；前后端统一读取根目录 `.env`，不再使用后端子目录 `.env`。Vite 只会把 `VITE_` 前缀变量暴露给浏览器，后端变量不会进入前端构建。
 
-常见字段：
+| 变量 | 必需 | 说明 |
+| --- | --- | --- |
+| `VITE_APP_TITLE` | 是 | 页面标题 |
+| `VITE_BASE` | 是 | 部署基础路径，当前为 `/vue3-vite5-dashboard/` |
+| `VITE_APP_DOMAIN` | 是 | API 前缀，当前为 `/api` |
+| `SERVER_PORT` | 是 | 后端端口，项目统一为 `8002` |
+| `DB_HOST` | 是 | MySQL 地址，默认 `127.0.0.1` |
+| `DB_USER` | 是 | MySQL 用户 |
+| `DB_PASSWORD` | 是 | MySQL 密码 |
+| `DB_NAME` | 是 | 已导入完整 SQL 的数据库名 |
+| `DB_CHARSET` | 是 | 推荐 `utf8mb4` |
+| `DEEPSEEK_API_KEY` | 否 | DeepSeek API Key |
+| `DEEPSEEK_BASE_URL` | 否 | 默认 `https://api.deepseek.com` |
+| `DEEPSEEK_MODEL` | 否 | 默认 `deepseek-chat` |
+| `DEEPSEEK_TIMEOUT` | 否 | 请求超时秒数，默认 `60` |
 
-```env
-VITE_APP_TITLE=绿色金融与区域碳减排空间协同智能测算平台
-VITE_BASE=/vue3-vite5-dashboard/
-VITE_APP_DOMAIN=/api
-```
+`.env.example` 中的 `DB_PASSWORD` 和 `DEEPSEEK_API_KEY` 默认留空。一键部署不会覆盖已有 `.env`，只在创建后端进程时临时注入本次输入的 MySQL 密码；DeepSeek 配置直接读取本地 `.env` 或当前进程环境变量。关闭后端窗口后部署脚本注入的密码不会持久化。
 
-字段说明：
+## 数据库、模型与知识库
 
-- `VITE_APP_TITLE`：页面标题
-- `VITE_BASE`：前端部署基础路径
-- `VITE_APP_DOMAIN`：本地开发时的接口前缀
+### 完整 SQL
 
-## 当前功能说明
+- `greenfianace_server/green_finance.sql`：绿色金融、省级能源消费、面板数据、描述性统计和空间模型系数等业务表。
+- `greenfianace_server/city_carbon_gdp.sql`：市级 GDP、碳排放、能源消费和政策标识数据。
 
-### 1. 绿色金融综合指数
+仓库不再包含样例 SQL 或提交包回退逻辑；部署必须使用上述两份完整 SQL。
 
-- 全国省级地图着色
-- 下钻到省内市级，碳排放+GDP底色页已复用同类下钻体验
-- 侧边栏排行
-- 雷达图联动展示
-- 地图悬浮框保留绿色金融七维指标，不展示能源消费明细
+### 模型输入与实证结果
 
-### 2. 碳排放+GDP底色
+- `greenfianace_server/data/model_inputs_v2/`：省级、市级模型输入工作簿和行政区经纬度表。
+- `greenfianace_server/data/2000-2024县级碳排放(1).xlsx`：县级碳排放原始数据。
+- `greenfianace_server/analysis_models/`：数据加载、预处理和预测模型代码。
+- `greenfianace_server/empirical_results/`：省市面板、回归表、空间权重、模型检验、稳健性检验、情景预测和模型评估结果。预测页面会直接读取其中的 CSV 文件。
 
-- 默认显示碳排放地图
-- 可一键切换到 `GDP 地图模式`
-- 可切换到 `GDP 和碳排放组合图`
-- 支持全国省级到省内市级下钻
-- 地图使用 3D 底色挤出效果，省级和市级交互体验与绿色金融页保持一致
-- 地图悬浮框支持滚动查看完整数据和 AI 分析
-- 省级悬浮框展示能源消费总量、强度、人均能源消耗及能源消费分项；如果当前年份分项为 0，会回退到该省最近一个非 0 年份并显示明细年份
-- 市级悬浮框展示 GDP、产业结构、碳排放和能源消费相关指标
-- 市级数据来自数据库 `city_carbon_gdp`
+### AI 知识库
 
-### 3. 碳排放强度预测
+- `01_indicator_dictionary/`：省、市、县指标定义。
+- `02_page_guidance/`：页面功能、数据范围和解读引导。
+- `04_result_cards/`：省市实证结果卡片。
+- `05_prompt_templates/`：聊天、总结和 Tooltip 提示词模板。
 
-- 首页 `碳排放强度预测` Tab 当前挂载 `src/views/home/BizCarbonPredictionV3.vue`
-- 支持省级预测、市级预测、区域选择，前端固定展示 `组合预测`
-- 后端官方情景键仍为 `baseline / lowCarbon / optimized`，前端展示为 `保守 / 基准 / 乐观 / 自定义`
-- 历史观测与 2025-2027 年预测结果在同一张折线图中展示
-- 前端展示层将碳排放强度主指标正向化，但预测段直接展示当前模型输出，不再做自适应缩放
-- 页面保留统一的组合预测展示，不恢复来源切换；主交互改为 `保守 / 基准 / 乐观 / 自定义` 四态切换
-- AI 上下文中保留 `raw*` 字段用于追溯，并固定使用组合预测口径
-- Tooltip 和右侧结论卡使用同一展示口径，避免同一指标出现正负或尺度不一致
+这些 JSON 和 TXT 文件参与运行，不属于说明文档，不应删除。
 
-### 4. AI 助手
+## 核心指标单位
 
-项目已接入 AI 助手，支持：
+下表由原数据单位说明提炼而来。不同来源文件可能存在字段缩放或展示换算，二次分析时仍应同时核对具体数据文件、SQL 字段和接口转换逻辑。
 
-- 当前页面问答
-- 当前页面总结
-- 流式输出
-- 页面级工具调用
+| 适用层级 | 指标 | 单位或编码 |
+| --- | --- | --- |
+| 省、市 | 绿色金融综合指数 | 无量纲，标准化后范围 `0–1` |
+| 省 | 绿色信贷规模 | 亿元 |
+| 市 | 绿色保险保费收入 | 万元 |
+| 省、市、县 | 碳排放量 | 万吨 CO₂ |
+| 省、市、县 | 碳排放强度 | 吨 CO₂/万元 GDP |
+| 省、市 | 能源消费总量 | 万吨标准煤 |
+| 省、市 | 能源强度 | 吨标准煤/万元 GDP |
+| 省 | 人均能源消耗 | 吨标准煤/人 |
+| 市 | 清洁能源占比 | % |
+| 省、市、县 | 绿色金融、环保税、碳交易或所属试点标识 | `0` 表示否，`1` 表示是 |
+| 市 | 长江经济带标识 | `0` 表示非沿线，`1` 表示沿线 |
+| 省、市 | 地区生产总值 GDP | 亿元 |
+| 省、市 | 人均 GDP | 万元/人 |
+| 省 | 第二产业增加值占 GDP 比重 | % |
 
-后端接口包括：
+## AI 助手的可选边界
 
-```text
-POST /api/ai/chat
-POST /api/ai/summary
-POST /api/ai/chat/stream
-POST /api/ai/summary/stream
-```
+未配置 `DEEPSEEK_API_KEY` 时，下列功能不可用：
 
-## 常用脚本
+- AI 对话与流式问答
+- 页面自动总结
+- Tooltip AI 解读
+- 依赖大模型生成的分析文本
+
+地图、图表、MySQL 查询、排名、下钻、实证结果和预测展示不依赖 DeepSeek，仍可正常使用。API Key 应通过根目录 `.env` 或后端进程环境变量提供，不要提交到 Git；一键部署不会询问或写入 API Key。
+
+## 常用开发命令
 
 在项目根目录执行：
 
-```bash
-pnpm run serve
-pnpm run build
-pnpm run preview
-pnpm run lint
+| 命令 | 作用 |
+| --- | --- |
+| `pnpm run dev` | 启动 Vite 开发服务器 |
+| `pnpm run build` | TypeScript 检查并生成生产构建到 `dist/` |
+| `pnpm run preview` | 本地预览生产构建 |
+| `pnpm run lint` | 检查 `src/` 中的 ESLint 问题 |
+| `.\deploy.ps1 -DryRun` | 无副作用检查部署条件 |
+| `.\deploy.ps1 -ForceInstall` | 完整部署并强制重装依赖 |
+
+后端开发模式：
+
+```powershell
+Set-Location .\greenfianace_server
+.\.venv\Scripts\python.exe -m uvicorn server:app --reload --host 0.0.0.0 --port 8002
 ```
-
-含义：
-
-- `serve`：启动前端开发环境
-- `build`：类型检查并构建生产包
-- `preview`：本地预览构建结果
-- `lint`：执行 ESLint
 
 ## 生产构建
 
-```bash
+前端构建：
+
+```powershell
+pnpm install --frozen-lockfile
 pnpm run build
 ```
 
-构建产物输出到：
+构建输出位于 `dist/`，该目录不纳入 Git。部署到子路径时，Web 服务器需与 `VITE_BASE=/vue3-vite5-dashboard/` 保持一致。
 
-```text
-dist/
+后端生产启动示例：
+
+```powershell
+Set-Location .\greenfianace_server
+.\.venv\Scripts\python.exe -m uvicorn server:app --host 0.0.0.0 --port 8002
 ```
 
-补充说明：
+生产环境应通过反向代理托管前端静态文件，并将 `/api` 转发到后端；数据库密码和 DeepSeek API Key 应由部署环境安全注入。
 
-- 项目启用了 `vite-plugin-compression`
-- 构建时会生成 `.gz` 压缩文件
-- 若部署在子路径下，服务器配置需要与 `VITE_BASE` 保持一致
+## 故障排查
 
-## 部署建议
+### PowerShell 禁止执行脚本
 
-### 前端
+仅对当前终端临时放开：
 
-- 将 `dist/` 部署到 Nginx、Apache 或其他静态资源服务器
-- 建议开启 `gzip` 或 `brotli`
-- 若使用 `.gz` 文件，需正确配置 `Content-Encoding`
-
-### 后端
-
-生产环境建议使用：
-
-```bash
-uvicorn server:app --host 0.0.0.0 --port 8000
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
 ```
 
-然后通过反向代理将前端的 `/api` 转发到 FastAPI 服务。
+### 找不到 `mysql`、`node`、`pnpm` 或 `python`
 
-## 常见问题
+先执行 `.\deploy.ps1 -DryRun` 查看命令路径和版本。安装对应工具后重新打开终端，确认其可由 `PATH` 访问。
 
-### 1. 后端提示数据库连接失败
+### 数据库导入失败
 
-优先检查：
+- 确认 MySQL 8 服务已启动，账号有建库、建表和写入权限。
+- 确认密码正确，目标数据库名只包含字母、数字和下划线。
+- 确认两份完整 SQL 文件未缺失或被截断。
+- 对已有数据库重复部署前先备份需保留的数据。
 
-- `greenfianace_server/.env` 是否已创建
-- `DB_HOST`、`DB_USER`、`DB_PASSWORD`、`DB_NAME` 是否正确
-- MySQL 服务是否已启动
-- `green_finance.sql` 和 `city_carbon_gdp.sql` 是否已导入
+### `8002` 或 `5173` 端口被占用
 
-### 2. 出现 `Access denied ... using password: NO`
+脚本会在启动前停止并报告端口。关闭占用端口的旧进程后重新运行；前后端当前固定使用这两个端口，不建议只修改一侧。
 
-这通常表示后端没有正确读取 `greenfianace_server/.env`，或者 `DB_PASSWORD` 为空。
+### 前端能打开但接口失败
 
-### 3. 出现 `cryptography package is required`
+- 确认后端可访问 `http://127.0.0.1:8002/docs`。
+- 确认根目录 `.env` 或后端进程环境变量中的数据库名与实际导入目标一致。
+- 确认从 `http://localhost:5173/vue3-vite5-dashboard/` 访问，而不是省略基础路径。
+- 检查 `vite.config.ts` 中 `/api` 代理仍指向 `127.0.0.1:8002`。
 
-在后端虚拟环境中重新安装依赖：
+### 依赖变化后没有重新安装
 
-```bash
-pip install -r requirements.txt
+正常情况下锁文件或 Python 版本变化会触发指纹更新；如本地依赖目录损坏，执行：
+
+```powershell
+.\deploy.ps1 -ForceInstall
 ```
 
-### 4. 前端能打开，但接口 404 或代理失败
+## 许可证
 
-请检查：
-
-- 后端是否运行在 `127.0.0.1:8000`
-- 是否先启动后端再启动前端
-- `vite.config.ts` 中 `/api` 代理是否被改动
-
-### 5. 出现 `pnpm` 无法识别
-
-安装方式任选其一：
-
-```bash
-npm install -g pnpm
-```
-
-或：
-
-```bash
-corepack enable
-corepack prepare pnpm@8 --activate
-```
-
-安装后重新打开终端再执行：
-
-```bash
-pnpm -v
-pnpm install
-```
-
-### 6. 出现 `[plugin:vite:css] Preprocessor dependency "less" not found`
-
-在项目根目录执行：
-
-```bash
-pnpm add -D less
-pnpm install
-pnpm run serve
-```
-
-### 7. 构建时报 `spawn EPERM`
-
-这通常不是项目代码问题，而是本机权限、杀毒软件或受限目录拦截了 `esbuild` 子进程。
-
-可优先尝试：
-
-- 使用普通本机终端重新执行构建
-- 检查安全软件是否拦截 `node` / `esbuild`
-- 避免在受限沙箱或只读同步目录中构建
-
-### 8. AI 助手提示 API Key 未配置
-
-请检查：
-
-- 是否已创建 `greenfianace_server/.env`
-- `DEEPSEEK_API_KEY` 是否已填写
-- 后端是否已经重启
-
-### 9. DeepSeek 请求出现 SSL EOF 错误
-
-如果出现类似：
-
-```text
-DeepSeek 请求失败: [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol
-```
-
-通常表示 HTTPS 连接在读取响应时被中途断开，不是 API Key 未配置。可优先检查：
-
-- 当前网络是否稳定
-- 代理、VPN、校园网或公司网关是否拦截 HTTPS
-- `DEEPSEEK_BASE_URL` 是否正确
-- 后端是否可以正常访问外网
-- 稍后重试或切换网络环境
-
-## 开发补充说明
-
-- 地图 GeoJSON 静态资源位于 `public/geojson/`
-- 当前地图主交互以省级和市级为主
-- 县级相关功能已移除，不再作为当前默认链路
-- 碳排放+GDP底色页市级 GDP / 碳排放 / 能源消费联动数据来自 `city_carbon_gdp`
-- 碳排放+GDP底色页省级能源消费明细来自 `province_energy_consumption`
-- 预测页显示层正向化只影响用户可见的碳排放强度展示值，不改变后端预测接口和模型原始结果
-
-## 预测页补充说明（2026-04）
-
-- 预测页当前仍然只展示 `组合预测`，不恢复 `STIRPAT / 系统动力学` 来源切换。
-- 省级和市级统一改成 `保守 / 基准 / 乐观 / 自定义` 四态切换。
-- `自定义` 固定基于 `基准` 官方曲线，统一使用 6 个驱动项：`人口 / 富裕度 / 技术或能耗 / 产业结构 / 能源结构 / 绿色金融`。
-- 这套调节不是后端重新训练或正式重算，而是基于 `STIRPAT` 弹性系数，对当前 `组合预测` 做前端近似推演。
-- `自定义` 模式下会同时展示 `基准官方预测` 与 `自定义调节曲线`；对比线和“官方情景区间”保持官方组合预测结果不变。
-- 页面展示层仍然保持碳排放强度的绝对值口径，参数调节计算则基于原始预测值完成，再进入展示层。
-
-## License
-
-MIT
+`package.json` 中声明本项目使用 MIT License。对外分发前，请同时核对数据集、地图和第三方依赖各自的授权条件。

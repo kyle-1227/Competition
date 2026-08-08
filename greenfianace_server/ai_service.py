@@ -10,8 +10,9 @@ import httpx
 from dotenv import load_dotenv
 
 
-ROOT = Path(__file__).resolve().parent
-load_dotenv(ROOT / ".env", override=True)
+BACKEND_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BACKEND_DIR.parent
+load_dotenv(PROJECT_ROOT / ".env")
 
 
 class AiServiceError(RuntimeError):
@@ -29,7 +30,7 @@ class DeepSeekConfig:
 def load_deepseek_config() -> DeepSeekConfig:
     api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
     if not api_key:
-        raise AiServiceError("DeepSeek API Key 未配置，请先在 greenfianace_server/.env 中设置 DEEPSEEK_API_KEY")
+        raise AiServiceError("DeepSeek API Key 未配置，请在根目录 .env 或进程环境中设置 DEEPSEEK_API_KEY")
 
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip() or "https://api.deepseek.com"
     model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat").strip() or "deepseek-chat"
